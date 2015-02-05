@@ -5,10 +5,9 @@ class TAG:
     BARRIER         = 4
     MSG_VALID       = 5
     MSG_INVALID     = 6
-    ABORT           = 7
-    TERMINATE       = -1
 
 class G:
+    ABORT           = -1
+    TERMINATE       = 0
     WHITE           = 1
     BLACK           = 2
-

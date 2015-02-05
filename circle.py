@@ -1,9 +1,10 @@
 from __future__ import print_function
 from mpi4py import MPI
-from globals import TAG, G
+from globals import T, G
 import logging
+import random
 
-logger = logging.getLogger("app")
+logger = logging.getLogger("circle")
 
 
 def setup_logging(level):
@@ -16,36 +17,53 @@ def setup_logging(level):
     logger.addHandler(console)
     logger.propagate = False
 
-
 class Circle:
-    comm = MPI.COMM_WORLD.Dup()
-    abort = False
 
-    def __init__(self, task, split = "equal"):
-        self.task = task
-        self.size = Circle.comm.Get_size()
-        self.rank = Circle.comm.Get_rank()
-        self.requestors = []
-        self.queue = []
+    def __init__(self, name="Circle Work Comm",  split = "equal"):
+        random.seed()  # use system time to seed
+        self.comm = MPI.COMM_WORLD.Dup()
+        self.comm.Set_name(name)
+        self.size = self.comm.Get_size()
+        self.rank = self.comm.Get_rank()
+        self.token_init()
 
-        self.processed = 0
-
-        # token management
-
-        self.token_src = None
-        self.token_dest = None
-        self.token_color = None
-        self.token_proc = None
-
-        #
         self.reduce_outstanding = False
         self.request_outstanding = False
-        self.token_send_req = MPI.REQUEST_NULL
+        self.task = None
+        self.abort = False
+        self.requestors = []
+        self.workq = []
+        self.next_proc = None # rank of next process to request work
 
-        #
+        # counters
+        self.work_processed = [0] * self.size
+        self.work_request_sent = [0] * self.size
+        self.work_request_received = [0] * self.size
+
+        # barriers
         self.barrier_started = False
 
+    def register(self, task):
+
+        self.task = task
+
+    def next_proc(self):
+        """ Note next proc could return rank of itself """
+        return random.randint(0, self.size)
+
+    def token_init(self):
+
+        self.token_src = (self.rank - 1 + self.size) % self.size
+        self.token_dest = (self.rank + 1 + self.size) % self.size
+        self.token_color = G.BLACK
+        self.token_proc = G.WHITE
+        self.token_is_local = False
+        if self.rank == 0:
+            self.token_is_local = True
+        self.token_send_req = MPI.REQUEST_NULL
+
     def begin(self):
+        """ entry point to work """
 
         if self.rank == 0:
             self.task.create()
@@ -53,11 +71,22 @@ class Circle:
         # work until terminate
         self.loop()
 
-    def enqueue(self):
+        # check point?
+        if self.abort:
+            checkpoint()
+
+    def checkpoint(self):
+        """ Write work queue to disk, one for each rank """
         pass
 
-    def dequeue(self):
-        pass
+    def enq(self, work):
+        self.workq.append(work)
+
+    def deq(self):
+        if len(self.workq) > 0:
+            return self.workq.pop(0)
+        else:
+            return None
 
 
     def check_reduce(self):
@@ -74,14 +103,14 @@ class Circle:
 
         # FIXME
         # do we really need async barrier?
-        Circle.comm.Barrier()
+        self.comm.Barrier()
 
     def bcase_abort(self):
-        Circle.abort = True
+        self.abort = True
         buf = G.ABORT
         for i in range(self.size):
             if (i != self.rank):
-                Circle.comm.Send(buf, i, tag = TAG.WORK_REQUEST)
+                self.comm.send(buf, i, tag = T.WORK_REQUEST)
                 logger.warn("abort message sent to %s" % i)
 
     def loop(self):
@@ -138,15 +167,15 @@ class Circle:
 
         while True:
             status = MPI.Status()
-            ret = Circle.comm.Iprobe(MPI.ANY_SOURCE, TAG.WORK_REQUEST, status)
+            ret = self.comm.Iprobe(MPI.ANY_SOURCE, T.WORK_REQUEST, status)
 
             if not ret: break
 
             # we have work request message
             rank = status.Get_source()
-            Circle.comm.Recv([buf, MPI.INT], rank, TAG.WORK_REQUEST, status)
-            if buf == TAG.ABORT:
-                Circle.abort = True
+            self.comm.recv(buf, rank, T.WORK_REQUEST, status)
+            if buf == T.ABORT:
+                self.abort = True
                 logger.info("Abort request recv'ed")
                 return
             else:
@@ -164,8 +193,8 @@ class Circle:
     def send_no_work(self, rank):
         """ send no work reply to someone requesting work"""
 
-        buf = TAG.ABORT if Circle.abort else 0
-        Circle.comm.Isend(buf, dest = rank, tag = TAG.WORK_REPLY)
+        buf = G.ABORT if self.abort else 0
+        self.comm.Isend(buf, dest = rank, tag = T.WORK_REPLY)
 
     def send_work_to_many(self):
         if self.split == "equal":
@@ -183,12 +212,16 @@ class Circle:
         if (dest < self.rank) or (dest == self.token_src):
             self.token_proc = G.BLACK
 
-        Circle.comm.Send(self.queue[0:count], dest, TAG.WORK_REPLY)
+        self.comm.send(self.queue[0:count], dest, T.WORK_REPLY)
 
         # remove work items
         del self.queue[0:count]
 
     def request_work(self):
+        pass
+
+    def finalize(self):
+        """ clean up """
         pass
 
 

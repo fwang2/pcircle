@@ -1,28 +1,36 @@
 from abc import ABCMeta, abstractmethod
 
-class Task(metaclass=ABCMeta):
-    def __init__(self):
-        self.queue = None
+class BaseTask:
+    __metaclass__ = ABCMeta
 
-        return global_rank;
+    def __init__(self, circle):
+        self.circle = circle
+        self.rank = circle.rank
 
     @abstractmethod
-    def create():
+    def create(self):
         pass
 
     @abstractmethod
-    def process():
+    def process(self):
         pass
 
     @abstractmethod
-    def reduce_init():
+    def reduce_init(self):
         pass
 
     @abstractmethod
-    def reduce_op():
+    def reduce_op(self):
         pass
 
     @abstractmethod
-    def reduce_finish():
+    def reduce_finish(self):
         pass
+
+    def enq(self, work):
+        self.circle.enq(work)
+
+    def deq(self):
+        return self.circle.deq()
+
 

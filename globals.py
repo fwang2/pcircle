@@ -1,4 +1,4 @@
-class TAG:
+class T:
     WORK_REQUEST    = 1
     WORK_REPLY      = 2
     REDUCE          = 3
@@ -7,7 +7,8 @@ class TAG:
     MSG_INVALID     = 6
 
 class G:
-    ABORT           = -1
-    TERMINATE       = 0
-    WHITE           = 1
-    BLACK           = 2
+    WHITE           = 50
+    BLACK           = 51
+    ABORT           = 52
+    TERMINATE       = 53
+

@@ -7,39 +7,32 @@ import random
 logger = logging.getLogger("circle")
 
 
-def setup_logging(level):
-    global logger
-    fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger.setLevel(level)
-
-    console = logging.StreamHandler()
-    console.setFormatter(fmt)
-    logger.addHandler(console)
-    logger.propagate = False
-
 class Circle:
 
     def __init__(self, name="Circle Work Comm",  split = "equal"):
         random.seed()  # use system time to seed
+        logging_init()
+
         self.comm = MPI.COMM_WORLD.Dup()
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
         self.token_init()
 
+        self.split = split
         self.reduce_outstanding = False
         self.request_outstanding = False
         self.task = None
         self.abort = False
         self.requestors = []
         self.workq = []
-        self.next_proc = None # rank of next process to request work
 
         # counters
-        self.work_processed = [0] * self.size
-        self.work_request_sent = [0] * self.size
-        self.work_request_received = [0] * self.size
-        self.processed = 0
+        self.local_work_requested = 0
+        self.local_work_processed = 0
+        self.work_request_received = 0
+        self.work_requested = False
+        self.work_requested_rank = -1
 
         # barriers
         self.barrier_started = False
@@ -50,7 +43,7 @@ class Circle:
 
     def next_proc(self):
         """ Note next proc could return rank of itself """
-        return random.randint(0, self.size)
+        return random.randint(0, self.size-1)
 
     def token_init(self):
 
@@ -175,7 +168,7 @@ class Circle:
             # if I have work, and no abort signal, process one
             if len(self.workq) != 0:
                 self.task.process()
-                self.processed += 1
+                self.local_work_processed += 1
             else:
                 status = self.check_for_term();
                 if status == G.TERMINATE:
@@ -245,10 +238,12 @@ class Circle:
 
             if not ret: break
 
+            logger.debug("We have request msg")
+
             # we have work request message
             rank = status.Get_source()
             self.comm.recv(buf, rank, T.WORK_REQUEST, status)
-            if buf == T.ABORT:
+            if buf == G.ABORT:
                 self.abort = True
                 logger.info("Abort request recv'ed")
                 return
@@ -257,7 +252,7 @@ class Circle:
                 self.requestors.append(rank)
 
         if len(self.requestors) != 0:
-            if len(self.queue) == 0:
+            if len(self.workq) == 0:
                 for rank in self.requestors:
                     self.send_no_work(rank)
             else:
@@ -292,7 +287,57 @@ class Circle:
         del self.queue[0:count]
 
     def request_work(self):
-        pass
+        status = MPI.Status()
+        # check if we have request outstanding
+        if self.work_requested:
+            source = self.work_requested_rank
+            # do we got a reply?
+            ret = self.common.Iprobe(source, T.WORK_REPLY, status)
+            if ret:
+                # got reply, process it
+                self.work_receive(source, status.Get_count())
+                # flip flag to indicate we no longer waiting for reply
+                self.work_requested = False
+        else:
+            # send request
+            dest = self.next_proc()
+
+            if dest == MPI.PROC_NULL:
+                # have no one to ask, we are done
+                return False
+
+            logger.debug("send work request to %s" % dest)
+            self.local_work_requested += 1
+
+
+            buf = G.ABORT if self.abort else G.NORMAL
+
+            # blocking send
+            self.comm.send(buf, dest, T.WORK_REQUEST)
+
+            self.work_requested = True
+            self.work_requested_rank = dest
+
+        return True
+
+    def work_receive(self, source, size):
+        """ when incoming request detected """
+        buf = None
+
+        # first message, check normal or abort
+        self.comm.recv(buf, source, T.WORK_REPLY)
+
+        if buf == G.ABORT:
+            self.abort = True
+            return G.ABORT
+        elif buf == G.ZERO:
+            # no follow up message, return
+            return G.ZERO
+
+        # second message, the actual work itmes
+        self.comm.recv(buf, source, T.WORK_REPLY)
+        logger.debug("received work: %s" % buf)
+        self.workq.append(buf)
 
     def finalize(self):
         """ clean up """
@@ -301,4 +346,17 @@ class Circle:
     def reduce(self, count):
         pass
 
+    def set_loglevel(self, level):
+        global logger
+        logger.setLevel(level)
+
+def logging_init(level=logging.ERROR):
+
+    global logger
+    fmt = logging.Formatter(G.simple_fmt)
+    logger.setLevel(level)
+    console = logging.StreamHandler()
+    console.setFormatter(fmt)
+    logger.addHandler(console)
+    logger.propagate = False
 

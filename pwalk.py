@@ -3,6 +3,7 @@ from __future__ import print_function
 
 from task import BaseTask
 from circle import Circle
+from globals import G
 import stat
 import os
 import os.path
@@ -12,10 +13,9 @@ import argparse
 ARGS    = None
 logger  = logging.getLogger("pwalk")
 
-def setup_logging(level):
+def logging_init(level=logging.INFO):
     global logger
-
-    fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fmt = logging.Formatter(G.simple_fmt)
     logger.setLevel(level)
     console = logging.StreamHandler()
     console.setFormatter(fmt)
@@ -65,15 +65,17 @@ def main():
 
     ARGS = parse_args()
 
-    if ARGS.verbose:
-        setup_logging(logging.DEBUG)
-    else:
-        setup_logging(logging.INFO)
-
     abspath = os.path.abspath(ARGS.path)
 
     # create circle
     circle = Circle()
+
+    if ARGS.verbose:
+        logging_init(logging.DEBUG)
+        circle.set_loglevel(logging.DEBUG)
+    else:
+        logging_init()
+
 
     # create this task
     task = PWalk(circle, abspath)

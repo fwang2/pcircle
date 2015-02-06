@@ -1,17 +1,25 @@
 #!/usr/bin/env python
 from __future__ import print_function
-from mpi4py import MPI
 
 from task import BaseTask
 from circle import Circle
-from stat import *
+import stat
 import os
 import os.path
 import logging
 import argparse
 
 ARGS    = None
-logger  = logging.getLogger("app.pwalk")
+logger  = logging.getLogger("pwalk")
+
+def setup_logging(level):
+    global logger
+
+    fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger.setLevel(level)
+    console = logging.StreamHandler()
+    console.setFormatter(fmt)
+    logger.addHandler(console)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="pwalk")
@@ -24,7 +32,8 @@ class PWalk(BaseTask):
     def __init__(self, circle, path):
         BaseTask.__init__(self, circle)
         self.root = path
-        self.flist = []  # element is (filepath, filemode, stats)
+        self.flist = []  # element is (filepath, filesize, filemode, stats)
+        self.reduce_items = 0
 
     def create(self):
         self.enq(self.root)
@@ -32,20 +41,17 @@ class PWalk(BaseTask):
     def process_dir(self, dir):
         entries = os.listdir(dir)
         for e in entries:
-            self.enq(os.path.abspath(e))
+            self.enq(os.path.abspath(dir + "/" + e))
 
     def process(self):
         path = self.deq()
+        logger.debug("process: %s", path)
         st = os.stat(path)
-        self.flish.append( (path, st.st_mode, st) )
+        self.flist.append( (path, st.st_size, st.st_mode, st) )
 
         # recurse into directory
-        if S_ISDIR(st.st_mode):
+        if stat.S_ISDIR(st.st_mode):
             self.process_dir(path)
-
-
-    def reduce_init(self):
-        pass
 
     def reduce_op(self):
         pass
@@ -56,19 +62,30 @@ class PWalk(BaseTask):
 def main():
 
     global ARGS
+
     ARGS = parse_args()
+
+    if ARGS.verbose:
+        setup_logging(logging.DEBUG)
+    else:
+        setup_logging(logging.INFO)
+
     abspath = os.path.abspath(ARGS.path)
 
     # create circle
     circle = Circle()
 
     # create this task
-    task = PWalk(circle, path)
+    task = PWalk(circle, abspath)
 
     # register the task
     circle.register(task)
 
+    # start
+    circle.begin()
 
+    # end
+    circle.finalize()
 
 if __name__ == "__main__": main()
 

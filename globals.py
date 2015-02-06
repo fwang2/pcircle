@@ -5,6 +5,7 @@ class T:
     BARRIER         = 4
     MSG_VALID       = 5
     MSG_INVALID     = 6
+    TOKEN           = 7
 
 class G:
     WHITE           = 50

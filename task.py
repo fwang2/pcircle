@@ -15,16 +15,9 @@ class BaseTask:
     def process(self):
         pass
 
-    @abstractmethod
-    def reduce_init(self):
-        pass
 
     @abstractmethod
     def reduce_op(self):
-        pass
-
-    @abstractmethod
-    def reduce_finish(self):
         pass
 
     def enq(self, work):

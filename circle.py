@@ -39,6 +39,7 @@ class Circle:
         self.work_processed = [0] * self.size
         self.work_request_sent = [0] * self.size
         self.work_request_received = [0] * self.size
+        self.processed = 0
 
         # barriers
         self.barrier_started = False
@@ -73,10 +74,60 @@ class Circle:
 
         # check point?
         if self.abort:
-            checkpoint()
+            self.checkpoint()
+
+    def token_recv(self):
+        # verify we don't have a local token
+        if self.token_is_local:
+            raise RuntimeError("token error")
+
+        # this won't block as token is waiting
+        self.comm.recv(self.token_color, self.token_src,
+            T.TOKEN)
+
+        # record token is local
+        self.token_is_local = True
+
+        # if we have a token outstanding, at this point
+        # we should have received the reply (even if we
+        # sent the token to ourself, we just replied above
+        # so the send should now complete
+        #
+        # FIXME?
+        # if self.token_send_req != MPI.PROC_NULL:
+
+        # now set our state
+        if self.token_proc == G.BLACK and self.token_color == G.BLACK:
+            self.token_proc = G.WHITE
+
+        # check for terminate condition
+        terminate = False
+
+        if self.rank == 0 and self.token_color == G.WHITE:
+            # if rank 0 receive a white token
+            logger.debug("Master detected termination")
+            terminate = True
+        elif self.token_color == G.TERMINATE:
+            terminate = True
+
+        # forward termination token if we have one
+        if terminate:
+            # send terminate token, don't bother
+            # if we the last rank
+            self.token_color = G.TERMINATE
+            if self.rank < self.size -1:
+                self.token_send()
+
+            # set our state to terminate
+            self.token_proc = G.TERMINATE
+
+    def token_check(self):
+        status = MPI.Status()
+        flag = self.comm.Iprobe(self.token_src, T.TOKEN, status)
+        if flag: self.token_recv()
+
 
     def checkpoint(self):
-        """ Write work queue to disk, one for each rank """
         pass
 
     def enq(self, work):
@@ -116,15 +167,14 @@ class Circle:
     def loop(self):
         while True:
             self.check_request()
-            #
             self.check_reduce()
 
             # if I have no work, request work from others
             self.request_work()
 
             # if I have work, and no abort signal, process one
-            if len(self.queue) != 0:
-                self.task.process(self.queue.pop(0))
+            if len(self.workq) != 0:
+                self.task.process()
                 self.processed += 1
             else:
                 status = self.check_for_term();
@@ -161,10 +211,34 @@ class Circle:
             if self.token_send_req != MPI.REQUEST_NULL:
                 self.token_send_req.Test()
 
-    def workreq_check(self):
-        buf = None
-        self.requestors = []
+    def check_for_term(self):
+        if self.token_proc == G.TERMINATE:
+            return G.TERMINATE
 
+        if self.token_is_local:
+            # we have token
+            if self.rank == 0:
+                # rank 0 start with white token
+                self.token_color = G.WHITE
+            elif self.token_proc == G.BLACK:
+                # others turn the token black
+                # if they are in black state
+                self.token_color = G.BLACK
+            # send the token
+            self.send_token()
+
+    def send_token(self):
+        # don't send if abort
+        if self.abort: return
+
+        self.comm.issend(self.token_color,
+            self.token_dest, tag = T.TOKEN)
+
+        # now we don't have the token
+        self.token_is_local = False
+
+    def check_request(self):
+        buf = None
         while True:
             status = MPI.Status()
             ret = self.comm.Iprobe(MPI.ANY_SOURCE, T.WORK_REQUEST, status)
@@ -222,6 +296,9 @@ class Circle:
 
     def finalize(self):
         """ clean up """
+        pass
+
+    def reduce(self, count):
         pass
 
 

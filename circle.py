@@ -6,6 +6,8 @@ import random
 
 logger = logging.getLogger("circle")
 
+class Token:
+    pass
 
 class Circle:
 
@@ -43,81 +45,45 @@ class Circle:
 
     def next_proc(self):
         """ Note next proc could return rank of itself """
-        return random.randint(0, self.size-1)
+        if self.size == 1:
+            return MPI.PROC_NULL
+        else:
+            return random.randint(0, self.size-1)
+
+
+    def token_status(self):
+        return "rank: %s, token_src: %s, token_dest: %s, token_color: %s, token_proc: %s" % \
+            (self.rank, self.token_src, self.token_dest, G.str[self.token_color], G.str[self.token_proc])
 
     def token_init(self):
 
         self.token_src = (self.rank - 1 + self.size) % self.size
         self.token_dest = (self.rank + 1 + self.size) % self.size
-        self.token_color = G.BLACK
+        self.token_color = G.NONE
         self.token_proc = G.WHITE
         self.token_is_local = False
         if self.rank == 0:
             self.token_is_local = True
+            self.token_color = G.WHITE
+
         self.token_send_req = MPI.REQUEST_NULL
+
+
+    def workq_status(self):
+        return "rank %s has %s items in work queue" % (self.rank, len(self.workq))
 
     def begin(self):
         """ entry point to work """
 
         if self.rank == 0:
             self.task.create()
-
+        logger.info(self.workq_status())
         # work until terminate
         self.loop()
 
         # check point?
         if self.abort:
             self.checkpoint()
-
-    def token_recv(self):
-        # verify we don't have a local token
-        if self.token_is_local:
-            raise RuntimeError("token error")
-
-        # this won't block as token is waiting
-        self.comm.recv(self.token_color, self.token_src,
-            T.TOKEN)
-
-        # record token is local
-        self.token_is_local = True
-
-        # if we have a token outstanding, at this point
-        # we should have received the reply (even if we
-        # sent the token to ourself, we just replied above
-        # so the send should now complete
-        #
-        # FIXME?
-        # if self.token_send_req != MPI.PROC_NULL:
-
-        # now set our state
-        if self.token_proc == G.BLACK and self.token_color == G.BLACK:
-            self.token_proc = G.WHITE
-
-        # check for terminate condition
-        terminate = False
-
-        if self.rank == 0 and self.token_color == G.WHITE:
-            # if rank 0 receive a white token
-            logger.debug("Master detected termination")
-            terminate = True
-        elif self.token_color == G.TERMINATE:
-            terminate = True
-
-        # forward termination token if we have one
-        if terminate:
-            # send terminate token, don't bother
-            # if we the last rank
-            self.token_color = G.TERMINATE
-            if self.rank < self.size -1:
-                self.token_send()
-
-            # set our state to terminate
-            self.token_proc = G.TERMINATE
-
-    def token_check(self):
-        status = MPI.Status()
-        flag = self.comm.Iprobe(self.token_src, T.TOKEN, status)
-        if flag: self.token_recv()
 
 
     def checkpoint(self):
@@ -131,7 +97,6 @@ class Circle:
             return self.workq.pop(0)
         else:
             return None
-
 
     def check_reduce(self):
         pass
@@ -158,17 +123,20 @@ class Circle:
                 logger.warn("abort message sent to %s" % i)
 
     def loop(self):
+        """ central loop to finish the work """
         while True:
-            self.check_request()
-            self.check_reduce()
+            # check for and service requests
+            self.request_check()
 
-            # if I have no work, request work from others
-            self.request_work()
+            if len(self.workq) == 0:
+                logger.info("rank %s have no work, issue request work" % self.rank)
+                self.request_work()
 
             # if I have work, and no abort signal, process one
-            if len(self.workq) != 0:
+            if len(self.workq) > 0 and not self.abort:
                 self.task.process()
                 self.local_work_processed += 1
+
             else:
                 status = self.check_for_term();
                 if status == G.TERMINATE:
@@ -178,6 +146,12 @@ class Circle:
         # (1) all processes finish the work
         # (2) abort
         #
+
+        logger.debug("All process finished or ready to abort")
+
+        self.comm.Barrier()
+
+    def cleanup(self):
         while True:
             if not (self.reduce_outstanding or self.request_outstanding) and \
                 self.token_send_req == MPI.REQUEST_NULL:
@@ -185,10 +159,10 @@ class Circle:
 
             # break the loop when non-blocking barrier completes
             if self.barrier_test():
-                break;
+                break
 
             # send no work message for any work request that comes in
-            self.workreq_check()
+            self.request_check()
 
             # clean up any outstanding reduction
             self.reduce_check()
@@ -204,12 +178,18 @@ class Circle:
             if self.token_send_req != MPI.REQUEST_NULL:
                 self.token_send_req.Test()
 
+
     def check_for_term(self):
+
         if self.token_proc == G.TERMINATE:
             return G.TERMINATE
 
+        if self.size == 1:
+            self.token_proc = G.TERMINATE
+            return G.TERMINATE
+
         if self.token_is_local:
-            # we have token
+            # we have no work, but we have token
             if self.rank == 0:
                 # rank 0 start with white token
                 self.token_color = G.WHITE
@@ -217,140 +197,246 @@ class Circle:
                 # others turn the token black
                 # if they are in black state
                 self.token_color = G.BLACK
-            # send the token
-            self.send_token()
 
-    def send_token(self):
-        # don't send if abort
-        if self.abort: return
+            self.token_issend()
 
-        self.comm.issend(self.token_color,
-            self.token_dest, tag = T.TOKEN)
+            # flip process color from black to white
+            self.token_proc = G.WHITE
+        else:
+            # we have no work, but we don't have the token
+            self.token_check()
 
-        # now we don't have the token
-        self.token_is_local = False
+        # return current status
+        return self.token_proc
 
-    def check_request(self):
+    def request_check(self):
         buf = None
         while True:
             status = MPI.Status()
             ret = self.comm.Iprobe(MPI.ANY_SOURCE, T.WORK_REQUEST, status)
-
             if not ret: break
-
-            logger.debug("We have request msg")
-
             # we have work request message
             rank = status.Get_source()
             self.comm.recv(buf, rank, T.WORK_REQUEST, status)
             if buf == G.ABORT:
                 self.abort = True
                 logger.info("Abort request recv'ed")
-                return
+                return False
             else:
+                logger.info("requestors: %s, buf = %s" % (rank, buf))
                 # add rank to requesters
                 self.requestors.append(rank)
 
-        if len(self.requestors) != 0:
+        # we don't have any request
+
+        if len(self.requestors) == 0:
+            return False
+        else:
+            logger.debug("rank %s have %s requesters, with %s work in queue" %
+                         (self.rank, len(self.requestors), self.workq))
+            # have work requesters
             if len(self.workq) == 0:
                 for rank in self.requestors:
                     self.send_no_work(rank)
             else:
+                # we do have work
                 self.send_work_to_many()
 
 
     def send_no_work(self, rank):
         """ send no work reply to someone requesting work"""
 
-        buf = G.ABORT if self.abort else 0
-        self.comm.Isend(buf, dest = rank, tag = T.WORK_REPLY)
+        buf = G.ABORT if self.abort else G.ZERO
+        logger.info("sending no work reply: %s" % buf)
+        self.comm.send(buf, dest = rank, tag = T.WORK_REPLY)
+
+    def spread_counts(self, rcount, wcount):
+        """ Given wcount work items and rcount requesters
+            spread it evenly among all requesters
+        """
+
+        base = wcount / rcount
+        extra = wcount - (base * rcount)
+        sizes = [base] * rcount
+        for i in range(extra):
+            sizes[i] += 1
+        return sizes
 
     def send_work_to_many(self):
+        rcount = len(self.requestors)
+        wcount = len(self.workq)
+        sizes = None
         if self.split == "equal":
-            self.spread_counts()
+            sizes = self.spread_counts(rcount, wcount)
         else:
-            # TODO self.split == "random":
             raise NotImplementedError
 
+        logger.debug("requester count: %s, work count: %s, spread: %s" % (rcount, wcount, sizes))
+        for idx, dest in enumerate(self.requestors):
+            self.send_work(dest, sizes[idx])
 
-        logger.debug("Done with servicing requests.")
 
     def send_work(self, dest, count):
-
+        """ dest is the rank of requester, count is the number of work to send
+        """
         # for termination detection
         if (dest < self.rank) or (dest == self.token_src):
             self.token_proc = G.BLACK
 
-        self.comm.send(self.queue[0:count], dest, T.WORK_REPLY)
+        # first message, send # of work items
+        self.comm.send(count, dest, T.WORK_REPLY)
+
+        # second message, actual work items
+        self.comm.send(self.workq[0:count-1], dest, T.WORK_REPLY)
+        logger.debug("%s work items sent to rank %s" % (count, dest))
 
         # remove work items
-        del self.queue[0:count]
+        del self.workq[0:count-1]
 
-    def request_work(self):
+    def request_work(self, cleanup = False):
+
         status = MPI.Status()
         # check if we have request outstanding
         if self.work_requested:
+            logger.debug("rank %s have work requested from rank %s, check reply"
+                         % (self.rank, self.work_requested_rank))
             source = self.work_requested_rank
             # do we got a reply?
-            ret = self.common.Iprobe(source, T.WORK_REPLY, status)
+            ret = self.comm.Iprobe(source, T.WORK_REPLY, status)
             if ret:
-                # got reply, process it
-                self.work_receive(source, status.Get_count())
+                self.workreq_receive(source)
                 # flip flag to indicate we no longer waiting for reply
                 self.work_requested = False
-        else:
+        elif not cleanup:
             # send request
             dest = self.next_proc()
-
             if dest == MPI.PROC_NULL:
                 # have no one to ask, we are done
                 return False
-
             logger.debug("send work request to %s" % dest)
             self.local_work_requested += 1
-
-
             buf = G.ABORT if self.abort else G.NORMAL
 
             # blocking send
             self.comm.send(buf, dest, T.WORK_REQUEST)
-
             self.work_requested = True
             self.work_requested_rank = dest
 
-        return True
+    def workreq_receive(self, source):
+        """ when incoming work request detected """
 
-    def work_receive(self, source, size):
-        """ when incoming request detected """
         buf = None
-
         # first message, check normal or abort
         self.comm.recv(buf, source, T.WORK_REPLY)
+        logger.info("rank %s receive work from rank %s, first msg: %s"
+                    % (self.rank, source, buf))
 
         if buf == G.ABORT:
+            logger.debug("receive abort signal")
             self.abort = True
             return G.ABORT
         elif buf == G.ZERO:
+            logger.debug("receive zero signal")
             # no follow up message, return
             return G.ZERO
+        else:
+            pass
 
         # second message, the actual work itmes
         self.comm.recv(buf, source, T.WORK_REPLY)
-        logger.debug("received work: %s" % buf)
-        self.workq.append(buf)
+        logger.info("rank %s receive work from rank %s, second msg:  %s"
+                    % (self.rank, source, buf))
+        if buf is None:
+            raise RuntimeError
+        else:
+            self.workq.append(buf)
 
     def finalize(self):
         """ clean up """
         pass
+    # TOKEN MANAGEMENT
+    def token_recv(self):
+        # verify we don't have a local token
+        if self.token_is_local:
+            raise RuntimeError("token_is_local True")
+
+        # this won't block as token is waiting
+        buf = None
+        self.comm.recv(buf, self.token_src, T.TOKEN)
+        if buf is None:
+            raise RuntimeError("token color is None")
+        self.token_color = buf
+
+        # record token is local
+        self.token_is_local = True
+
+        # if we have a token outstanding, at this point
+        # we should have received the reply (even if we
+        # sent the token to ourself, we just replied above
+        # so the send should now complete
+        #
+        if self.token_send_req != MPI.PROC_NULL:
+            pass
+
+
+        # now set our state
+        if self.token_proc == G.BLACK:
+            self.token_color = G.BLACK
+            self.token_proc = G.WHITE
+
+        # check for terminate condition
+        terminate = False
+
+        if self.rank == 0 and self.token_color == G.WHITE:
+            # if rank 0 receive a white token
+            logger.info("Master detected termination")
+            terminate = True
+        elif self.token_color == G.TERMINATE:
+            terminate = True
+
+        # forward termination token if we have one
+        if terminate:
+            # send terminate token, don't bother
+            # if we the last rank
+            self.token_color = G.TERMINATE
+            if self.rank < self.size -1:
+                self.token_issend()
+
+            # set our state to terminate
+            self.token_proc = G.TERMINATE
+
+    def token_check(self):
+        """
+        check for token, and receive it if arrived
+        """
+
+        status = MPI.Status()
+        flag = self.comm.Iprobe(self.token_src, T.TOKEN, status)
+        if flag:
+            self.token_recv()
+
+    def token_issend(self):
+        # don't send if abort
+        if self.abort: return
+        logger.debug("token send: token_color = %s" % self.token_color)
+        self.comm.send(self.token_color,
+            self.token_dest, tag = T.TOKEN)
+
+        # now we don't have the token
+        self.token_is_local = False
 
     def reduce(self, count):
         pass
+
+    def reduce_check(self):
+        pass
+
 
     def set_loglevel(self, level):
         global logger
         logger.setLevel(level)
 
-def logging_init(level=logging.ERROR):
+def logging_init(level=logging.INFO):
 
     global logger
     fmt = logging.Formatter(G.simple_fmt)

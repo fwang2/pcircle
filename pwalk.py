@@ -45,13 +45,13 @@ class PWalk(BaseTask):
 
     def process(self):
         path = self.deq()
-        logger.debug("process: %s", path)
-        st = os.stat(path)
-        self.flist.append( (path, st.st_size, st.st_mode, st) )
+        if path:
+            st = os.stat(path)
+            self.flist.append( (path, st.st_size, st.st_mode, st) )
 
-        # recurse into directory
-        if stat.S_ISDIR(st.st_mode):
-            self.process_dir(path)
+            # recurse into directory
+            if stat.S_ISDIR(st.st_mode):
+                self.process_dir(path)
 
     def reduce_op(self):
         pass
@@ -62,23 +62,17 @@ class PWalk(BaseTask):
 def main():
 
     global ARGS
-
     ARGS = parse_args()
-
-    abspath = os.path.abspath(ARGS.path)
-
-    # create circle
+    root = os.path.abspath(ARGS.path)
     circle = Circle()
-
     if ARGS.verbose:
         logging_init(logging.DEBUG)
         circle.set_loglevel(logging.DEBUG)
     else:
         logging_init()
 
-
     # create this task
-    task = PWalk(circle, abspath)
+    task = PWalk(circle, root)
 
     # register the task
     circle.register(task)

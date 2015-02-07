@@ -126,10 +126,9 @@ class Circle:
         """ central loop to finish the work """
         while True:
             # check for and service requests
-            self.request_check()
+            self.workreq_check()
 
             if len(self.workq) == 0:
-                logger.info("rank %s have no work, issue request work" % self.rank)
                 self.request_work()
 
             # if I have work, and no abort signal, process one
@@ -209,15 +208,14 @@ class Circle:
         # return current status
         return self.token_proc
 
-    def request_check(self):
-        buf = None
+    def workreq_check(self):
         while True:
-            status = MPI.Status()
-            ret = self.comm.Iprobe(MPI.ANY_SOURCE, T.WORK_REQUEST, status)
+            st = MPI.Status()
+            ret = self.comm.Iprobe(source = MPI.ANY_SOURCE, tag = T.WORK_REQUEST, status = st)
             if not ret: break
             # we have work request message
-            rank = status.Get_source()
-            self.comm.recv(buf, rank, T.WORK_REQUEST, status)
+            rank = st.Get_source()
+            buf = self.comm.recv(source = rank, tag = T.WORK_REQUEST, status = st)
             if buf == G.ABORT:
                 self.abort = True
                 logger.info("Abort request recv'ed")
@@ -242,12 +240,12 @@ class Circle:
                 # we do have work
                 self.send_work_to_many()
 
+            self.requestors = []
 
     def send_no_work(self, rank):
         """ send no work reply to someone requesting work"""
 
         buf = G.ABORT if self.abort else G.ZERO
-        logger.info("sending no work reply: %s" % buf)
         self.comm.send(buf, dest = rank, tag = T.WORK_REPLY)
 
     def spread_counts(self, rcount, wcount):
@@ -271,7 +269,8 @@ class Circle:
         else:
             raise NotImplementedError
 
-        logger.debug("requester count: %s, work count: %s, spread: %s" % (rcount, wcount, sizes))
+        logger.debug("requester count: %s, work count: %s, spread: %s" %
+                     (rcount, wcount, sizes))
         for idx, dest in enumerate(self.requestors):
             self.send_work(dest, sizes[idx])
 
@@ -304,7 +303,7 @@ class Circle:
             # do we got a reply?
             ret = self.comm.Iprobe(source, T.WORK_REPLY, status)
             if ret:
-                self.workreq_receive(source)
+                self.work_receive(source)
                 # flip flag to indicate we no longer waiting for reply
                 self.work_requested = False
         elif not cleanup:
@@ -313,7 +312,7 @@ class Circle:
             if dest == MPI.PROC_NULL:
                 # have no one to ask, we are done
                 return False
-            logger.debug("send work request to %s" % dest)
+            logger.debug("rank %s send work request to %s" % (self.rank, dest))
             self.local_work_requested += 1
             buf = G.ABORT if self.abort else G.NORMAL
 
@@ -322,14 +321,13 @@ class Circle:
             self.work_requested = True
             self.work_requested_rank = dest
 
-    def workreq_receive(self, source):
-        """ when incoming work request detected """
+    def work_receive(self, rank):
+        """ when incoming work reply detected """
 
-        buf = None
         # first message, check normal or abort
-        self.comm.recv(buf, source, T.WORK_REPLY)
+        buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
         logger.info("rank %s receive work from rank %s, first msg: %s"
-                    % (self.rank, source, buf))
+                    % (self.rank, rank, buf))
 
         if buf == G.ABORT:
             logger.debug("receive abort signal")
@@ -343,9 +341,9 @@ class Circle:
             pass
 
         # second message, the actual work itmes
-        self.comm.recv(buf, source, T.WORK_REPLY)
+        buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
         logger.info("rank %s receive work from rank %s, second msg:  %s"
-                    % (self.rank, source, buf))
+                    % (self.rank, rank, buf))
         if buf is None:
             raise RuntimeError
         else:
@@ -361,8 +359,7 @@ class Circle:
             raise RuntimeError("token_is_local True")
 
         # this won't block as token is waiting
-        buf = None
-        self.comm.recv(buf, self.token_src, T.TOKEN)
+        buf = self.comm.recv(source = self.token_src, tag = T.TOKEN)
         if buf is None:
             raise RuntimeError("token color is None")
         self.token_color = buf

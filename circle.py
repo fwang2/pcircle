@@ -215,10 +215,10 @@ class Circle:
             buf = self.comm.recv(source = rank, tag = T.WORK_REQUEST, status = st)
             if buf == G.ABORT:
                 self.abort = True
-                logger.info("Abort request recv'ed")
+                logger.warn("Abort request recv'ed")
                 return False
             else:
-                logger.info("requestors: %s, buf = %s" % (rank, buf))
+                logger.debug("requestors: %s, buf = %s" % (rank, buf))
                 # add rank to requesters
                 self.requestors.append(rank)
 
@@ -318,7 +318,7 @@ class Circle:
 
         # first message, check normal or abort
         buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
-        logger.info("rank %s receive work from rank %s, first msg, work count: %s"
+        logger.debug("rank %s receive work from rank %s, first msg, work count: %s"
                     % (self.rank, rank, buf))
 
         if buf == G.ABORT:
@@ -334,10 +334,10 @@ class Circle:
 
         # second message, the actual work itmes
         buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
-        logger.info("rank %s receive work from rank %s, second msg:  %s"
+        logger.debug("rank %s receive work from rank %s, second msg:  %s"
                     % (self.rank, rank, buf))
         if buf is None:
-            raise RuntimeError
+            raise RuntimeError("work reply of 2nd message is None")
         else:
             self.workq.extend(buf)
 

@@ -53,6 +53,9 @@ class PWalk(BaseTask):
             if stat.S_ISDIR(st.st_mode):
                 self.process_dir(path)
 
+    def stat(self):
+        return len(self.flist)
+
     def reduce_op(self):
         pass
 
@@ -79,6 +82,8 @@ def main():
 
     # start
     circle.begin()
+
+    logger.info("rank %s has: %s items" % (circle.rank, task.stat()))
 
     # end
     circle.finalize()

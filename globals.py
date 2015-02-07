@@ -16,7 +16,7 @@ class G:
     ABORT           = 54
     TERMINATE       = 55
 
-    NORMAL          = 99
+    MSG             = 99
     detail_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     simple_fmt = '%(name)s - %(message)s'
     bare_fmt   = '%(message)s'

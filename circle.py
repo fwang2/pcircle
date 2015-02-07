@@ -22,19 +22,17 @@ class Circle:
         self.token_init()
 
         self.split = split
-        self.reduce_outstanding = False
-        self.request_outstanding = False
         self.task = None
         self.abort = False
         self.requestors = []
         self.workq = []
 
         # counters
-        self.local_work_requested = 0
-        self.local_work_processed = 0
+        self.work_requested = 0
+        self.work_processed = 0
         self.work_request_received = 0
-        self.work_requested = False
-        self.work_requested_rank = -1
+        self.workreq_outstanding = False
+        self.workreq_rank = None
 
         # barriers
         self.barrier_started = False
@@ -69,28 +67,27 @@ class Circle:
         self.token_send_req = MPI.REQUEST_NULL
 
 
-    def workq_status(self):
-        return "rank %s has %s items in work queue" % (self.rank, len(self.workq))
+    def workq_info(self):
+        s =  "rank %s has %s items in work queue\n" % (self.rank, len(self.workq))
+        for w in self.workq:
+            s = s + "\t %s" % w
+        return s
 
     def begin(self):
         """ entry point to work """
 
         if self.rank == 0:
             self.task.create()
-        logger.info(self.workq_status())
+
         # work until terminate
         self.loop()
 
-        # check point?
-        if self.abort:
-            self.checkpoint()
-
-
-    def checkpoint(self):
-        pass
 
     def enq(self, work):
-        self.workq.append(work)
+        if work is not None:
+            self.workq.append(work)
+        else:
+            logger.warn("enq work item is None")
 
     def deq(self):
         if len(self.workq) > 0:
@@ -134,7 +131,7 @@ class Circle:
             # if I have work, and no abort signal, process one
             if len(self.workq) > 0 and not self.abort:
                 self.task.process()
-                self.local_work_processed += 1
+                self.work_processed += 1
 
             else:
                 status = self.check_for_term();
@@ -293,32 +290,27 @@ class Circle:
         del self.workq[0:count-1]
 
     def request_work(self, cleanup = False):
-
-        status = MPI.Status()
         # check if we have request outstanding
-        if self.work_requested:
-            logger.debug("rank %s have work requested from rank %s, check reply"
-                         % (self.rank, self.work_requested_rank))
-            source = self.work_requested_rank
-            # do we got a reply?
-            ret = self.comm.Iprobe(source, T.WORK_REPLY, status)
-            if ret:
-                self.work_receive(source)
+        if self.workreq_outstanding:
+
+            st = MPI.Status()
+            reply = self.comm.Iprobe(source = self.work_requested_rank,
+                                     tag = T.WORK_REPLY, status = st)
+            if reply:
+                self.work_receive(self.work_requested_rank)
                 # flip flag to indicate we no longer waiting for reply
-                self.work_requested = False
+                self.workreq_outstanding = False
+
         elif not cleanup:
             # send request
             dest = self.next_proc()
-            if dest == MPI.PROC_NULL:
+            if dest == self.rank or dest == MPI.PROC_NULL:
                 # have no one to ask, we are done
-                return False
-            logger.debug("rank %s send work request to %s" % (self.rank, dest))
-            self.local_work_requested += 1
-            buf = G.ABORT if self.abort else G.NORMAL
-
+                return
+            buf = G.ABORT if self.abort else G.MSG
             # blocking send
             self.comm.send(buf, dest, T.WORK_REQUEST)
-            self.work_requested = True
+            self.workreq_outstanding = True
             self.work_requested_rank = dest
 
     def work_receive(self, rank):
@@ -326,17 +318,17 @@ class Circle:
 
         # first message, check normal or abort
         buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
-        logger.info("rank %s receive work from rank %s, first msg: %s"
+        logger.info("rank %s receive work from rank %s, first msg, work count: %s"
                     % (self.rank, rank, buf))
 
         if buf == G.ABORT:
             logger.debug("receive abort signal")
             self.abort = True
-            return G.ABORT
+            return
         elif buf == G.ZERO:
             logger.debug("receive zero signal")
             # no follow up message, return
-            return G.ZERO
+            return
         else:
             pass
 
@@ -347,7 +339,7 @@ class Circle:
         if buf is None:
             raise RuntimeError
         else:
-            self.workq.append(buf)
+            self.workq.extend(buf)
 
     def finalize(self):
         """ clean up """

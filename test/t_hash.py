@@ -2,6 +2,7 @@
 from __future__ import print_function
 import time
 import hashlib
+import sys
 
 class S:
     sz_1k = 1024
@@ -37,7 +38,11 @@ def run(fn, method):
             h.update(piece)
 
 if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("provide a file name")
+        sys.exit(1)
+
     methods=["sha1","md5"]
     for m in methods:
         print(m + ":")
-        run("test.mp4", m)
+        run(sys.argv[1], m)

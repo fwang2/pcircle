@@ -114,7 +114,7 @@ def main():
     if circle.rank == 0:
         print("\tDirectory count: %s" % total_dirs)
         print("\tFile count: %s" % total_files)
-        print("\tFile size: %s" % total_filesize)
+        print("\tFile size: %s bytes" % total_filesize)
 
 if __name__ == "__main__": main()
 

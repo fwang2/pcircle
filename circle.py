@@ -12,6 +12,9 @@ class Token:
 class Circle:
 
     def __init__(self, name="Circle Work Comm",  split = "equal"):
+        self.reset()
+
+    def reset(self, name="Circle Work Comm", split = "equal"):
         random.seed()  # use system time to seed
         logging_init()
 
@@ -39,6 +42,7 @@ class Circle:
 
         # debug
         self.d = {"rank" : "rank %s" % self.rank}
+
 
     def next_proc(self):
         """ Note next proc could return rank of itself """

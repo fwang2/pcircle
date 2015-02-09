@@ -7,7 +7,7 @@ import itertools
 
 # SO: http://stackoverflow.com/questions/13520622/python-script-to-show-progress
 def spiner():
-    for c in itertools.cycle('/-\|'):
+    for c in itertools.cycle('|/-\\'):
         sys.stdout.write('\r' + c)
         sys.stdout.flush()
         time.sleep(0.2)

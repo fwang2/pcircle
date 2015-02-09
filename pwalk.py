@@ -4,6 +4,7 @@ from __future__ import print_function
 from task import BaseTask
 from circle import Circle
 from globals import G
+from mpi4py import MPI
 import stat
 import os
 import os.path
@@ -31,30 +32,49 @@ def parse_args():
 class PWalk(BaseTask):
     def __init__(self, circle, path):
         BaseTask.__init__(self, circle)
+        self.circle = circle
         self.root = path
-        self.flist = []  # element is (filepath, filesize, filemode, stats)
-        self.reduce_items = 0
+        self.flist = []  # element is (filepath, filemode, filesize)
+
+        self.cnt_dirs = 0
+        self.cnt_files = 0
+        self.cnt_filesize = 0
+
+        # debug
+        self.d = {"rank": "rank %s" % circle.rank}
+
 
     def create(self):
         self.enq(self.root)
 
     def process_dir(self, dir):
+
         entries = os.listdir(dir)
         for e in entries:
             self.enq(os.path.abspath(dir + "/" + e))
 
     def process(self):
+
         path = self.deq()
+        logger.debug("process: %s" %  path, extra=self.d)
         if path:
             st = os.stat(path)
-            self.flist.append( (path, st.st_size, st.st_mode, st) )
+            self.flist.append( (path, st.st_mode, st.st_size ))
 
             # recurse into directory
             if stat.S_ISDIR(st.st_mode):
                 self.process_dir(path)
 
-    def stat(self):
-        return len(self.flist)
+    def tally(self, t):
+        """ t is a tuple element of flist """
+        if stat.S_ISDIR(t[1]):
+            self.cnt_dirs += 1
+        elif stat.S_ISREG(t[1]):
+            self.cnt_files += 1
+            self.cnt_filesize += t[2]
+
+    def summarize(self):
+        map(self.tally, self.flist)
 
     def reduce_op(self):
         pass
@@ -76,17 +96,25 @@ def main():
 
     # create this task
     task = PWalk(circle, root)
-
-    # register the task
-    circle.register(task)
-
+    if circle.rank == 0:
+        print("Calculating work:"),
     # start
-    circle.begin()
-
-    logger.info("rank %s has: %s items" % (circle.rank, task.stat()))
+    circle.begin(task)
 
     # end
     circle.finalize()
+
+    # summarize results
+    task.summarize()
+
+    total_dirs = circle.comm.reduce(task.cnt_dirs, op=MPI.SUM)
+    total_files = circle.comm.reduce(task.cnt_files, op=MPI.SUM)
+    total_filesize = circle.comm.reduce(task.cnt_filesize, op=MPI.SUM)
+
+    if circle.rank == 0:
+        print("\tDirectory count: %s" % total_dirs)
+        print("\tFile count: %s" % total_files)
+        print("\tFile size: %s" % total_filesize)
 
 if __name__ == "__main__": main()
 

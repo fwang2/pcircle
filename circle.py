@@ -37,9 +37,8 @@ class Circle:
         # barriers
         self.barrier_started = False
 
-    def register(self, task):
-
-        self.task = task
+        # debug
+        self.d = {"rank" : "rank %s" % self.rank}
 
     def next_proc(self):
         """ Note next proc could return rank of itself """
@@ -63,6 +62,8 @@ class Circle:
         if self.rank == 0:
             self.token_is_local = True
             self.token_color = G.WHITE
+            self.token_proc  = G.WHITE
+
 
         self.token_send_req = MPI.REQUEST_NULL
 
@@ -73,8 +74,10 @@ class Circle:
             s = s + "\t %s" % w
         return s
 
-    def begin(self):
+    def begin(self, task):
         """ entry point to work """
+
+        self.task = task
 
         if self.rank == 0:
             self.task.create()
@@ -84,12 +87,14 @@ class Circle:
 
 
     def enq(self, work):
+        logger.debug("enq: %s" % work, extra=self.d)
         if work is not None:
             self.workq.append(work)
         else:
             logger.warn("enq work item is None")
 
     def deq(self):
+        logger.debug("deq: %s" % self.workq[0], extra=self.d)
         if len(self.workq) > 0:
             return self.workq.pop(0)
         else:
@@ -122,6 +127,7 @@ class Circle:
     def loop(self):
         """ central loop to finish the work """
         while True:
+
             # check for and service requests
             self.workreq_check()
 
@@ -142,10 +148,15 @@ class Circle:
         # (1) all processes finish the work
         # (2) abort
         #
-
-        logger.debug("All process finished or ready to abort")
-
+        # we now clean up
+        self.workreq_check(cleanup=True)
+        self.request_work(cleanup=True)
+        self.token_check()
+        if self.token_send_req != MPI.REQUEST_NULL:
+            logger.warn("Have outstanding token req", extra = self.d)
         self.comm.Barrier()
+        if self.rank == 0:
+            logger.debug("All process in sync now", extra=self.d)
 
     def cleanup(self):
         while True:
@@ -205,7 +216,8 @@ class Circle:
         # return current status
         return self.token_proc
 
-    def workreq_check(self):
+    def workreq_check(self, cleanup=False):
+        logger.debug("in workreq_check(): %s" % self.token_status(), extra=self.d)
         while True:
             st = MPI.Status()
             ret = self.comm.Iprobe(source = MPI.ANY_SOURCE, tag = T.WORK_REQUEST, status = st)
@@ -218,19 +230,17 @@ class Circle:
                 logger.warn("Abort request recv'ed")
                 return False
             else:
-                logger.debug("requestors: %s, buf = %s" % (rank, buf))
+                logger.debug("receive work request from requestor [%s]"  % rank, extra=self.d)
                 # add rank to requesters
                 self.requestors.append(rank)
-
-        # we don't have any request
 
         if len(self.requestors) == 0:
             return False
         else:
-            logger.debug("rank %s have %s requesters, with %s work in queue" %
-                         (self.rank, len(self.requestors), self.workq))
+            logger.debug("have %s requesters, with %s work in queue" %
+                         (len(self.requestors), self.workq), extra=self.d)
             # have work requesters
-            if len(self.workq) == 0:
+            if len(self.workq) == 0 or cleanup:
                 for rank in self.requestors:
                     self.send_no_work(rank)
             else:
@@ -267,13 +277,15 @@ class Circle:
             raise NotImplementedError
 
         logger.debug("requester count: %s, work count: %s, spread: %s" %
-                     (rcount, wcount, sizes))
+                     (rcount, wcount, sizes), extra=self.d)
         for idx, dest in enumerate(self.requestors):
             self.send_work(dest, sizes[idx])
 
 
     def send_work(self, dest, count):
-        """ dest is the rank of requester, count is the number of work to send
+        """
+        @dest   - the rank of requester
+        @count  - the number of work to send
         """
         # for termination detection
         if (dest < self.rank) or (dest == self.token_src):
@@ -283,11 +295,11 @@ class Circle:
         self.comm.send(count, dest, T.WORK_REPLY)
 
         # second message, actual work items
-        self.comm.send(self.workq[0:count-1], dest, T.WORK_REPLY)
-        logger.debug("%s work items sent to rank %s" % (count, dest))
+        self.comm.send(self.workq[0:count], dest, T.WORK_REPLY)
+        logger.debug("%s work items sent to rank %s" % (count, dest), extra=self.d)
 
         # remove work items
-        del self.workq[0:count-1]
+        del self.workq[0:count]
 
     def request_work(self, cleanup = False):
         # check if we have request outstanding
@@ -318,24 +330,22 @@ class Circle:
 
         # first message, check normal or abort
         buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
-        logger.debug("rank %s receive work from rank %s, first msg, work count: %s"
-                    % (self.rank, rank, buf))
+        logger.debug("receive work from rank %s, first msg, work count: %s"
+                    % (rank, buf), extra=self.d)
 
         if buf == G.ABORT:
             logger.debug("receive abort signal")
             self.abort = True
             return
         elif buf == G.ZERO:
-            logger.debug("receive zero signal")
+            logger.debug("receive zero signal", extra=self.d)
             # no follow up message, return
             return
-        else:
-            pass
 
         # second message, the actual work itmes
         buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
-        logger.debug("rank %s receive work from rank %s, second msg:  %s"
-                    % (self.rank, rank, buf))
+        logger.debug("receive work from rank %s, second msg:  %s"
+                    % (rank, buf), extra=self.d)
         if buf is None:
             raise RuntimeError("work reply of 2nd message is None")
         else:
@@ -344,7 +354,8 @@ class Circle:
     def finalize(self):
         """ clean up """
         pass
-    # TOKEN MANAGEMENT
+
+
     def token_recv(self):
         # verify we don't have a local token
         if self.token_is_local:
@@ -378,7 +389,7 @@ class Circle:
 
         if self.rank == 0 and self.token_color == G.WHITE:
             # if rank 0 receive a white token
-            logger.info("Master detected termination")
+            logger.debug("Master detected termination", extra=self.d)
             terminate = True
         elif self.token_color == G.TERMINATE:
             terminate = True
@@ -405,9 +416,11 @@ class Circle:
             self.token_recv()
 
     def token_issend(self):
-        # don't send if abort
+
         if self.abort: return
-        logger.debug("token send: token_color = %s" % self.token_color)
+
+        logger.debug("token send: token_color = %s" % G.str[self.token_color], extra=self.d)
+
         self.comm.send(self.token_color,
             self.token_dest, tag = T.TOKEN)
 

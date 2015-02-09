@@ -18,8 +18,9 @@ class G:
 
     MSG             = 99
     detail_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    simple_fmt = '%(name)s - %(message)s'
+    simple_fmt = '%(name)s - %(levelname)s - %(rank)s - %(message)s'
     bare_fmt   = '%(message)s'
 
-    str = {WHITE: "white", BLACK: "black", NONE: "not set"}
+    str = {WHITE: "white", BLACK: "black", NONE: "not set", TERMINATE: "terminate",
+           MSG: "message"}
 

@@ -11,10 +11,11 @@ class Token:
 
 class Circle:
 
-    def __init__(self, name="Circle Work Comm",  split = "equal"):
-        self.reset()
+    # Keep init() and reset() in sync ... it is a pain, I know
 
-    def reset(self, name="Circle Work Comm", split = "equal"):
+    def __init__(self, name="Circle Work Comm",  split = "equal",
+                 reduce_interval=10):
+
         random.seed()  # use system time to seed
         logging_init()
 
@@ -37,8 +38,12 @@ class Circle:
         self.workreq_outstanding = False
         self.workreq_rank = None
 
-        # barriers
-        self.barrier_started = False
+        # manage reduction
+        self.reduce_enabled = True
+        self.reduce_time_last = MPI.Wtime()
+        self.reduce_time_interval = reduce_interval
+        self.reduce_outstanding = False
+        self.reduce_replies = 0
 
         # debug
         self.d = {"rank" : "rank %s" % self.rank}
@@ -134,6 +139,9 @@ class Circle:
 
             # check for and service requests
             self.workreq_check()
+
+            if self.reduce_enabled:
+                self.reduce_check()
 
             if len(self.workq) == 0:
                 self.request_work()
@@ -434,7 +442,11 @@ class Circle:
     def reduce(self, count):
         pass
 
-    def reduce_check(self):
+    def reduce_check(self, cleanup=False):
+        """
+        initiate and progress a reduce operation at specified interval,
+        ensure progress of reduction in background, stop reduction if cleanup flag is True
+        """
         pass
 
 

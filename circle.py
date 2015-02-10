@@ -263,8 +263,9 @@ class Circle:
             spread it evenly among all requesters
         """
 
-        base = wcount / rcount
-        extra = wcount - (base * rcount)
+        base = wcount / (rcount + 1)    # leave self a base number of works
+        extra = wcount - base * (rcount + 1)
+        if extra > rcount: extra = rcount
         sizes = [base] * rcount
         for i in range(extra):
             sizes[i] += 1

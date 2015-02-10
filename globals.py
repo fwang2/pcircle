@@ -22,3 +22,5 @@ class G:
     str = {WHITE: "white", BLACK: "black", NONE: "not set", TERMINATE: "terminate",
            ABORT: "abort", MSG: "message"}
 
+    KEY         = "key"
+    VAL         = "val"

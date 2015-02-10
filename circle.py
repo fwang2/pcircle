@@ -226,7 +226,6 @@ class Circle:
         return self.token_proc
 
     def workreq_check(self, cleanup=False):
-        logger.debug("in workreq_check(): %s" % self.workreq_outstanding, extra=self.d)
         while True:
             st = MPI.Status()
             ret = self.comm.Iprobe(source = MPI.ANY_SOURCE, tag = T.WORK_REQUEST, status = st)
@@ -274,7 +273,7 @@ class Circle:
     def send_no_work(self, rank):
         """ send no work reply to someone requesting work"""
 
-        buf = { 'key': G.ABORT } if self.abort else { 'key': G.ZERO }
+        buf = { G.KEY: G.ABORT } if self.abort else { G.KEY: G.ZERO }
         r = self.comm.isend(buf, dest = rank, tag = T.WORK_REPLY)
         r.wait()
 
@@ -302,8 +301,8 @@ class Circle:
         if (rank < self.rank) or (rank == self.token_src):
             self.token_proc = G.BLACK
 
-        buf = { 'key': count,
-                'val': self.workq[0:count] }
+        buf = { G.KEY: count,
+                G.VAL: self.workq[0:count] }
 
         self.comm.send(buf, dest = rank, tag = T.WORK_REPLY)
         logger.debug("%s work items sent to rank %s" % (count, rank), extra=self.d)
@@ -345,16 +344,16 @@ class Circle:
 
         buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
 
-        if buf['key'] == G.ABORT:
+        if buf[G.KEY] == G.ABORT:
             logger.debug("receive abort signal", extra=self.d)
             self.abort = True
             return
-        elif buf['key'] == G.ZERO:
+        elif buf[G.KEY] == G.ZERO:
             logger.debug("receive no work signal", extra=self.d)
             return
         else:
-            assert type(buf['val']) == list
-            self.workq.extend(buf['val'])
+            assert type(buf[G.VAL]) == list
+            self.workq.extend(buf[G.VAL])
 
     def finalize(self):
         """ clean up """

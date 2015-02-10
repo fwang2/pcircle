@@ -274,9 +274,9 @@ class Circle:
     def send_no_work(self, rank):
         """ send no work reply to someone requesting work"""
 
-        buf = { 'key': G.ZERO } if self.abort else { 'key': G.ABORT }
-        self.comm.send(buf, dest = rank, tag = T.WORK_REPLY)
-
+        buf = { 'key': G.ABORT } if self.abort else { 'key': G.ZERO }
+        r = self.comm.isend(buf, dest = rank, tag = T.WORK_REPLY)
+        r.wait()
 
     def send_work_to_many(self):
         rcount = len(self.requestors)
@@ -353,11 +353,8 @@ class Circle:
             logger.debug("receive no work signal", extra=self.d)
             return
         else:
-            if type(buf['val']) == list:
-                self.workq.extend(buf['val'])
-            else:
-                logger.error("receive from rank %s: %s" % (rank, buf),
-                             extra = self.d)
+            assert type(buf['val']) == list
+            self.workq.extend(buf['val'])
 
     def finalize(self):
         """ clean up """
@@ -371,8 +368,6 @@ class Circle:
 
         # this won't block as token is waiting
         buf = self.comm.recv(source = self.token_src, tag = T.TOKEN)
-        if buf is None:
-            raise RuntimeError("token color is None")
 
         # record token is local
         self.token_is_local = True
@@ -385,9 +380,11 @@ class Circle:
         if self.token_send_req != MPI.PROC_NULL:
             self.token_send_req.Wait()
 
+        # now send is complete, we can overwrite
         self.token_color = buf
 
         # now set our state
+        # a black machine receives a black token, set machine color as white
         if self.token_proc == G.BLACK and self.token_color == G.BLACK:
             self.token_proc = G.WHITE
 

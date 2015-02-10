@@ -46,6 +46,11 @@ class Circle:
         self.reduce_replies = 0
         self.reduce_buf = [0] * 3   # work items, work bytes
 
+        # barriers
+        self.barrier_started = False
+        self.barrier_up = False    # flag to indicate barrier sent to parent
+        self.barrier_replies = 0
+
         # token
         self.token_init()
 
@@ -180,22 +185,69 @@ class Circle:
         self.barrier_started = True
 
     def barrier_test(self):
-
-        # barrier has not been started
-        if not self.barrier_started:
+        if not self.barrier_start:
             return False
 
-        # FIXME
-        # do we really need async barrier?
-        self.comm.Barrier()
+        # check if we have received message from all children
+        if self.barries_replies < self.children:
+            # still waiting for barries from children
+            st = MPI.Status()
+            flag = self.comm.Iprobe(MPI.MPI_ANY_SOURCE, T.BARRIER, st)
+            if flag:
+                child = st.Get_source()
+                self.comm.recv(source = child, tag = T.BARRIER)
+                self.barrier_replies += 1
 
-    def bcase_abort(self):
+        # if we have not sent a message to our parent, and we
+        # have received a message from all of our children (or we have no children)
+        # send a message to our parent
+        if not self.barrier_up and self.barrier_replies == self.children:
+            if self.parent_rank != MPI.PROC_NULL:
+                self.comm.send(None, self.parent_rank, T.BARRIER)
+
+            # transition to state where we're waiting for parent
+            # to notify us that the barrier is complete
+            self.barrier_up = True
+
+        # wait for message to come back down from parent to mark end of barrier
+        complete = False
+        if self.barrier_up:
+            if self.parent_rank != MPI.PROC_NULL:
+                # check for message from parent
+                flag = self.comm.Iprobe(self.parent_rank, T.BARRIER)
+                if flag:
+                    self.comm.recv(source = self.parent_rank, tag = T.BARRIER)
+                    # mark barrier as complete
+                    complete = True
+            else:
+                # we have no parent, we must be root
+                # so mark the barrier complete
+                complete = True
+
+        # barrier is complete, send messages to children if any and return true
+        if complete:
+            for child in self.child_ranks:
+                self.comm.send(dest=child, tag = T.BARRIER)
+
+            # reset state for another barrier
+            self.barrier_started = False
+            self.barrier_up = False
+            self.barrier_replies = 0
+            return True
+
+        # barrier still not complete
+        return False
+
+
+    def bcast_abort(self):
         self.abort = True
         buf = G.ABORT
         for i in range(self.size):
             if (i != self.rank):
-                self.comm.send(buf, i, tag = T.WORK_REQUEST)
-                logger.warn("abort message sent to %s" % i)
+                self.comm.send(buf, dest = i, tag = T.WORK_REQUEST)
+                logger.warn("abort message sent to %s" % i, extra=self.d)
+
+
     def cleanup(self):
         while True:
             if not (self.reduce_outstanding or self.request_outstanding) and \

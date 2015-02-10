@@ -14,6 +14,8 @@ class G:
     NONE            = -99
     TERMINATE       = -100
     MSG             = 99
+    MSG_VALID       = True
+    MSG_INVALID     = False
 
     detail_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     simple_fmt = '%(name)s - %(levelname)s - %(rank)s - %(message)s'

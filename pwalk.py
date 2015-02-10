@@ -76,11 +76,21 @@ class PWalk(BaseTask):
     def summarize(self):
         map(self.tally, self.flist)
 
-    def reduce_op(self):
-        pass
+    def reduce_init(self):
+        buf = [0] * 3
+        self.circle.reduce(buf)
 
-    def reduce_fini(self):
-        pass
+    def reduce(self, buf1, buf2):
+
+        buf = [0] * 3
+        buf[1] = buf1[1] + buf2[1]
+        buf[2] = buf1[2] + buf2[2]
+
+        self.circle.reduce(buf)
+
+    def reduce_finish(self, buf):
+        # get result of reduction
+        print("Items walked %s" % buf)
 
 def main():
 

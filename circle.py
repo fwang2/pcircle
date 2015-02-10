@@ -1,6 +1,7 @@
 from __future__ import print_function
 from mpi4py import MPI
 from globals import T, G
+from copy import copy
 import logging
 import random
 
@@ -14,7 +15,7 @@ class Circle:
     # Keep init() and reset() in sync ... it is a pain, I know
 
     def __init__(self, name="Circle Work Comm",  split = "equal",
-                 reduce_interval=10):
+                 reduce_interval=10, k=2):
 
         random.seed()  # use system time to seed
         logging_init()
@@ -23,7 +24,6 @@ class Circle:
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
-        self.token_init()
 
         self.split = split
         self.task = None
@@ -44,22 +44,17 @@ class Circle:
         self.reduce_time_interval = reduce_interval
         self.reduce_outstanding = False
         self.reduce_replies = 0
+        self.reduce_buf = [0] * 3   # work items, work bytes
+
+        # token
+        self.token_init()
+
+        # tree
+        self.tree_init(k)
 
         # debug
         self.d = {"rank" : "rank %s" % self.rank}
 
-
-    def next_proc(self):
-        """ Note next proc could return rank of itself """
-        if self.size == 1:
-            return MPI.PROC_NULL
-        else:
-            return random.randint(0, self.size-1)
-
-
-    def token_status(self):
-        return "rank: %s, token_src: %s, token_dest: %s, token_color: %s, token_proc: %s" % \
-            (self.rank, self.token_src, self.token_dest, G.str[self.token_color], G.str[self.token_proc])
 
     def token_init(self):
 
@@ -72,10 +67,45 @@ class Circle:
             self.token_is_local = True
             self.token_color = G.WHITE
             self.token_proc  = G.WHITE
-
-
         self.token_send_req = MPI.REQUEST_NULL
 
+
+    def tree_init(self, k):
+        self.k = k
+        self.parent_rank = MPI.PROC_NULL
+        self.child_ranks = []  # [MPI.PROC_NULL] * k is too much C
+
+        # compute rank of parent if we have one
+        if self.rank > 0:
+            self.parent_rank = (self.size-1) / k
+
+        # identify ranks of what would be leftmost and rightmost children
+        left = self.rank * k + 1
+        right = self.rank * k + k
+
+        # if we have at least one child
+        # compute number of children and list of child ranks
+        if left < self.size:
+            # adjust right child in case we don't have a full set of k
+            if right >= self.size:
+                right = self.size - 1;
+            # compute number of children and the list
+            self.children = right - left + 1
+
+            for i in range(self.children):
+                self.child_ranks.append( left + i)
+
+    def next_proc(self):
+        """ Note next proc could return rank of itself """
+        if self.size == 1:
+            return MPI.PROC_NULL
+        else:
+            return random.randint(0, self.size-1)
+
+
+    def token_status(self):
+        return "rank: %s, token_src: %s, token_dest: %s, token_color: %s, token_proc: %s" % \
+            (self.rank, self.token_src, self.token_dest, G.str[self.token_color], G.str[self.token_proc])
 
     def workq_info(self):
         s =  "has %s items in work queue\n" % len(self.workq)
@@ -145,8 +175,6 @@ class Circle:
         else:
             return None
 
-    def check_reduce(self):
-        pass
 
     def barrier_start(self):
         self.barrier_started = True
@@ -263,9 +291,9 @@ class Circle:
             spread it evenly among all requesters
         """
 
-        base = wcount / (rcount + 1)    # leave self a base number of works
+        base = wcount / (rcount + 1)            # leave self a base number of works
         extra = wcount - base * (rcount + 1)
-        if extra > rcount: extra = rcount
+        if extra > rcount: extra = rcount       # take fewer, no big deal
         sizes = [base] * rcount
         for i in range(extra):
             sizes[i] += 1
@@ -431,15 +459,119 @@ class Circle:
         # now we don't have the token
         self.token_is_local = False
 
-    def reduce(self, count):
-        pass
+    def reduce_init(self, x):
+        self.reduce_items = x
+
+    def reduce(self, buf):
+        # copy data from user buffer
+        # do I really need to copy?
+        self.reduce_buf = copy(buf)
+
 
     def reduce_check(self, cleanup=False):
         """
         initiate and progress a reduce operation at specified interval,
         ensure progress of reduction in background, stop reduction if cleanup flag is True
         """
-        pass
+
+        # if we have outstanding reduce, check message from children
+        # otherwise, check whether we should start new reduce
+
+        if self.reduce_outstanding:
+            for child in self.child_ranks:
+                flag = self.comm.Iprobe(child, T.REDUCE)
+                if flag:
+                    # receive message from child
+                    # 1st element is number of completed work items
+                    # 2nd element is number of bytes of user data
+                    inbuf = self.comm.recv(child, T.REDUCE)
+                    self.reduce_replies += 1
+
+                    logger.debug("client data from %s: %s" %
+                                 (child, inbuf), extra=self.d)
+
+                    if inbuf[0] == G.MSG_INVALID:
+                        self.reduce_buf[0] = False
+                    else:
+                        self.reduce_buf[0] = True
+                        self.reduce_buf[1] += inbuf[1]
+                        self.reduce_buf[2] += inbuf[2]
+
+                        # invoke user's callback to reduce user data
+                        if hasattr(self.task, "reduce"):
+                            self.task.reduce(self.reduce_buf, inbuf)
+
+
+            # check if we have gotten replies from all children
+            if self.reduce_replies == self.children:
+                # all children replied
+                # add our own contents to reduce buffer
+                self.reduce_workitems += self.work_processed
+
+                # send message to parent if we have one
+                if self.parent_rank != MPI.PROC_NULL:
+                    self.comm.send(self.reduce_buf, self.parent_rank, T.REDUCE)
+                else:
+                    # we are the root, print results if we have valid data
+                    if self.reduce_buf[0]:
+                        logger.info("Object processed: %s" % self.reduce_buf[1], extra=self.d)
+
+                    # invoke callback on root to deliver final results (?)
+                    if hasattr(self.task, "reduce_finish"):
+                        self.task.reduce_finish(self.reduce_buf)
+
+                # disable flag to indicate we got what we want
+                self.reduce_outstanding = False
+        else:
+            # we don't have an outstanding reduction
+            # determine if a new reduce should be started
+            # only bother checking if we think it is about time or
+            # we are in cleanup mode
+            start_reduce = False
+            time_now = MPI.Wtime()
+            time_next = self.reduce_time_last + self.reduce_time_interval
+            if time_now >= time_next or cleanup:
+                # okay, let's do reduce
+                if self.parent_rank == MPI.PROC_NULL:
+                    # we are root, kick it off
+                    start_reduce = True
+                else:
+                    # we are not root, check if parent sent us a message
+                    flag = self.comm.Iprobe(self.parent_rank, T.REDUCE)
+                    if flag:
+                        # receive message from parent and set flag to start reduce
+                        self.comm.recv(None, self.parent_rank, T.REDUCE)
+                        start_reduce = True
+
+            # it is critical that we don't start a reduce if we are in cleanup
+            # phase because we may have already started the non-blocking barrier
+            # just send an invalid message back to parent
+            if start_reduce and cleanup:
+                # avoid starting a reduce
+                start_reduce = False
+
+                if self.parent_rank != MPI.PROC_NULL:
+                    self.reduce_buf[0] = G.MSG_INVALID
+                    self.comm.send(self.reduce_buf, self.parent_rank, T.REDUCE)
+
+            if start_reduce:
+                # set flag to indicate we have a reduce outstanding
+                # and initiate state for a fresh reduction
+
+                self.reduce_time_last = time_now
+                self.reduce_outstanding = True
+                self.reduce_replies = 0
+                self.reduce_buf[0] = G.MSG_VALID
+                self.reduce_buf[1] = 0
+                self.reduce_buf[2] = 0
+
+                # invoke callback to get input data
+                if hasattr(self.task, "reduce_init"):
+                    self.task.reduce_init()
+
+                # sent message to each child
+                for child in self.child_ranks:
+                    self.comm.send(None, child, T.REDUCE)
 
 
     def set_loglevel(self, level):

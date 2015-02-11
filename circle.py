@@ -79,7 +79,7 @@ class Circle:
         self.k = k
         self.parent_rank = MPI.PROC_NULL
         self.child_ranks = []  # [MPI.PROC_NULL] * k is too much C
-
+        self.children = 0
         # compute rank of parent if we have one
         if self.rank > 0:
             self.parent_rank = (self.size-1) / k
@@ -128,7 +128,9 @@ class Circle:
 
         # work until terminate
         self.loop()
-
+        if self.rank == 0:
+            logger.info("Loop finished, cleaning up ... ", extra=self.d)
+        self.cleanup()
 
     def loop(self):
         """ central loop to finish the work """
@@ -189,10 +191,10 @@ class Circle:
             return False
 
         # check if we have received message from all children
-        if self.barries_replies < self.children:
+        if self.barrier_replies < self.children:
             # still waiting for barries from children
             st = MPI.Status()
-            flag = self.comm.Iprobe(MPI.MPI_ANY_SOURCE, T.BARRIER, st)
+            flag = self.comm.Iprobe(MPI.ANY_SOURCE, T.BARRIER, st)
             if flag:
                 child = st.Get_source()
                 self.comm.recv(source = child, tag = T.BARRIER)
@@ -250,7 +252,9 @@ class Circle:
 
     def cleanup(self):
         while True:
-            if not (self.reduce_outstanding or self.request_outstanding) and \
+
+            # start non-block barrier if we have no outstanding items
+            if not self.reduce_outstanding and not self.workreq_outstanding and \
                 self.token_send_req == MPI.REQUEST_NULL:
                 self.barrier_start()
 
@@ -259,19 +263,20 @@ class Circle:
                 break
 
             # send no work message for any work request that comes in
-            self.request_check()
+            self.workreq_check(cleanup = True)
 
             # clean up any outstanding reduction
-            self.reduce_check()
+            if self.reduce_enabled:
+                self.reduce_check(cleanup = True)
 
             # recv any incoming work reply messages
-            self.request_work()
+            self.request_work(cleanup = True)
 
             # check and recv any incoming token
             self.token_check()
 
             # if we have an outstanding token, check if it has been recv'ed
-            # FIXME
+            # I don't think this is needed as there seem no side effect
             if self.token_send_req != MPI.REQUEST_NULL:
                 self.token_send_req.Test()
 
@@ -534,9 +539,10 @@ class Circle:
                 flag = self.comm.Iprobe(child, T.REDUCE)
                 if flag:
                     # receive message from child
+                    # 0st element is G.MSG_VALID or not
                     # 1st element is number of completed work items
                     # 2nd element is number of bytes of user data
-                    inbuf = self.comm.recv(child, T.REDUCE)
+                    inbuf = self.comm.recv(source = child, tag = T.REDUCE)
                     self.reduce_replies += 1
 
                     logger.debug("client data from %s: %s" %
@@ -558,7 +564,7 @@ class Circle:
             if self.reduce_replies == self.children:
                 # all children replied
                 # add our own contents to reduce buffer
-                self.reduce_workitems += self.work_processed
+                self.reduce_buf[1] += self.work_processed
 
                 # send message to parent if we have one
                 if self.parent_rank != MPI.PROC_NULL:
@@ -579,7 +585,9 @@ class Circle:
             # determine if a new reduce should be started
             # only bother checking if we think it is about time or
             # we are in cleanup mode
+
             start_reduce = False
+
             time_now = MPI.Wtime()
             time_next = self.reduce_time_last + self.reduce_time_interval
             if time_now >= time_next or cleanup:
@@ -592,7 +600,7 @@ class Circle:
                     flag = self.comm.Iprobe(self.parent_rank, T.REDUCE)
                     if flag:
                         # receive message from parent and set flag to start reduce
-                        self.comm.recv(None, self.parent_rank, T.REDUCE)
+                        self.comm.recv(source=self.parent_rank, tag = T.REDUCE)
                         start_reduce = True
 
             # it is critical that we don't start a reduce if we are in cleanup
@@ -601,7 +609,7 @@ class Circle:
             if start_reduce and cleanup:
                 # avoid starting a reduce
                 start_reduce = False
-
+                # if we have parent, send invalid msg
                 if self.parent_rank != MPI.PROC_NULL:
                     self.reduce_buf[0] = G.MSG_INVALID
                     self.comm.send(self.reduce_buf, self.parent_rank, T.REDUCE)

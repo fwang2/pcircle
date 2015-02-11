@@ -40,6 +40,11 @@ class PWalk(BaseTask):
         self.cnt_files = 0
         self.cnt_filesize = 0
 
+        # reduce
+        self.reduce_items = 0
+        self.buf = [0] * 3
+        self.buf[0] = G.MSG_VALID
+
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
 
@@ -57,7 +62,9 @@ class PWalk(BaseTask):
 
         path = self.deq()
         logger.debug("process: %s" %  path, extra=self.d)
+
         if path:
+            self.reduce_items += 1
             st = os.stat(path)
             self.flist.append( (path, st.st_mode, st.st_size ))
 
@@ -77,27 +84,23 @@ class PWalk(BaseTask):
         map(self.tally, self.flist)
 
     def reduce_init(self):
-        buf = [0] * 3
-        self.circle.reduce(buf)
+        self.circle.reduce(self.buf)
 
     def reduce(self, buf1, buf2):
-
-        buf = [0] * 3
-        buf[1] = buf1[1] + buf2[1]
-        buf[2] = buf1[2] + buf2[2]
-
-        self.circle.reduce(buf)
+        self.buf[1] = buf1[1] + buf2[1]
+        self.buf[2] = buf2[2] + buf2[2]
+        self.circle.reduce(self.buf)
 
     def reduce_finish(self, buf):
         # get result of reduction
-        print("Items walked %s" % buf)
+        pass
 
 def main():
 
     global ARGS
     ARGS = parse_args()
     root = os.path.abspath(ARGS.path)
-    circle = Circle()
+    circle = Circle(reduce_interval=0)
     if ARGS.verbose:
         logging_init(logging.DEBUG)
         circle.set_loglevel(logging.DEBUG)

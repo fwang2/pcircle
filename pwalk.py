@@ -14,17 +14,26 @@ import argparse
 ARGS    = None
 logger  = logging.getLogger("pwalk")
 
-def logging_init(level=logging.INFO):
+def logging_init(loglevel, circle):
     global logger
+
+    numeric_level = getattr(logging, loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError("Invalid log level: %s" % loglevel)
+
+    logger.setLevel(level=numeric_level)
+    circle.set_loglevel(level=numeric_level)
+
     fmt = logging.Formatter(G.simple_fmt)
-    logger.setLevel(level)
+
     console = logging.StreamHandler()
     console.setFormatter(fmt)
     logger.addHandler(console)
 
+    circle.set_loglevel(numeric_level)
 def parse_args():
     parser = argparse.ArgumentParser(description="pwalk")
-    parser.add_argument("-v", "--verbose", action="store_true", help="debug output")
+    parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("-p", "--path", default=".", help="path")
 
     return parser.parse_args()
@@ -101,11 +110,8 @@ def main():
     ARGS = parse_args()
     root = os.path.abspath(ARGS.path)
     circle = Circle(reduce_interval=5)
-    if ARGS.verbose:
-        logging_init(logging.DEBUG)
-        circle.set_loglevel(logging.DEBUG)
-    else:
-        logging_init()
+
+    logging_init(ARGS.loglevel, circle)
 
     # create this task
     task = PWalk(circle, root)

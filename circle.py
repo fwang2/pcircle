@@ -638,6 +638,9 @@ class Circle:
         ret = ret + "barrier started: %s" % self.barrier_started
         return ret
 
+    # define method alias
+    finalize = __init__
+
 def logging_init(level=logging.INFO):
 
     global logger

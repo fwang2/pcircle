@@ -100,7 +100,7 @@ def main():
     global ARGS
     ARGS = parse_args()
     root = os.path.abspath(ARGS.path)
-    circle = Circle(reduce_interval=0)
+    circle = Circle(reduce_interval=5)
     if ARGS.verbose:
         logging_init(logging.DEBUG)
         circle.set_loglevel(logging.DEBUG)
@@ -109,8 +109,6 @@ def main():
 
     # create this task
     task = PWalk(circle, root)
-    if circle.rank == 0:
-        print("Calculating work:"),
     # start
     circle.begin(task)
 

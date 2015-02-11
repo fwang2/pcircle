@@ -25,6 +25,10 @@ class Circle:
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
 
+        # debug
+        self.d = {"rank" : "rank %s" % self.rank}
+
+
         self.split = split
         self.task = None
         self.abort = False
@@ -57,10 +61,6 @@ class Circle:
         # tree
         self.tree_init(k)
 
-        # debug
-        self.d = {"rank" : "rank %s" % self.rank}
-
-
     def token_init(self):
 
         self.token_src = (self.rank - 1 + self.size) % self.size
@@ -82,7 +82,7 @@ class Circle:
         self.children = 0
         # compute rank of parent if we have one
         if self.rank > 0:
-            self.parent_rank = (self.size-1) / k
+            self.parent_rank = (self.rank - 1) / k
 
         # identify ranks of what would be leftmost and rightmost children
         left = self.rank * k + 1
@@ -99,6 +99,9 @@ class Circle:
 
             for i in range(self.children):
                 self.child_ranks.append( left + i)
+
+        logger.debug("parent: %s, children: %s" % (self.parent_rank, self.child_ranks),
+                        extra=self.d)
 
     def next_proc(self):
         """ Note next proc could return rank of itself """
@@ -128,8 +131,10 @@ class Circle:
 
         # work until terminate
         self.loop()
+
         if self.rank == 0:
-            logger.info("Loop finished, cleaning up ... ", extra=self.d)
+            logger.debug("Loop finished, cleaning up ... ", extra=self.d)
+
         self.cleanup()
 
     def loop(self):
@@ -152,21 +157,6 @@ class Circle:
                 status = self.check_for_term();
                 if status == G.TERMINATE:
                     break;
-        #
-        # We got here because
-        # (1) all processes finish the work
-        # (2) abort
-        #
-        # we now clean up
-        #self.workreq_check(cleanup=True)
-        #self.request_work(cleanup=True)
-        #self.token_check()
-        #if self.token_send_req != MPI.REQUEST_NULL:
-        #    logger.warn("Have outstanding token req", extra = self.d)
-        self.comm.Barrier()
-        if self.rank == 0:
-            logger.debug("All process in sync now", extra=self.d)
-
 
     def enq(self, work):
         logger.debug("enq: %s" % work, extra=self.d)
@@ -252,7 +242,6 @@ class Circle:
 
     def cleanup(self):
         while True:
-
             # start non-block barrier if we have no outstanding items
             if not self.reduce_outstanding and not self.workreq_outstanding and \
                 self.token_send_req == MPI.REQUEST_NULL:
@@ -278,8 +267,8 @@ class Circle:
             # if we have an outstanding token, check if it has been recv'ed
             # I don't think this is needed as there seem no side effect
             if self.token_send_req != MPI.REQUEST_NULL:
-                self.token_send_req.Test()
-
+                if self.token_send_req.Test():
+                    self.token_send_req = MPI.REQUEST_NULL
 
     def check_for_term(self):
 
@@ -591,7 +580,6 @@ class Circle:
             time_now = MPI.Wtime()
             time_next = self.reduce_time_last + self.reduce_time_interval
             if time_now >= time_next or cleanup:
-                # okay, let's do reduce
                 if self.parent_rank == MPI.PROC_NULL:
                     # we are root, kick it off
                     start_reduce = True
@@ -637,6 +625,18 @@ class Circle:
     def set_loglevel(self, level):
         global logger
         logger.setLevel(level)
+
+
+    def debug_info(self):
+        ret = "request %s, " % self.workreq_outstanding
+        if self.token_send_req == MPI.REQUEST_NULL:
+            token_send_req = False
+        else:
+            token_send_req = True
+        ret = ret + "token_send_request: %s, " % token_send_req
+        ret = ret + "reduce outstanding: %s, " % self.reduce_outstanding
+        ret = ret + "barrier started: %s" % self.barrier_started
+        return ret
 
 def logging_init(level=logging.INFO):
 

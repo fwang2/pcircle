@@ -549,7 +549,9 @@ class Circle:
             if self.reduce_replies == self.children:
                 # all children replied
                 # add our own contents to reduce buffer
-                self.reduce_buf[1] += self.work_processed
+
+                # @issue: no need to record this, right?
+                # self.reduce_buf[1] += self.work_processed
 
                 # send message to parent if we have one
                 if self.parent_rank != MPI.PROC_NULL:
@@ -624,18 +626,20 @@ class Circle:
 
 
     def debug_info(self):
-        ret = "request %s, " % self.workreq_outstanding
+        ret = "req outstanding = %s, " % self.workreq_outstanding
         if self.token_send_req == MPI.REQUEST_NULL:
             token_send_req = False
         else:
             token_send_req = True
-        ret = ret + "token_send_request: %s, " % token_send_req
-        ret = ret + "reduce outstanding: %s, " % self.reduce_outstanding
-        ret = ret + "barrier started: %s" % self.barrier_started
+        ret = ret + "token_send_request = %s, " % token_send_req
+        ret = ret + "reduce outstanding = %s, " % self.reduce_outstanding
+        ret = ret + "barrier started = %s " % self.barrier_started
+        ret = ret + "local token = %s" % self.token_is_local
         return ret
 
     # define method alias
     finalize = __init__
+    setLevel = set_loglevel
 
 def logging_init(level=logging.INFO):
 

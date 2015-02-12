@@ -35,6 +35,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="pwalk")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("-p", "--path", default=".", help="path")
+    parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
 
     return parser.parse_args()
 
@@ -50,7 +51,6 @@ class PWalk(BaseTask):
         self.cnt_filesize = 0
 
         # reduce
-        self.reduce_items = 0
         self.buf = [0] * 3
         self.buf[0] = G.MSG_VALID
 
@@ -73,10 +73,10 @@ class PWalk(BaseTask):
         logger.debug("process: %s" %  path, extra=self.d)
 
         if path:
-            self.reduce_items += 1
             st = os.stat(path)
             self.flist.append( (path, st.st_mode, st.st_size ))
-
+            self.buf[1] += 1
+            self.buf[2] += st.st_size
             # recurse into directory
             if stat.S_ISDIR(st.st_mode):
                 self.process_dir(path)
@@ -95,9 +95,7 @@ class PWalk(BaseTask):
     def reduce_init(self):
         self.circle.reduce(self.buf)
 
-    def reduce(self, buf1, buf2):
-        self.buf[1] = buf1[1] + buf2[1]
-        self.buf[2] = buf2[2] + buf2[2]
+    def reduce(self):
         self.circle.reduce(self.buf)
 
     def reduce_finish(self, buf):
@@ -109,7 +107,7 @@ def main():
     global ARGS
     ARGS = parse_args()
     root = os.path.abspath(ARGS.path)
-    circle = Circle(reduce_interval=5)
+    circle = Circle(reduce_interval=ARGS.interval)
 
     logging_init(ARGS.loglevel, circle)
 

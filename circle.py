@@ -430,9 +430,6 @@ class Circle:
             assert type(buf[G.VAL]) == list
             self.workq.extend(buf[G.VAL])
 
-    def finalize(self):
-        """ clean up """
-        pass
 
 
     def token_recv(self):
@@ -546,7 +543,7 @@ class Circle:
 
                         # invoke user's callback to reduce user data
                         if hasattr(self.task, "reduce"):
-                            self.task.reduce(self.reduce_buf, inbuf)
+                            self.task.reduce()
 
 
             # check if we have gotten replies from all children

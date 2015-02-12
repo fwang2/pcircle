@@ -31,6 +31,7 @@ def logging_init(loglevel, circle):
     logger.addHandler(console)
 
     circle.set_loglevel(numeric_level)
+
 def parse_args():
     parser = argparse.ArgumentParser(description="pwalk")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
@@ -53,6 +54,7 @@ class PWalk(BaseTask):
         # reduce
         self.buf = [0] * 3
         self.buf[0] = G.MSG_VALID
+        self.reduce_items = 0
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
@@ -75,8 +77,7 @@ class PWalk(BaseTask):
         if path:
             st = os.stat(path)
             self.flist.append( (path, st.st_mode, st.st_size ))
-            self.buf[1] += 1
-            self.buf[2] += st.st_size
+            self.reduce_items += 1
             # recurse into directory
             if stat.S_ISDIR(st.st_mode):
                 self.process_dir(path)
@@ -93,10 +94,10 @@ class PWalk(BaseTask):
         map(self.tally, self.flist)
 
     def reduce_init(self):
-        self.circle.reduce(self.buf)
+        self.circle.reduce(self.reduce_items)
 
-    def reduce(self):
-        self.circle.reduce(self.buf)
+    def reduce(self, buf1, buf2):
+        self.circle.reduce(buf1[1] + buf2[1])
 
     def reduce_finish(self, buf):
         # get result of reduction

@@ -507,8 +507,7 @@ class Circle:
 
     def reduce(self, buf):
         # copy data from user buffer
-        # do I really need to copy?
-        self.reduce_buf = copy(buf)
+        self.reduce_buf[1] = buf
 
 
     def reduce_check(self, cleanup=False):
@@ -527,7 +526,7 @@ class Circle:
                     # receive message from child
                     # 0st element is G.MSG_VALID or not
                     # 1st element is number of completed work items
-                    # 2nd element is number of bytes of user data
+                    # 2nd element is undefined user data
                     inbuf = self.comm.recv(source = child, tag = T.REDUCE)
                     self.reduce_replies += 1
 
@@ -539,12 +538,12 @@ class Circle:
                     else:
                         self.reduce_buf[0] = True
                         self.reduce_buf[1] += inbuf[1]
-                        self.reduce_buf[2] += inbuf[2]
+                        self.reduce_buf[2] = inbuf[2]
 
                         # invoke user's callback to reduce user data
+                        # FIXME
                         if hasattr(self.task, "reduce"):
-                            self.task.reduce()
-
+                            self.task.reduce(self.reduce_buf, inbuf)
 
             # check if we have gotten replies from all children
             if self.reduce_replies == self.children:

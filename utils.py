@@ -4,22 +4,19 @@ import itertools
 import logging
 from globals import G
 
-def logging_init(logger, loglevel, circle):
+def logging_init(logger, loglevel):
 
     numeric_level = getattr(logging, loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError("Invalid log level: %s" % loglevel)
 
     logger.setLevel(level=numeric_level)
-    circle.set_loglevel(level=numeric_level)
 
     fmt = logging.Formatter(G.simple_fmt)
 
     console = logging.StreamHandler()
     console.setFormatter(fmt)
     logger.addHandler(console)
-
-    circle.set_loglevel(numeric_level)
 
     return logger
 

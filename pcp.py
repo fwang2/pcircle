@@ -12,28 +12,40 @@ import logging
 import argparse
 import utils
 from pwalk import PWalk
+import sys
 
 ARGS    = None
 logger  = logging.getLogger("pcp")
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="pwalk")
+    parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
-    parser.add_argument("-p", "--path", default=".", help="path")
+    parser.add_argument("-", "--interval", type=int, default=10, help="interval")
+    parser.add_argument("-c", "--checksum", action="store_true", help="verify")
+    parser.add_argument("src", help="copy from")
+    parser.add_argument("dest", help="copy to")
 
     return parser.parse_args()
 
 
 class PCP(BaseTask):
-    def __init__(self, circle, path):
+    def __init__(self, circle, treewalk, src, dest):
         BaseTask.__init__(self, circle)
         self.circle = circle
-        self.root = path
-        self.flist = []  # element is (filepath, filemode, filesize)
+        self.treewalk = treewalk
+        self.src = os.path.abspath(src)
+        self.srcbase = os.path.basename(src)
+        self.dest = os.path.abspath(dest)
+
+        # cache
+        fd_cache = {}
 
         self.cnt_dirs = 0
         self.cnt_files = 0
         self.cnt_filesize = 0
+
+        self.blocksize = 2
+        self.chunksize = 2
 
         # reduce
         self.reduce_items = 0
@@ -42,71 +54,119 @@ class PCP(BaseTask):
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
+        self.wtime_started = MPI.Wtime()
+        self.wtime_ended = None
+
+
+    def enq_file(self, f):
+        """
+        f (path mode size) - we enq all in one shot
+        CMD = copy src  dest  off_start  last_chunk
+        """
+        chunks    = f[2] / self.chunksize
+        remaining = f[2] % self.chunksize
+
+        d = {}
+        d['cmd'] = 'copy'
+        d['src'] = f[0]
+        d['dest'] = os.path.abspath(self.dest + self.srcbase + "/" + f[0])
+
+        if f[2] == 0:
+            # empty file
+            d['off_start'] = 0
+            d['length'] = 0
+            self.enq(d)
+            logger.debug("%s" % d, extra=self.d)
+
+        for i in range(chunks):
+            d['off_start'] = i * self.chunksize
+            d['length'] = self.chunksize
+            self.enq(d)
+            logger.debug("%s" % d, extra=self.d)
+
+        if remaining > 0:
+            # send remainder
+            d['off_start'] = chunks * self.chunksize
+            d['length' ] = remaining
+            self.enq(d)
+            logger.debug("%s" % d, extra=self.d)
 
 
     def create(self):
-        self.enq(self.root)
+        # construct and enable all copy operations
+        for f in self.treewalk.flist:
+            if stat.S_ISREG(f[1]):
+                self.enq_file(f)
 
-    def process_dir(self, dir):
+    def abort(self, code):
+        self.circle.abort()
+        exit(code)
 
-        entries = os.listdir(dir)
-        for e in entries:
-            self.enq(os.path.abspath(dir + "/" + e))
+    def do_copy(self, work):
+        logger.debug("copy: %s" % work, extra=self.d)
 
     def process(self):
-
-        path = self.deq()
-        logger.debug("process: %s" %  path, extra=self.d)
-
-        if path:
-            self.reduce_items += 1
-            st = os.stat(path)
-            self.flist.append( (path, st.st_mode, st.st_size ))
-
-            # recurse into directory
-            if stat.S_ISDIR(st.st_mode):
-                self.process_dir(path)
-
-    def tally(self, t):
-        """ t is a tuple element of flist """
-        if stat.S_ISDIR(t[1]):
-            self.cnt_dirs += 1
-        elif stat.S_ISREG(t[1]):
-            self.cnt_files += 1
-            self.cnt_filesize += t[2]
-
-    def summarize(self):
-        map(self.tally, self.flist)
+        work = self.deq()
+        if work['cmd'] == 'copy':
+            self.do_copy(work)
+        else:
+            logger.error("Unknown command %s" % work['cmd'], extra=self.d)
+            self.abort()
 
     def reduce_init(self):
-        self.circle.reduce(self.buf)
+        pass
 
     def reduce(self, buf1, buf2):
-        self.buf[1] = buf1[1] + buf2[1]
-        self.buf[2] = buf2[2] + buf2[2]
-        self.circle.reduce(self.buf)
+        pass
 
     def reduce_finish(self, buf):
-        # get result of reduction
         pass
+
+    def epilogue():
+        pass
+
+def verify_path(src, dest):
+
+    if not os.path.exists(src) or not os.access(src, os.R_OK):
+        print("source directory %s is not readable" % src)
+        sys.exit(1)
+
+    if not os.path.exists(dest):
+        try:
+            os.mkdir(dest)
+        except:
+            print("Error: failed to create %s" % dest)
+            sys.exit(1)
+    else:
+        if not os.access(dest, os.W_OK):
+            print("Error: destination %s is not writable" % dest)
+            sys.exit(1)
 
 
 def main():
 
     global ARGS, logger
     ARGS = parse_args()
-    root = os.path.abspath(ARGS.path)
+
     circle = Circle(reduce_interval=5)
+    circle.setLevel(logging.ERROR)
+    logger = utils.logging_init(logger, ARGS.loglevel)
+    if circle.rank == 0: verify_path(ARGS.src, ARGS.dest)
 
-    logger = utils.logging_init(logger, ARGS.loglevel, circle)
-
-    # create this task
-    task = PWalk(circle, root)
-    # start
-    circle.begin(task)
-
-    # end
+    # first task
+    treewalk = PWalk(circle, ARGS.src, ARGS.dest)
+    treewalk.set_loglevel(ARGS.loglevel)
+    circle.begin(treewalk)
     circle.finalize()
+
+    # second task
+    print(treewalk.flist)
+    pcp = PCP(circle, treewalk, ARGS.src, ARGS.dest)
+    circle.begin(pcp)
+    circle.finalize()
+
+    pcp.wtime_ended = MPI.Wtime()
+
 
 if __name__ == "__main__": main()
 

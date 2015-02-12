@@ -641,7 +641,7 @@ class Circle:
     finalize = __init__
     setLevel = set_loglevel
 
-def logging_init(level=logging.INFO):
+def logging_init(level=logging.WARN):
 
     global logger
     fmt = logging.Formatter(G.simple_fmt)

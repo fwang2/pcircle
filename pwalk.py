@@ -5,6 +5,7 @@ from task import BaseTask
 from circle import Circle
 from globals import G
 from mpi4py import MPI
+from utils import logging_init
 import stat
 import os
 import os.path
@@ -13,24 +14,6 @@ import argparse
 
 ARGS    = None
 logger  = logging.getLogger("pwalk")
-
-def logging_init(loglevel, circle):
-    global logger
-
-    numeric_level = getattr(logging, loglevel.upper(), None)
-    if not isinstance(numeric_level, int):
-        raise ValueError("Invalid log level: %s" % loglevel)
-
-    logger.setLevel(level=numeric_level)
-    circle.set_loglevel(level=numeric_level)
-
-    fmt = logging.Formatter(G.simple_fmt)
-
-    console = logging.StreamHandler()
-    console.setFormatter(fmt)
-    logger.addHandler(console)
-
-    circle.set_loglevel(numeric_level)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="pwalk")
@@ -41,11 +24,14 @@ def parse_args():
     return parser.parse_args()
 
 class PWalk(BaseTask):
-    def __init__(self, circle, path):
+    def __init__(self, circle, rel_src, rel_dest=None):
         BaseTask.__init__(self, circle)
         self.circle = circle
-        self.root = path
+        self.rel_src = rel_src
+        self.rel_dest = rel_dest
+
         self.flist = []  # element is (filepath, filemode, filesize)
+        self.src_flist = self.flist
 
         self.cnt_dirs = 0
         self.cnt_files = 0
@@ -60,13 +46,13 @@ class PWalk(BaseTask):
         self.d = {"rank": "rank %s" % circle.rank}
 
     def create(self):
-        self.enq(self.root)
+        self.enq(self.rel_src)
 
     def process_dir(self, dir):
 
         entries = os.listdir(dir)
         for e in entries:
-            self.enq(os.path.abspath(dir + "/" + e))
+            self.enq(dir + "/" + e)
 
     def process(self):
 
@@ -109,14 +95,18 @@ class PWalk(BaseTask):
         total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
         return total_dirs, total_files, total_filesize
 
+    def set_loglevel(self, loglevel):
+        global logger
+        logger = logging_init(logger, loglevel)
+
 def main():
 
-    global ARGS
+    global ARGS, logger
     ARGS = parse_args()
-    root = os.path.abspath(ARGS.path)
+    #root = os.path.abspath(ARGS.path)
+    root = ARGS.path
     circle = Circle(reduce_interval=ARGS.interval)
-
-    logging_init(ARGS.loglevel, circle)
+    logger = logging_init(logger, ARGS.loglevel)
 
     task = PWalk(circle, root)
     circle.begin(task)

@@ -161,7 +161,10 @@ class Circle:
     def enq(self, work):
         logger.debug("enq: %s" % work, extra=self.d)
         if work is not None:
-            self.workq.append(work)
+            if type(work) in [list, tuple, dict]:
+                self.workq.append(copy(work))
+            else:
+                self.workq.append(work)
         else:
             logger.warn("enq work item is None")
 

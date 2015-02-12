@@ -59,7 +59,6 @@ class PWalk(BaseTask):
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
 
-
     def create(self):
         self.enq(self.root)
 
@@ -103,6 +102,13 @@ class PWalk(BaseTask):
         # get result of reduction
         pass
 
+    def total_tally(self):
+        self.summarize()
+        total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
+        total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
+        total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
+        return total_dirs, total_files, total_filesize
+
 def main():
 
     global ARGS
@@ -112,20 +118,10 @@ def main():
 
     logging_init(ARGS.loglevel, circle)
 
-    # create this task
     task = PWalk(circle, root)
-    # start
     circle.begin(task)
-
-    # end
     circle.finalize()
-
-    # summarize results
-    task.summarize()
-
-    total_dirs = circle.comm.reduce(task.cnt_dirs, op=MPI.SUM)
-    total_files = circle.comm.reduce(task.cnt_files, op=MPI.SUM)
-    total_filesize = circle.comm.reduce(task.cnt_filesize, op=MPI.SUM)
+    total_dirs, total_files, total_filesize = task.total_tally()
 
     if circle.rank == 0:
         print("\tDirectory count: %s" % total_dirs)

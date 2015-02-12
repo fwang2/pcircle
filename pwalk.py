@@ -35,7 +35,7 @@ def logging_init(loglevel, circle):
 def parse_args():
     parser = argparse.ArgumentParser(description="pwalk")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
-    parser.add_argument("-p", "--path", default=".", help="path")
+    parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
 
     return parser.parse_args()

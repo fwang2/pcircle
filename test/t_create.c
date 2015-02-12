@@ -23,6 +23,11 @@ int main(int argc, char**argv) {
         }
         posix_fallocate(fd, 0, rand() % sizemax);
         close(fd);
+
+        if (i % 100 == 0) {
+            double percent = (double) i / count;
+            fprintf(stderr, "%.2f are done\n", percent);
+        }
     }
 }
 

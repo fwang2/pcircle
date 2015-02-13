@@ -13,6 +13,7 @@ import argparse
 import utils
 from pwalk import PWalk
 import sys
+from collections import Counter
 
 ARGS    = None
 logger  = logging.getLogger("pcp")
@@ -22,6 +23,7 @@ def parse_args():
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("-", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
+    parser.add_argument("-f", "--force", action="store_true", default=False, help="force unlink")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -33,12 +35,14 @@ class PCP(BaseTask):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
+
         self.src = os.path.abspath(src)
         self.srcbase = os.path.basename(src)
         self.dest = os.path.abspath(dest)
 
         # cache
-        fd_cache = {}
+        self.rfd_cache = {}
+        self.wfd_cache = {}
 
         self.cnt_dirs = 0
         self.cnt_files = 0
@@ -57,6 +61,10 @@ class PCP(BaseTask):
         self.wtime_started = MPI.Wtime()
         self.wtime_ended = None
 
+        # fini_check
+        self.fini_cnt = Counter()
+
+
 
     def enq_file(self, f):
         """
@@ -69,7 +77,10 @@ class PCP(BaseTask):
         d = {}
         d['cmd'] = 'copy'
         d['src'] = f[0]
-        d['dest'] = os.path.abspath(self.dest + self.srcbase + "/" + f[0])
+
+        d['dest'] = self.dest + "/" + self.srcbase + "/" + os.path.relpath(f[0], start=self.src)
+
+        workcnt = 0
 
         if f[2] == 0:
             # empty file
@@ -77,19 +88,26 @@ class PCP(BaseTask):
             d['length'] = 0
             self.enq(d)
             logger.debug("%s" % d, extra=self.d)
-
-        for i in range(chunks):
-            d['off_start'] = i * self.chunksize
-            d['length'] = self.chunksize
-            self.enq(d)
-            logger.debug("%s" % d, extra=self.d)
-
+        else:
+            for i in range(chunks):
+                d['off_start'] = i * self.chunksize
+                d['length'] = self.chunksize
+                self.enq(d)
+                logger.debug("%s" % d, extra=self.d)
+            workcnt += chunks
         if remaining > 0:
             # send remainder
             d['off_start'] = chunks * self.chunksize
             d['length' ] = remaining
             self.enq(d)
             logger.debug("%s" % d, extra=self.d)
+            workcnt += 1
+
+
+        # make finish token for this file
+
+        t = {'cmd' : 'fini_check', 'workcnt' : workcnt, 'src' : f[0], 'dest': d['dest'] }
+        self.enq(t)
 
 
     def create(self):
@@ -103,12 +121,72 @@ class PCP(BaseTask):
         exit(code)
 
     def do_copy(self, work):
-        logger.debug("copy: %s" % work, extra=self.d)
+        src = work['src']
+        dest = work['dest']
+        rfd = None
+        wfd = None
+
+        if src in self.rfd_cache:
+            rfd = self.rfd_cache[src]
+
+        if dest in self.rfd_cache:
+            wfd = self.wfd_cache[dest]
+
+        basedir = os.path.dirname(dest)
+        if not os.path.exists(basedir):
+            os.mkdir(basedir)
+
+        if not rfd:
+            rfd = open(src, "rb")
+            self.rfd_cache[src] = rfd
+
+        if not wfd:
+            wfd = open(dest, "a+b")
+           if wfd < 0:
+                logger.error("Failed to open output file %s" % dest, extra=self.d)
+                return
+
+            self.wfd_cache[dest] = wfd
+
+        os.lseek(rfd, work['off_start'], os.SEEK_SET)
+        os.lseek(wfd, work['off_start'], os.SEEK_SET)
+
+        os.write(os.read(
+        # wfd.write(rfd.read(work['length']))
+
+        self.fini_cnt[src] += 1
+        logger.debug("Inc workcnt for %s (workcnt=%s)" % (src, self.fini_cnt[src]), extra=self.d)
+
+    def do_fini_check(self, work):
+        src = work['src']
+        dest = work['dest']
+        workcnt = work['workcnt']
+
+        mycnt = self.fini_cnt[src]
+        if workcnt == mycnt:
+            # all job finished
+            # we should have cached this before
+            rfd = self.rfd_cache[src]
+            wfd = self.wfd_cache[dest]
+            rfd.close()
+            wfd.close()
+            logger.debug("Finish done: %s" % src, extra=self.d)
+        elif mycnt < workcnt:
+            # worked some, but not yet done
+            work['workcnt'] -= mycnt
+            self.enq(work)
+            logger.debug("Finish enq: %s (workcnt=%s) " % (src, work['workcnt']), extra=self.d)
+        # either way, clear the cnt
+        del self.fini_cnt[src]
+
+
 
     def process(self):
         work = self.deq()
         if work['cmd'] == 'copy':
             self.do_copy(work)
+        elif work['cmd'] == 'fini_check':
+            self.do_fini_check(work)
         else:
             logger.error("Unknown command %s" % work['cmd'], extra=self.d)
             self.abort()
@@ -124,6 +202,10 @@ class PCP(BaseTask):
 
     def epilogue():
         pass
+
+
+
+
 
 def verify_path(src, dest):
 
@@ -154,7 +236,9 @@ def main():
     if circle.rank == 0: verify_path(ARGS.src, ARGS.dest)
 
     # first task
-    treewalk = PWalk(circle, ARGS.src, ARGS.dest)
+    src = os.path.abspath(ARGS.src)
+    dest = os.path.abspath(ARGS.dest)
+    treewalk = PWalk(circle, src, dest)
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     circle.finalize()

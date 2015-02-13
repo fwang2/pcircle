@@ -24,11 +24,11 @@ def parse_args():
     return parser.parse_args()
 
 class PWalk(BaseTask):
-    def __init__(self, circle, rel_src, rel_dest=None):
+    def __init__(self, circle, src, dest=None):
         BaseTask.__init__(self, circle)
         self.circle = circle
-        self.rel_src = rel_src
-        self.rel_dest = rel_dest
+        self.src = src
+        self.dest = dest
 
         self.flist = []  # element is (filepath, filemode, filesize)
         self.src_flist = self.flist
@@ -46,7 +46,7 @@ class PWalk(BaseTask):
         self.d = {"rank": "rank %s" % circle.rank}
 
     def create(self):
-        self.enq(self.rel_src)
+        self.enq(self.src)
 
     def process_dir(self, dir):
 
@@ -104,7 +104,7 @@ def main():
     global ARGS, logger
     ARGS = parse_args()
     #root = os.path.abspath(ARGS.path)
-    root = ARGS.path
+    root = os.path.abspath(ARGS.path)
     circle = Circle(reduce_interval=ARGS.interval)
     logger = logging_init(logger, ARGS.loglevel)
 

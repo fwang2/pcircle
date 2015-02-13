@@ -21,6 +21,7 @@ logger  = logging.getLogger("pcp")
 def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
+    parser.add_argument("--chunksize", type=int, default=1048576 )
     parser.add_argument("-", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
     parser.add_argument("-f", "--force", action="store_true", default=False, help="force unlink")
@@ -48,8 +49,8 @@ class PCP(BaseTask):
         self.cnt_files = 0
         self.cnt_filesize = 0
 
-        self.blocksize = 2
-        self.chunksize = 2
+        self.blocksize = 1024*1024
+        self.chunksize = 1024*1024
 
         # reduce
         self.reduce_items = 0
@@ -126,10 +127,11 @@ class PCP(BaseTask):
         rfd = None
         wfd = None
 
+
         if src in self.rfd_cache:
             rfd = self.rfd_cache[src]
 
-        if dest in self.rfd_cache:
+        if dest in self.wfd_cache:
             wfd = self.wfd_cache[dest]
 
         basedir = os.path.dirname(dest)
@@ -137,22 +139,23 @@ class PCP(BaseTask):
             os.mkdir(basedir)
 
         if not rfd:
-            rfd = open(src, "rb")
+            rfd = os.open(src, os.O_RDONLY)
             self.rfd_cache[src] = rfd
 
         if not wfd:
-            wfd = open(dest, "a+b")
-           if wfd < 0:
-                logger.error("Failed to open output file %s" % dest, extra=self.d)
-                return
+            wfd = os.open(dest, os.O_WRONLY|os.O_CREAT)
+            if wfd < 0:
+                if ARGS.force:
+                    os.unlink(dest)
+                    wfd = os.open(dest, os.O_WRONLY)
+                else:
+                    logger.error("Failed to create output file %s" % dest, extra=self.d)
+                    return
 
             self.wfd_cache[dest] = wfd
 
-        os.lseek(rfd, work['off_start'], os.SEEK_SET)
-        os.lseek(wfd, work['off_start'], os.SEEK_SET)
-
-        os.write(os.read(
-        # wfd.write(rfd.read(work['length']))
+        # do the actual copy
+        self.write_bytes(rfd, wfd, work)
 
         self.fini_cnt[src] += 1
         logger.debug("Inc workcnt for %s (workcnt=%s)" % (src, self.fini_cnt[src]), extra=self.d)
@@ -168,8 +171,8 @@ class PCP(BaseTask):
             # we should have cached this before
             rfd = self.rfd_cache[src]
             wfd = self.wfd_cache[dest]
-            rfd.close()
-            wfd.close()
+            os.close(rfd)
+            os.close(wfd)
             logger.debug("Finish done: %s" % src, extra=self.d)
         elif mycnt < workcnt:
             # worked some, but not yet done
@@ -200,12 +203,16 @@ class PCP(BaseTask):
     def reduce_finish(self, buf):
         pass
 
-    def epilogue():
+    def epilogue(self):
         pass
 
 
+    def write_bytes(self, rfd, wfd, work):
+        os.lseek(rfd, work['off_start'], os.SEEK_SET)
+        os.lseek(wfd, work['off_start'], os.SEEK_SET)
 
-
+        buf = os.read(rfd, work['length'])
+        os.write(wfd, buf)
 
 def verify_path(src, dest):
 
@@ -244,13 +251,14 @@ def main():
     circle.finalize()
 
     # second task
-    print(treewalk.flist)
-    pcp = PCP(circle, treewalk, ARGS.src, ARGS.dest)
+    pcp = PCP(circle, treewalk, src, dest)
+    pcp.chunksize = ARGS.chunksize
     circle.begin(pcp)
     circle.finalize()
 
     pcp.wtime_ended = MPI.Wtime()
 
+    pcp.epilogue()
 
 if __name__ == "__main__": main()
 

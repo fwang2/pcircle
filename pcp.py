@@ -11,9 +11,10 @@ import os.path
 import logging
 import argparse
 import utils
+import hashlib
 from pwalk import PWalk
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 
 ARGS    = None
 logger  = logging.getLogger("pcp")
@@ -65,6 +66,8 @@ class PCP(BaseTask):
         # fini_check
         self.fini_cnt = Counter()
 
+        # checksum
+        self.checksum = defaultdict(list)
 
 
     def enq_file(self, f):
@@ -218,6 +221,9 @@ class PCP(BaseTask):
         # might be needed.
         buf = os.read(rfd, work['length'])
         os.write(wfd, buf)
+        digest = hashlib.md5(buf).hexdigest()
+        self.checksum[work['dest']].append((work['off_start'], work['length'], digest))
+
 
 def verify_path(src, dest):
 

@@ -173,6 +173,8 @@ class PCP(BaseTask):
             wfd = self.wfd_cache[dest]
             os.close(rfd)
             os.close(wfd)
+            del self.rfd_cache[src]
+            del self.wfd_cache[dest]
             logger.debug("Finish done: %s" % src, extra=self.d)
         elif mycnt < workcnt:
             # worked some, but not yet done
@@ -211,6 +213,9 @@ class PCP(BaseTask):
         os.lseek(rfd, work['off_start'], os.SEEK_SET)
         os.lseek(wfd, work['off_start'], os.SEEK_SET)
 
+        # FIXME: assumed read will return what we asked for
+        # in C, this is not the case though. A loop check
+        # might be needed.
         buf = os.read(rfd, work['length'])
         os.write(wfd, buf)
 

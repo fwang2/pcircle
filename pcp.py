@@ -21,7 +21,7 @@ logger  = logging.getLogger("pcp")
 def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
-    parser.add_argument("--chunksize", type=int, default=1048576 )
+    parser.add_argument("--chunksize", default="1m", help="chunk size")
     parser.add_argument("-", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
     parser.add_argument("-f", "--force", action="store_true", default=False, help="force unlink")
@@ -220,6 +220,11 @@ def verify_path(src, dest):
         print("source directory %s is not readable" % src)
         sys.exit(1)
 
+    srcbase = os.path.basename(src)
+    if os.path.exists(dest+"/"+srcbase) and not ARGS.force:
+        print("Error, destination exists, use -f to overwrite")
+        sys.exit(1)
+
     if not os.path.exists(dest):
         try:
             os.mkdir(dest)
@@ -252,7 +257,7 @@ def main():
 
     # second task
     pcp = PCP(circle, treewalk, src, dest)
-    pcp.chunksize = ARGS.chunksize
+    pcp.chunksize = utils.conv_unit(ARGS.chunksize)
     circle.begin(pcp)
     circle.finalize()
 

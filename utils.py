@@ -2,6 +2,7 @@ import sys
 import time
 import itertools
 import logging
+import re
 from globals import G
 
 def logging_init(logger, loglevel):
@@ -19,6 +20,25 @@ def logging_init(logger, loglevel):
     logger.addHandler(console)
 
     return logger
+
+
+def conv_unit(s):
+    " convert a unit to number"
+    d = { "B": 1,
+         "K": 1024,
+         "M": 1024*1024,
+         "G": 1024*1024*1024,
+         "T": 1024*1024*1024*1024}
+    s = s.upper()
+    match = re.match(r"(\d+)(\w+)", s, re.I)
+    if match:
+        items = match.groups()
+        v = int(items[0])
+        u = items[1]
+        return v * d[u]
+
+    return False
+
 
 # SO: http://stackoverflow.com/questions/13520622/python-script-to-show-progress
 def spiner():

@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 from task import BaseTask
+from pcheck import PCheck
 from circle import Circle
 from globals import G
 from mpi4py import MPI
@@ -220,9 +221,10 @@ class PCP(BaseTask):
         # in C, this is not the case though. A loop check
         # might be needed.
         buf = os.read(rfd, work['length'])
+        assert len(buf) == work['length']
         os.write(wfd, buf)
         digest = hashlib.md5(buf).hexdigest()
-        self.checksum[work['dest']].append((work['off_start'], work['length'], digest))
+        self.checksum[work['dest']].append((work['off_start'], work['length'], digest, work['src']))
 
 
 def verify_path(src, dest):
@@ -246,7 +248,6 @@ def verify_path(src, dest):
         if not os.access(dest, os.W_OK):
             print("Error: destination %s is not writable" % dest)
             sys.exit(1)
-
 
 def main():
 
@@ -273,8 +274,23 @@ def main():
     circle.finalize()
 
     pcp.wtime_ended = MPI.Wtime()
-
     pcp.epilogue()
+
+    # third task
+    pcheck = PCheck(circle, pcp)
+    pcheck.setLevel(ARGS.loglevel)
+    circle.begin(pcheck)
+    circle.finalize()
+
+    tally = pcheck.fail_tally()
+
+    if circle.rank == 0:
+        if tally == 0:
+            print("Copy Success, verification passed")
+        else:
+            print("Verification failed")
+
+
 
 if __name__ == "__main__": main()
 

@@ -11,9 +11,6 @@ class Token:
     pass
 
 class Circle:
-
-    # Keep init() and reset() in sync ... it is a pain, I know
-
     def __init__(self, name="Circle Work Comm",  split = "equal",
                  reduce_interval=10, k=2):
 
@@ -48,7 +45,8 @@ class Circle:
         self.reduce_time_interval = reduce_interval
         self.reduce_outstanding = False
         self.reduce_replies = 0
-        self.reduce_buf = [0] * 3   # work items, work bytes
+        self.reduce_buf = None
+        self.reduce_status = None
 
         # barriers
         self.barrier_started = False
@@ -73,7 +71,6 @@ class Circle:
             self.token_color = G.WHITE
             self.token_proc  = G.WHITE
         self.token_send_req = MPI.REQUEST_NULL
-
 
     def tree_init(self, k):
         self.k = k
@@ -109,7 +106,6 @@ class Circle:
             return MPI.PROC_NULL
         else:
             return random.randint(0, self.size-1)
-
 
     def token_status(self):
         return "rank: %s, token_src: %s, token_dest: %s, token_color: %s, token_proc: %s" % \
@@ -175,7 +171,6 @@ class Circle:
         else:
             return None
 
-
     def barrier_start(self):
         self.barrier_started = True
 
@@ -233,7 +228,6 @@ class Circle:
         # barrier still not complete
         return False
 
-
     def bcast_abort(self):
         self.abort = True
         buf = G.ABORT
@@ -241,7 +235,6 @@ class Circle:
             if (i != self.rank):
                 self.comm.send(buf, dest = i, tag = T.WORK_REQUEST)
                 logger.warn("abort message sent to %s" % i, extra=self.d)
-
 
     def cleanup(self):
         while True:
@@ -369,7 +362,6 @@ class Circle:
         for idx, dest in enumerate(self.requestors):
             self.send_work(dest, sizes[idx])
 
-
     def send_work(self, rank, count):
         """
         @dest   - the rank of requester
@@ -388,7 +380,6 @@ class Circle:
         # remove work items
         del self.workq[0:count]
 
-
     def request_work(self, cleanup = False):
         # check if we have request outstanding
         if self.workreq_outstanding:
@@ -401,7 +392,6 @@ class Circle:
                 self.work_receive(self.work_requested_rank)
                 # flip flag to indicate we no longer waiting for reply
                 self.workreq_outstanding = False
-
         elif not cleanup:
             # send request
             dest = self.next_proc()
@@ -415,7 +405,6 @@ class Circle:
             self.comm.send(buf, dest, T.WORK_REQUEST)
             self.workreq_outstanding = True
             self.work_requested_rank = dest
-
 
     def work_receive(self, rank):
         """ when incoming work reply detected """
@@ -432,8 +421,6 @@ class Circle:
         else:
             assert type(buf[G.VAL]) == list
             self.workq.extend(buf[G.VAL])
-
-
 
     def token_recv(self):
         # verify we don't have a local token
@@ -496,21 +483,16 @@ class Circle:
     def token_issend(self):
 
         if self.abort: return
-
         logger.debug("token send: token_color = %s" % G.str[self.token_color], extra=self.d)
-
         self.token_send_req = self.comm.issend(self.token_color,
             self.token_dest, tag = T.TOKEN)
-
         # now we don't have the token
         self.token_is_local = False
 
-    def reduce_init(self, x):
-        self.reduce_items = x
 
     def reduce(self, buf):
         # copy data from user buffer
-        self.reduce_buf[1] = buf
+        self.reduce_buf = copy(buf)
 
 
     def reduce_check(self, cleanup=False):
@@ -536,16 +518,15 @@ class Circle:
                     logger.debug("client data from %s: %s" %
                                  (child, inbuf), extra=self.d)
 
-                    if inbuf[0] == G.MSG_INVALID:
-                        self.reduce_buf[0] = False
+                    if inbuf['status'] == G.MSG_INVALID:
+                        self.reduce_status = False
                     else:
-                        self.reduce_buf[0] = True
-                        self.reduce_buf[1] += inbuf[1]
-                        self.reduce_buf[2] = inbuf[2]
+                        self.reduce_status = True
 
                         # invoke user's callback to reduce user data
-                        # FIXME
                         if hasattr(self.task, "reduce"):
+                            # 1st buf is parent's buf
+                            # 2nd buf is children's buf
                             self.task.reduce(self.reduce_buf, inbuf)
 
             # check if we have gotten replies from all children
@@ -561,7 +542,7 @@ class Circle:
                     self.comm.send(self.reduce_buf, self.parent_rank, T.REDUCE)
                 else:
                     # we are the root, print results if we have valid data
-                    if self.reduce_buf[0]:
+                    if self.reduce_status:
                         logger.info("Object processed: %s" % self.reduce_buf[1], extra=self.d)
 
                     # invoke callback on root to deliver final results (?)

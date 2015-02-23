@@ -24,7 +24,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("--chunksize", default="1m", help="chunk size")
-    parser.add_argument("-", "--interval", type=int, default=10, help="interval")
+    parser.add_argument("-", "--interval", type=int, default=5, help="interval")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
     parser.add_argument("-f", "--force", action="store_true", default=False, help="force unlink")
     parser.add_argument("src", help="copy from")
@@ -201,10 +201,19 @@ class PCP(BaseTask):
             self.abort()
 
     def reduce_init(self):
-        pass
+        d = {'cnt_dirs': 0,
+             'cnt_files': 0,
+             'cnt_size': 0}
 
-    def reduce(self, buf1, buf2):
-        pass
+        self.circle.reduce(d)
+
+    def reduce(self, d):
+        d['cnt_dirs'] += self.cnt_dirs
+        d['cnt_files'] += self.cnt_files
+        d['cnt_filesize'] += self.cnt_filesize
+
+        self.circle.reduce(d)
+
 
     def reduce_finish(self, buf):
         pass

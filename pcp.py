@@ -210,7 +210,7 @@ class PCP(BaseTask):
     def reduce_report(self, buf):
         out = ""
         if self.totalsize != 0:
-            out += "%.2f \% finished, " % (float(buf['cnt_filezie']) / self.totalsize)
+            out += "%.2f %% finished, " % (100* float(buf['cnt_filesize']) / self.totalsize)
 
         out += "%s copied" % bytes_fmt(buf['cnt_filesize'])
         print(out)
@@ -275,10 +275,10 @@ def main():
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.interval)
-    totalsize = treewalk.epilogue()
+    tsz = treewalk.epilogue()
 
     # second task
-    pcp = PCP(circle, treewalk, src, dest)
+    pcp = PCP(circle, treewalk, src, dest, totalsize=tsz)
     pcp.chunksize = utils.conv_unit(ARGS.chunksize)
     circle.begin(pcp)
     circle.finalize()

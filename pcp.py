@@ -49,6 +49,7 @@ class PCP(BaseTask):
         self.rfd_cache = {}
         self.wfd_cache = {}
 
+        self.cnt_filesize_prior = 0
         self.cnt_filesize = 0
 
         self.blocksize = 1024*1024
@@ -234,7 +235,8 @@ class PCP(BaseTask):
         out += "%s copied" % bytes_fmt(buf['cnt_filesize'])
 
         if self.circle.reduce_time_interval != 0:
-            rate = float(buf['cnt_filesize']) / self.circle.reduce_time_interval
+            rate = float(buf['cnt_filesize'] - self.cnt_filesize_prior) / self.circle.reduce_time_interval
+            self.cnt_filesize_prior = buf['cnt_filesize']
             out += ", estimated transfer rate: %s/s" % bytes_fmt(rate)
 
         print(out)

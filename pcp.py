@@ -35,7 +35,7 @@ def parse_args():
 
 
 class PCP(BaseTask):
-    def __init__(self, circle, treewalk, src, dest, totalsize=0):
+    def __init__(self, circle, treewalk, src, dest, totalsize=0, checksum=False):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
@@ -265,8 +265,11 @@ class PCP(BaseTask):
         buf = os.read(rfd, work['length'])
         assert len(buf) == work['length']
         os.write(wfd, buf)
-        digest = hashlib.md5(buf).hexdigest()
-        self.checksum[work['dest']].append((work['off_start'], work['length'], digest, work['src']))
+
+        # are we doing checksum?
+        if self.checksum:
+            digest = hashlib.md5(buf).hexdigest()
+            self.checksum[work['dest']].append((work['off_start'], work['length'], digest, work['src']))
 
 
 def verify_path(src, dest):
@@ -311,7 +314,7 @@ def main():
     tsz = treewalk.epilogue()
 
     # second task
-    pcp = PCP(circle, treewalk, src, dest, totalsize=tsz)
+    pcp = PCP(circle, treewalk, src, dest, totalsize=tsz, checksum=ARGS.checksum)
     pcp.chunksize = utils.conv_unit(ARGS.chunksize)
     circle.begin(pcp)
     circle.finalize(reduce_interval=ARGS.interval)

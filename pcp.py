@@ -251,7 +251,8 @@ class PCP(BaseTask):
             if self.totalsize == 0: return
             time = self.wtime_ended - self.wtime_started
             rate = float(self.totalsize)/time
-            hprint("Average transfer rate: %s/s\n" % bytes_fmt(rate))
+            hprint("Copy Job Completed In: %.2f seconds" % (time))
+            hprint("Average Transfer Rate: %s/s\n" % bytes_fmt(rate))
 
 
     def write_bytes(self, rfd, wfd, work):
@@ -320,19 +321,20 @@ def main():
     pcp.epilogue()
 
     # third task
-    pcheck = PCheck(circle, pcp, tsz)
-    pcheck.setLevel(ARGS.loglevel)
-    circle.begin(pcheck)
-    circle.finalize()
+    if ARGS.checksum:
+        pcheck = PCheck(circle, pcp, tsz)
+        pcheck.setLevel(ARGS.loglevel)
+        circle.begin(pcheck)
+        circle.finalize()
 
-    tally = pcheck.fail_tally()
+        tally = pcheck.fail_tally()
 
-    if circle.rank == 0:
-        print("")
-        if tally == 0:
-            hprint("Copy Success, verification passed!")
-        else:
-            eprint("Verification failed")
+        if circle.rank == 0:
+            print("")
+            if tally == 0:
+                hprint("Verification passed!")
+            else:
+                eprint("Verification failed")
 
 
 

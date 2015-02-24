@@ -68,10 +68,10 @@ class PCP(BaseTask):
 
 
     def enq_file(self, f):
-        """
-        f (path mode size) - we enq all in one shot
+        '''
+        f[0] path f[1] mode f[2] size - we enq all in one shot
         CMD = copy src  dest  off_start  last_chunk
-        """
+        '''
         chunks    = f[2] / self.chunksize
         remaining = f[2] % self.chunksize
 
@@ -89,6 +89,7 @@ class PCP(BaseTask):
             d['length'] = 0
             self.enq(d)
             logger.debug("%s" % d, extra=self.d)
+            workcnt += 1
         else:
             for i in range(chunks):
                 d['off_start'] = i * self.chunksize

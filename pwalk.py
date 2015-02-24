@@ -5,7 +5,7 @@ from task import BaseTask
 from circle import Circle
 from globals import G
 from mpi4py import MPI
-from utils import logging_init, bytes_fmt
+from utils import logging_init, bytes_fmt, hprint
 import stat
 import os
 import os.path
@@ -46,6 +46,7 @@ class PWalk(BaseTask):
     def create(self):
         if self.circle.rank == 0:
             self.enq(self.src)
+            hprint("Starting tree walk ...")
 
     def process_dir(self, dir):
 
@@ -114,11 +115,11 @@ class PWalk(BaseTask):
         total_dirs, total_files, total_filesize = self.total_tally()
 
         if self.circle.rank == 0:
-            print("======= Treewalk Summary ======= ")
+            print("")
             print("Directory count: %s" % total_dirs)
             print("File count: %s" % total_files)
             print("File size: %s" % bytes_fmt(total_filesize))
-
+            print("")
         return total_filesize
 
     def set_loglevel(self, loglevel):

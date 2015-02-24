@@ -1,6 +1,6 @@
 from task import BaseTask
 import logging
-from utils import logging_init, bytes_fmt
+from utils import logging_init, bytes_fmt, hprint
 import hashlib
 from mpi4py import MPI
 
@@ -27,6 +27,9 @@ class PCheck(BaseTask):
 
         # reduce
         self.vsize = 0
+
+        if self.circle.rank == 0:
+            hprint("Start verification process ...")
 
     def create(self):
         for k, v in self.pcp.checksum.iteritems():

@@ -16,7 +16,7 @@ import hashlib
 from pwalk import PWalk
 import sys
 from collections import Counter, defaultdict
-from utils import bytes_fmt
+from utils import bytes_fmt, hprint, eprint
 
 ARGS    = None
 logger  = logging.getLogger("pcp")
@@ -68,6 +68,9 @@ class PCP(BaseTask):
 
         # checksum
         self.checksum = defaultdict(list)
+
+        if self.circle.rank == 0:
+            hprint("Start copying process ...")
 
     def cleanup(self):
         for f in self.rfd_cache.values():
@@ -236,7 +239,8 @@ class PCP(BaseTask):
         pass
 
     def epilogue(self):
-        pass
+        if self.circle.rank == 0:
+            print("")
 
 
     def write_bytes(self, rfd, wfd, work):
@@ -313,10 +317,11 @@ def main():
     tally = pcheck.fail_tally()
 
     if circle.rank == 0:
+        print("")
         if tally == 0:
-            print("Copy Success, verification passed")
+            hprint("Copy Success, verification passed!")
         else:
-            print("Verification failed")
+            eprint("Verification failed")
 
 
 

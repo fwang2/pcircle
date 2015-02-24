@@ -38,8 +38,6 @@ class PWalk(BaseTask):
         self.cnt_filesize = 0
 
         # reduce
-        self.buf = [0] * 3
-        self.buf[0] = G.MSG_VALID
         self.reduce_items = 0
 
         # debug
@@ -63,8 +61,12 @@ class PWalk(BaseTask):
             st = os.stat(path)
             self.flist.append( (path, st.st_mode, st.st_size ))
             self.reduce_items += 1
-            # recurse into directory
-            if stat.S_ISDIR(st.st_mode):
+
+            if stat.S_ISREG(st.st_mode):
+                self.cnt_files += 1
+                self.cnt_filesize += st.st_size
+            elif stat.S_ISDIR(st.st_mode):
+                self.cnt_dirs += 1
                 self.process_dir(path)
 
     def tally(self, t):
@@ -78,18 +80,30 @@ class PWalk(BaseTask):
     def summarize(self):
         map(self.tally, self.flist)
 
-    def reduce_init(self):
-        self.circle.reduce(self.reduce_items)
+    def reduce_init(self, buf):
+        buf['cnt_files'] = self.cnt_files
+        buf['cnt_dirs'] = self.cnt_dirs
+        buf['cnt_filesize'] = self.cnt_filesize
+
+
 
     def reduce(self, buf1, buf2):
-        self.circle.reduce(buf1[1] + buf2[1])
+        buf1['cnt_dirs'] += buf2['cnt_dirs']
+        buf1['cnt_files'] += buf2['cnt_files']
+        buf1['cnt_filesize'] += buf2['cnt_filesize']
+
+        return buf1
+
+    def reduce_report(self, buf):
+        print("Processed files: %s " % buf['cnt_files'])
+
 
     def reduce_finish(self, buf):
         # get result of reduction
         pass
 
     def total_tally(self):
-        self.summarize()
+        # self.summarize()
         total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
         total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
         total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
@@ -114,9 +128,10 @@ def main():
     total_dirs, total_files, total_filesize = task.total_tally()
 
     if circle.rank == 0:
-        print("\tDirectory count: %s" % total_dirs)
-        print("\tFile count: %s" % total_files)
-        print("\tFile size: %s bytes" % total_filesize)
+        print("======= Treewalk Summary ======= ")
+        print("Directory count: %s" % total_dirs)
+        print("File count: %s" % total_files)
+        print("File size: %s bytes" % total_filesize)
 
 if __name__ == "__main__": main()
 

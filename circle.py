@@ -45,7 +45,7 @@ class Circle:
         self.reduce_time_interval = reduce_interval
         self.reduce_outstanding = False
         self.reduce_replies = 0
-        self.reduce_buf = None
+        self.reduce_buf = {}
         self.reduce_status = None
 
         # barriers
@@ -509,9 +509,8 @@ class Circle:
                 flag = self.comm.Iprobe(child, T.REDUCE)
                 if flag:
                     # receive message from child
-                    # 0st element is G.MSG_VALID or not
-                    # 1st element is number of completed work items
-                    # 2nd element is undefined user data
+                    # 'status' element is G.MSG_VALID or not
+                    # the rest is opaque
                     inbuf = self.comm.recv(source = child, tag = T.REDUCE)
                     self.reduce_replies += 1
 
@@ -525,25 +524,21 @@ class Circle:
 
                         # invoke user's callback to reduce user data
                         if hasattr(self.task, "reduce"):
-                            # 1st buf is parent's buf
-                            # 2nd buf is children's buf
-                            self.task.reduce(self.reduce_buf, inbuf)
+                            self.reduce_buf = self.task.reduce(self.reduce_buf, inbuf)
 
             # check if we have gotten replies from all children
             if self.reduce_replies == self.children:
                 # all children replied
                 # add our own contents to reduce buffer
 
-                # @issue: no need to record this, right?
-                # self.reduce_buf[1] += self.work_processed
-
                 # send message to parent if we have one
                 if self.parent_rank != MPI.PROC_NULL:
                     self.comm.send(self.reduce_buf, self.parent_rank, T.REDUCE)
                 else:
                     # we are the root, print results if we have valid data
-                    if self.reduce_status:
-                        logger.info("Object processed: %s" % self.reduce_buf[1], extra=self.d)
+                    if self.reduce_status and hasattr(self.task, "reduce_report"):
+                        self.task.reduce_report(self.reduce_buf)
+
 
                     # invoke callback on root to deliver final results (?)
                     if hasattr(self.task, "reduce_finish"):
@@ -591,13 +586,12 @@ class Circle:
                 self.reduce_time_last = time_now
                 self.reduce_outstanding = True
                 self.reduce_replies = 0
-                self.reduce_buf[0] = G.MSG_VALID
-                self.reduce_buf[1] = 0
-                self.reduce_buf[2] = 0
+                self.reduce_status = G.MSG_VALID
+                self.reduce_buf['status'] = G.MSG_VALID
 
                 # invoke callback to get input data
                 if hasattr(self.task, "reduce_init"):
-                    self.task.reduce_init()
+                    self.task.reduce_init(self.reduce_buf)
 
                 # sent message to each child
                 for child in self.child_ranks:

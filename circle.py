@@ -12,7 +12,7 @@ class Token:
 
 class Circle:
     def __init__(self, name="Circle Work Comm",  split = "equal",
-                 reduce_interval=10, k=2):
+                reduce_interval = 10, k  = 2):
 
         random.seed()  # use system time to seed
         logging_init()
@@ -576,7 +576,7 @@ class Circle:
                 start_reduce = False
                 # if we have parent, send invalid msg
                 if self.parent_rank != MPI.PROC_NULL:
-                    self.reduce_buf[0] = G.MSG_INVALID
+                    self.reduce_status = G.MSG_INVALID
                     self.comm.send(self.reduce_buf, self.parent_rank, T.REDUCE)
 
             if start_reduce:

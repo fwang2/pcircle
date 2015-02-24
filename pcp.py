@@ -16,6 +16,7 @@ import hashlib
 from pwalk import PWalk
 import sys
 from collections import Counter, defaultdict
+from utils import bytes_fmt
 
 ARGS    = None
 logger  = logging.getLogger("pcp")
@@ -24,7 +25,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("--chunksize", default="1m", help="chunk size")
-    parser.add_argument("-", "--interval", type=int, default=5, help="interval")
+    parser.add_argument("-i", "--interval", type=int, default=5, help="interval")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
     parser.add_argument("-f", "--force", action="store_true", default=False, help="force unlink")
     parser.add_argument("src", help="copy from")
@@ -34,10 +35,11 @@ def parse_args():
 
 
 class PCP(BaseTask):
-    def __init__(self, circle, treewalk, src, dest):
+    def __init__(self, circle, treewalk, src, dest, totalsize=0):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
+        self.totalsize = totalsize
 
         self.src = os.path.abspath(src)
         self.srcbase = os.path.basename(src)
@@ -47,17 +49,11 @@ class PCP(BaseTask):
         self.rfd_cache = {}
         self.wfd_cache = {}
 
-        self.cnt_dirs = 0
-        self.cnt_files = 0
         self.cnt_filesize = 0
 
         self.blocksize = 1024*1024
         self.chunksize = 1024*1024
 
-        # reduce
-        self.reduce_items = 0
-        self.buf = [0] * 3
-        self.buf[0] = G.MSG_VALID
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
@@ -161,6 +157,9 @@ class PCP(BaseTask):
         # do the actual copy
         self.write_bytes(rfd, wfd, work)
 
+        # update tally
+        self.cnt_filesize += work['length']
+
         self.fini_cnt[src] += 1
         logger.debug("Inc workcnt for %s (workcnt=%s)" % (src, self.fini_cnt[src]), extra=self.d)
 
@@ -200,20 +199,21 @@ class PCP(BaseTask):
             logger.error("Unknown command %s" % work['cmd'], extra=self.d)
             self.abort()
 
-    def reduce_init(self):
-        d = {'cnt_dirs': 0,
-             'cnt_files': 0,
-             'cnt_size': 0}
+    def reduce_init(self, buf):
+        buf['cnt_filesize'] = self.cnt_filesize
 
-        self.circle.reduce(d)
 
-    def reduce(self, d):
-        d['cnt_dirs'] += self.cnt_dirs
-        d['cnt_files'] += self.cnt_files
-        d['cnt_filesize'] += self.cnt_filesize
+    def reduce(self, buf1, buf2):
+        buf1['cnt_filesize'] += buf2['cnt_filesize']
+        return buf1
 
-        self.circle.reduce(d)
+    def reduce_report(self, buf):
+        out = ""
+        if self.totalsize != 0:
+            out += "%.2f \% finished, " % (float(buf['cnt_filezie']) / self.totalsize)
 
+        out += "%s copied" % bytes_fmt(buf['cnt_filesize'])
+        print(out)
 
     def reduce_finish(self, buf):
         pass
@@ -263,7 +263,7 @@ def main():
     global ARGS, logger
     ARGS = parse_args()
 
-    circle = Circle(reduce_interval=5)
+    circle = Circle(reduce_interval=ARGS.interval)
     circle.setLevel(logging.ERROR)
     logger = utils.logging_init(logger, ARGS.loglevel)
     if circle.rank == 0: verify_path(ARGS.src, ARGS.dest)
@@ -274,7 +274,8 @@ def main():
     treewalk = PWalk(circle, src, dest)
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
-    circle.finalize()
+    circle.finalize(reduce_interval=ARGS.interval)
+    totalsize = treewalk.epilogue()
 
     # second task
     pcp = PCP(circle, treewalk, src, dest)

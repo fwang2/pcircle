@@ -39,6 +39,21 @@ def conv_unit(s):
 
     return False
 
+def bytes_fmt(n):
+    d = {'1mb': 1048576,
+         '1gb': 1073741824,
+         '1tb': 1099511627776}
+    if n < d['1mb']:
+        return "%.2f KiB" % (float(n)/1024)
+
+    if n < d['1gb']:
+        return "%.2f MiB" % (float(n)/d['1mb'])
+
+    if n < d['1tb']:
+        return "%.2f GiB" % (float(n)/d['1gb'])
+
+    return "%.2f TiB" % (float(n)/d['1tb'])
+
 
 # SO: http://stackoverflow.com/questions/13520622/python-script-to-show-progress
 def spiner():

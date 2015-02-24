@@ -5,7 +5,7 @@ from task import BaseTask
 from circle import Circle
 from globals import G
 from mpi4py import MPI
-from utils import logging_init
+from utils import logging_init, bytes_fmt
 import stat
 import os
 import os.path
@@ -109,6 +109,17 @@ class PWalk(BaseTask):
         total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
         return total_dirs, total_files, total_filesize
 
+    def epilogue(self):
+        total_dirs, total_files, total_filesize = self.total_tally()
+
+        if self.circle.rank == 0:
+            print("======= Treewalk Summary ======= ")
+            print("Directory count: %s" % total_dirs)
+            print("File count: %s" % total_files)
+            print("File size: %s" % bytes_fmt(total_filesize))
+
+        return total_filesize
+
     def set_loglevel(self, loglevel):
         global logger
         logger = logging_init(logger, loglevel)
@@ -119,19 +130,13 @@ def main():
     ARGS = parse_args()
     #root = os.path.abspath(ARGS.path)
     root = os.path.abspath(ARGS.path)
-    circle = Circle(reduce_interval=ARGS.interval)
+    circle = Circle(reduce_interval = ARGS.interval)
     logger = logging_init(logger, ARGS.loglevel)
 
     task = PWalk(circle, root)
     circle.begin(task)
     circle.finalize()
-    total_dirs, total_files, total_filesize = task.total_tally()
-
-    if circle.rank == 0:
-        print("======= Treewalk Summary ======= ")
-        print("Directory count: %s" % total_dirs)
-        print("File count: %s" % total_files)
-        print("File size: %s bytes" % total_filesize)
+    task.epilogue()
 
 if __name__ == "__main__": main()
 

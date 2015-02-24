@@ -44,7 +44,8 @@ class PWalk(BaseTask):
         self.d = {"rank": "rank %s" % circle.rank}
 
     def create(self):
-        self.enq(self.src)
+        if self.circle.rank == 0:
+            self.enq(self.src)
 
     def process_dir(self, dir):
 

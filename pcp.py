@@ -59,6 +59,9 @@ class PCP(BaseTask):
         self.d = {"rank": "rank %s" % circle.rank}
         self.wtime_started = MPI.Wtime()
         self.wtime_ended = None
+        self.workcnt = 0
+
+        logger.debug("treewalk files = %s" % treewalk.flist, extra=self.d)
 
         # fini_check
         self.fini_cnt = Counter()
@@ -103,6 +106,7 @@ class PCP(BaseTask):
                 self.enq(d)
                 logger.debug("%s" % d, extra=self.d)
             workcnt += chunks
+
         if remaining > 0:
             # send remainder
             d['off_start'] = chunks * self.chunksize
@@ -110,6 +114,9 @@ class PCP(BaseTask):
             self.enq(d)
             logger.debug("%s" % d, extra=self.d)
             workcnt += 1
+
+        # tally work cnt
+        self.workcnt += workcnt
 
         # --------------------------------------
         # TODO: make finish token for this file
@@ -123,6 +130,8 @@ class PCP(BaseTask):
         for f in self.treewalk.flist:
             if stat.S_ISREG(f[1]):
                 self.enq_file(f)
+
+        logger.debug("enq workcnt = %s" % self.workcnt, extra=self.d)
 
     def abort(self, code):
         self.circle.abort()

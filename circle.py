@@ -122,8 +122,8 @@ class Circle:
 
         self.task = task
 
-        if self.rank == 0:
-            self.task.create()
+        #if self.rank == 0:
+        self.task.create()
 
         # work until terminate
         self.loop()

@@ -521,10 +521,9 @@ class Circle:
                         self.reduce_status = False
                     else:
                         self.reduce_status = True
-
                         # invoke user's callback to reduce user data
                         if hasattr(self.task, "reduce"):
-                            self.reduce_buf = self.task.reduce(self.reduce_buf, inbuf)
+                            self.task.reduce(self.reduce_buf, inbuf)
 
             # check if we have gotten replies from all children
             if self.reduce_replies == self.children:
@@ -540,7 +539,7 @@ class Circle:
                         self.task.reduce_report(self.reduce_buf)
 
 
-                    # invoke callback on root to deliver final results (?)
+                    # invoke callback on root to deliver final results
                     if hasattr(self.task, "reduce_finish"):
                         self.task.reduce_finish(self.reduce_buf)
 

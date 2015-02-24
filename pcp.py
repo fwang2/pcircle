@@ -66,6 +66,12 @@ class PCP(BaseTask):
         # checksum
         self.checksum = defaultdict(list)
 
+    def cleanup(self):
+        for f in self.rfd_cache.values():
+            os.close(f)
+
+        for f in self.wfd_cache.values():
+            os.close(f)
 
     def enq_file(self, f):
         '''
@@ -105,11 +111,11 @@ class PCP(BaseTask):
             logger.debug("%s" % d, extra=self.d)
             workcnt += 1
 
-
-        # make finish token for this file
-
-        t = {'cmd' : 'fini_check', 'workcnt' : workcnt, 'src' : f[0], 'dest': d['dest'] }
-        self.enq(t)
+        # --------------------------------------
+        # TODO: make finish token for this file
+        # --------------------------------------
+        # t = {'cmd' : 'fini_check', 'workcnt' : workcnt, 'src' : f[0], 'dest': d['dest'] }
+        # self.enq(t)
 
 
     def create(self):
@@ -160,9 +166,10 @@ class PCP(BaseTask):
 
         # update tally
         self.cnt_filesize += work['length']
+        logger.debug("transfer bytes %s" % self.cnt_filesize, extra=self.d)
 
-        self.fini_cnt[src] += 1
-        logger.debug("Inc workcnt for %s (workcnt=%s)" % (src, self.fini_cnt[src]), extra=self.d)
+        #self.fini_cnt[src] += 1
+        #logger.debug("Inc workcnt for %s (workcnt=%s)" % (src, self.fini_cnt[src]), extra=self.d)
 
     def do_fini_check(self, work):
         src = work['src']
@@ -195,7 +202,8 @@ class PCP(BaseTask):
         if work['cmd'] == 'copy':
             self.do_copy(work)
         elif work['cmd'] == 'fini_check':
-            self.do_fini_check(work)
+            # self.do_fini_check(work)
+            pass
         else:
             logger.error("Unknown command %s" % work['cmd'], extra=self.d)
             self.abort()
@@ -217,7 +225,7 @@ class PCP(BaseTask):
         print(out)
 
     def reduce_finish(self, buf):
-        pass
+        self.reduce_report(buf)
 
     def epilogue(self):
         pass
@@ -283,6 +291,9 @@ def main():
     pcp.chunksize = utils.conv_unit(ARGS.chunksize)
     circle.begin(pcp)
     circle.finalize()
+
+    # print("rank %s tally bytes = %s" % (circle.rank, pcp.cnt_filesize))
+    pcp.cleanup()
 
     pcp.wtime_ended = MPI.Wtime()
     pcp.epilogue()

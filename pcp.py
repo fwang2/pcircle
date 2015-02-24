@@ -232,6 +232,11 @@ class PCP(BaseTask):
             out += "%.2f %% finished, " % (100* float(buf['cnt_filesize']) / self.totalsize)
 
         out += "%s copied" % bytes_fmt(buf['cnt_filesize'])
+
+        if self.circle.reduce_time_interval != 0:
+            rate = float(buf['cnt_filesize']) / self.circle.reduce_time_interval
+            out += ", estimated transfer rate: %s/s" % bytes_fmt(rate)
+
         print(out)
 
     def reduce_finish(self, buf):
@@ -241,6 +246,10 @@ class PCP(BaseTask):
     def epilogue(self):
         if self.circle.rank == 0:
             print("")
+            if self.totalsize == 0: return
+            time = self.wtime_ended - self.wtime_started
+            rate = float(self.totalsize)/time
+            hprint("Average transfer rate: %s/s\n" % bytes_fmt(rate))
 
 
     def write_bytes(self, rfd, wfd, work):

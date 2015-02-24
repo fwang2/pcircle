@@ -131,8 +131,6 @@ class PCP(BaseTask):
             if stat.S_ISREG(f[1]):
                 self.enq_file(f)
 
-        logger.debug("enq workcnt = %s" % self.workcnt, extra=self.d)
-
     def abort(self, code):
         self.circle.abort()
         exit(code)
@@ -234,7 +232,8 @@ class PCP(BaseTask):
         print(out)
 
     def reduce_finish(self, buf):
-        self.reduce_report(buf)
+        #self.reduce_report(buf)
+        pass
 
     def epilogue(self):
         pass
@@ -299,16 +298,14 @@ def main():
     pcp = PCP(circle, treewalk, src, dest, totalsize=tsz)
     pcp.chunksize = utils.conv_unit(ARGS.chunksize)
     circle.begin(pcp)
-    circle.finalize()
-
-    # print("rank %s tally bytes = %s" % (circle.rank, pcp.cnt_filesize))
+    circle.finalize(reduce_interval=ARGS.interval)
     pcp.cleanup()
 
     pcp.wtime_ended = MPI.Wtime()
     pcp.epilogue()
 
     # third task
-    pcheck = PCheck(circle, pcp)
+    pcheck = PCheck(circle, pcp, tsz)
     pcheck.setLevel(ARGS.loglevel)
     circle.begin(pcheck)
     circle.finalize()

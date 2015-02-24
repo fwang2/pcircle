@@ -1,17 +1,18 @@
 from task import BaseTask
 import logging
-import utils
+from utils import logging_init, bytes_fmt
 import hashlib
 from mpi4py import MPI
 
 logger = logging.getLogger("pcheck")
 
 class PCheck(BaseTask):
-    def __init__(self, circle, pcp):
+    def __init__(self, circle, pcp, totalsize=0):
         global logger
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.pcp = pcp
+        self.totalsize = totalsize
 
         # cache
         self.fd_cache = {}
@@ -23,6 +24,9 @@ class PCheck(BaseTask):
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
+
+        # reduce
+        self.vsize = 0
 
     def create(self):
         for k, v in self.pcp.checksum.iteritems():
@@ -52,6 +56,7 @@ class PCheck(BaseTask):
                 self.failed[src] = chunk[3]
                 self.failcnt += 1
 
+        self.vsize += chunk[1]
 
     def fail_tally(self):
         total_fails = self.circle.comm.reduce(self.failcnt, op=MPI.SUM)
@@ -59,16 +64,26 @@ class PCheck(BaseTask):
 
     def setLevel(self, level):
         global logger
-        utils.logging_init(logger, level)
+        logging_init(logger, level)
 
 
-    def reduce_init(self):
+    def reduce_init(self, buf):
+        buf['vsize'] = self.vsize
+
+    def reduce_report(self, buf):
+        out = ""
+        if self.totalsize != 0:
+            out += "%.2f %% verified, " % (100 * float(buf['vsize'])/self.totalsize)
+
+        out += "%s bytes done" % bytes_fmt(buf['vsize'])
+        print(out)
+
+    def reduce_finish(self, buf):
+        #self.reduce_report(buf)
         pass
 
-    def reduce_finish(self):
-        pass
-
-    def reduce(self):
-        pass
+    def reduce(self, buf1, buf2):
+        buf1['vsize'] += buf2['vsize']
+        return buf1
 
 

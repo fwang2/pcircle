@@ -13,13 +13,15 @@ import logging
 import argparse
 import utils
 import hashlib
-from pwalk import PWalk
 import sys
+import signal
+from pwalk import PWalk
 from collections import Counter, defaultdict
 from utils import bytes_fmt, hprint, eprint
 
 ARGS    = None
 logger  = logging.getLogger("pcp")
+circle  = None
 
 def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
@@ -27,12 +29,16 @@ def parse_args():
     parser.add_argument("--chunksize", default="1m", help="chunk size")
     parser.add_argument("-i", "--interval", type=int, default=5, help="interval")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
-    parser.add_argument("-f", "--force", action="store_true", default=False, help="force unlink")
+    parser.add_argument("-f", "--force", action="store_true", help="force unlink")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
 
     return parser.parse_args()
 
+def sig_handler(signal, frame):
+    # catch keyboard, do nothing
+    # eprint("\tUser cancelled ... cleaning up")
+    sys.exit(1)
 
 class PCP(BaseTask):
     def __init__(self, circle, treewalk, src, dest, totalsize=0, checksum=False):
@@ -275,34 +281,37 @@ class PCP(BaseTask):
 def verify_path(src, dest):
 
     if not os.path.exists(src) or not os.access(src, os.R_OK):
-        print("source directory %s is not readable" % src)
-        sys.exit(1)
+        eprint("source directory %s is not readable" % src)
+        circle.exit(0)
 
     srcbase = os.path.basename(src)
     if os.path.exists(dest+"/"+srcbase) and not ARGS.force:
-        print("Error, destination exists, use -f to overwrite")
-        sys.exit(1)
+        eprint("Error, destination exists, use -f to overwrite")
+        circle.exit(0)
 
     if not os.path.exists(dest):
         try:
             os.mkdir(dest)
         except:
-            print("Error: failed to create %s" % dest)
-            sys.exit(1)
+            eprint("Error: failed to create %s" % dest)
+            circle.exit(0)
     else:
         if not os.access(dest, os.W_OK):
-            print("Error: destination %s is not writable" % dest)
-            sys.exit(1)
+            eprint("Error: destination %s is not writable" % dest)
+            circle.exit(0)
 
 def main():
 
-    global ARGS, logger
+    global ARGS, logger, circle
+    signal.signal(signal.SIGINT, sig_handler)
     ARGS = parse_args()
 
     circle = Circle(reduce_interval=ARGS.interval)
     circle.setLevel(logging.ERROR)
     logger = utils.logging_init(logger, ARGS.loglevel)
+
     if circle.rank == 0: verify_path(ARGS.src, ARGS.dest)
+
 
     # first task
     src = os.path.abspath(ARGS.src)

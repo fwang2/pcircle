@@ -4,6 +4,7 @@ from globals import T, G
 from copy import copy
 import logging
 import random
+import sys
 
 logger = logging.getLogger("circle")
 
@@ -613,6 +614,11 @@ class Circle:
         ret = ret + "barrier started = %s " % self.barrier_started
         ret = ret + "local token = %s" % self.token_is_local
         return ret
+
+    @staticmethod
+    def exit(code):
+        MPI.Finalize()
+        sys.exit(code)
 
     # define method alias
     finalize = __init__

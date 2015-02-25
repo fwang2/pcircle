@@ -18,10 +18,12 @@ import signal
 from pwalk import PWalk
 from collections import Counter, defaultdict
 from utils import bytes_fmt, hprint, eprint
+from lru import LRU
 
 ARGS    = None
 logger  = logging.getLogger("pcp")
 circle  = None
+CACHE_LIMIT = 2
 
 def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
@@ -51,9 +53,9 @@ class PCP(BaseTask):
         self.srcbase = os.path.basename(src)
         self.dest = os.path.abspath(dest)
 
-        # cache
-        self.rfd_cache = {}
-        self.wfd_cache = {}
+        # cache, keep the size conservative
+        self.rfd_cache = LRU(CACHE_LIMIT)
+        self.wfd_cache = LRU(CACHE_LIMIT)
 
         self.cnt_filesize_prior = 0
         self.cnt_filesize = 0
@@ -145,38 +147,48 @@ class PCP(BaseTask):
         self.circle.abort()
         exit(code)
 
+    def do_open(self, k, d, flag):
+        """
+        :param k: key
+        :param d: dict
+        :return: file handle
+        """
+        if d.has_key(k):
+            return d[k]
+
+        if len(d.keys()) < CACHE_LIMIT:
+            fd = os.open(k, flag)
+            if fd > 0: d[k] = fd
+            return fd
+        else:
+            # over the limit
+            # clean up the least used
+            old_k, old_v = d.items()[-1]
+            logger.debug("Closing fd for %s" % old_k, extra=self.d)
+            os.close(old_v)
+
+            fd = os.open(k, flag)
+            if fd > 0: d[k] = fd
+            return fd
+
     def do_copy(self, work):
         src = work['src']
         dest = work['dest']
-        rfd = None
-        wfd = None
 
-
-        if src in self.rfd_cache:
-            rfd = self.rfd_cache[src]
-
-        if dest in self.wfd_cache:
-            wfd = self.wfd_cache[dest]
 
         basedir = os.path.dirname(dest)
         if not os.path.exists(basedir):
             os.mkdir(basedir)
 
-        if not rfd:
-            rfd = os.open(src, os.O_RDONLY)
-            self.rfd_cache[src] = rfd
-
-        if not wfd:
-            wfd = os.open(dest, os.O_WRONLY|os.O_CREAT)
-            if wfd < 0:
-                if ARGS.force:
-                    os.unlink(dest)
-                    wfd = os.open(dest, os.O_WRONLY)
-                else:
-                    logger.error("Failed to create output file %s" % dest, extra=self.d)
-                    return
-
-            self.wfd_cache[dest] = wfd
+        rfd = self.do_open(src, self.rfd_cache, os.O_RDONLY)
+        wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT)
+        if wfd < 0:
+            if ARGS.force:
+                os.unlink(dest)
+                wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY)
+            else:
+                logger.error("Failed to create output file %s" % dest, extra=self.d)
+                return
 
         # do the actual copy
         self.write_bytes(rfd, wfd, work)

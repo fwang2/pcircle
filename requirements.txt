@@ -1,4 +1,4 @@
 mpi4py
-cffi>=0.4
+lru-dict
 xattr
 

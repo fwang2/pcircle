@@ -596,8 +596,8 @@ class Circle:
                 for child in self.child_ranks:
                     self.comm.send(None, child, T.REDUCE)
 
-
-    def set_loglevel(self, level):
+    @staticmethod
+    def set_loglevel(level):
         global logger
         logger.setLevel(level)
 

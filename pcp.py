@@ -143,9 +143,6 @@ class PCP(BaseTask):
             if stat.S_ISREG(f[1]):
                 self.enq_file(f)
 
-    def abort(self, code):
-        self.circle.abort()
-        exit(code)
 
     def do_open(self, k, d, flag):
         """

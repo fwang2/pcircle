@@ -3,6 +3,8 @@ import time
 import itertools
 import logging
 import re
+import os.path
+
 from globals import G
 
 def logging_init(logger, loglevel):
@@ -21,6 +23,15 @@ def logging_init(logger, loglevel):
 
     return logger
 
+def destpath(srcdir, destdir, srcfile):
+    """
+    srcdir -> source path
+    destdir -> destination path
+    srcfile -> full source file path
+    return the destination file path
+    """
+    srcbase = os.path.basename(srcdir)
+    return destdir + "/" + srcbase + "/" + os.path.relpath(srcfile, start=srcdir)
 
 def conv_unit(s):
     " convert a unit to number"

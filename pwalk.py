@@ -5,12 +5,13 @@ from task import BaseTask
 from circle import Circle
 from globals import G
 from mpi4py import MPI
-from utils import logging_init, bytes_fmt, hprint
+from utils import logging_init, bytes_fmt, hprint, destpath
 import stat
 import os
 import os.path
 import logging
 import argparse
+import xattr
 
 ARGS    = None
 logger  = logging.getLogger("pwalk")
@@ -24,12 +25,12 @@ def parse_args():
     return parser.parse_args()
 
 class PWalk(BaseTask):
-    def __init__(self, circle, src, dest=None):
+    def __init__(self, circle, src, dest=None, preserve=False):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.src = src
         self.dest = dest
-
+        self.preserve = preserve
         self.flist = []  # element is (filepath, filemode, filesize)
         self.src_flist = self.flist
 
@@ -48,10 +49,26 @@ class PWalk(BaseTask):
             self.enq(self.src)
             hprint("Starting tree walk ...")
 
-    def process_dir(self, dir):
+    def copy_xattr(self, src, dest):
+        attrs = xattr.listxattr(src)
+        for k in attrs:
+            val = xattr.getxattr(src, k)
+            xattr.setxattr(dest, k, val)
 
-        entries = os.listdir(dir)
+    def process_dir(self, i_dir):
+        """
+            i_dir should be absolute path
+        """
+        if self.dest:
+            # we create destination directory
+            o_dir = destpath(self.src, self.dest, i_dir)
+            os.mkdir(o_dir, stat.S_IRWXU)
+            if self.preserve:
+                self.copy_xattr(i_dir, o_dir)
+
+        entries = os.listdir(i_dir)
         for e in entries:
+            # e is relative path, we convert to absolute path and enq
             self.enq(dir + "/" + e)
 
     def process(self):
@@ -67,6 +84,10 @@ class PWalk(BaseTask):
             if stat.S_ISREG(st.st_mode):
                 self.cnt_files += 1
                 self.cnt_filesize += st.st_size
+                if self.preserve:
+                    o_file = destpath(self.src, self.dest, path)
+                    os.mknod(o_file, stat.S_IRWXU | stat.S_IFREG)
+                    self.copy_xattr(path, o_file)
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
                 self.process_dir(path)

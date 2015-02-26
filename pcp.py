@@ -20,10 +20,9 @@ from collections import Counter, defaultdict
 from utils import bytes_fmt, hprint, eprint
 from lru import LRU
 
-ARGS    = None
-logger  = logging.getLogger("pcp")
-circle  = None
-CACHE_LIMIT = 0
+ARGS = None
+logger = logging.getLogger("pcp")
+circle = None
 
 def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
@@ -43,8 +42,7 @@ def sig_handler(signal, frame):
     sys.exit(1)
 
 class PCP(BaseTask):
-    def __init__(self, circle, treewalk, src, dest, totalsize=0, checksum=False):
-        global CACHE_LIMIT
+    def __init__(self, circle, treewalk, src, dest, totalsize=0, checksum=False, climit=0):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
@@ -55,9 +53,12 @@ class PCP(BaseTask):
         self.dest = os.path.abspath(dest)
 
         # cache, keep the size conservative
-        CACHE_LIMIT = 1024/circle.size - 16
-        self.rfd_cache = LRU(CACHE_LIMIT)
-        self.wfd_cache = LRU(CACHE_LIMIT)
+        self.cache_limit = climit
+        if  climit == 0:
+            self.cache_limit = 1024/circle.size - 16
+
+        self.rfd_cache = LRU(self.cache_limit)
+        self.wfd_cache = LRU(self.cache_limit)
 
         self.cnt_filesize_prior = 0
         self.cnt_filesize = 0
@@ -155,7 +156,7 @@ class PCP(BaseTask):
         if d.has_key(k):
             return d[k]
 
-        if len(d.keys()) < CACHE_LIMIT:
+        if len(d.keys()) < self.cache_limit:
             fd = os.open(k, flag)
             if fd > 0: d[k] = fd
             return fd
@@ -177,7 +178,7 @@ class PCP(BaseTask):
 
         basedir = os.path.dirname(dest)
         if not os.path.exists(basedir):
-            os.mkdir(basedir)
+            os.makedirs(basedir)
 
         rfd = self.do_open(src, self.rfd_cache, os.O_RDONLY)
         wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT)
@@ -321,12 +322,13 @@ def main():
     circle.setLevel(logging.ERROR)
     logger = utils.logging_init(logger, ARGS.loglevel)
 
-    if circle.rank == 0: verify_path(ARGS.src, ARGS.dest)
+    src = os.path.abspath(ARGS.src)
+    dest = os.path.abspath(ARGS.dest)
+
+    if circle.rank == 0: verify_path(src, dest)
 
 
     # first task
-    src = os.path.abspath(ARGS.src)
-    dest = os.path.abspath(ARGS.dest)
     treewalk = PWalk(circle, src, dest)
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)

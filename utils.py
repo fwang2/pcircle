@@ -30,13 +30,13 @@ def destpath(srcdir, destdir, srcfile):
     srcfile -> full source file path
     return the destination file path
     """
-    srcbase = os.path.basename(srcdir)
+    destbase = os.path.basename(destdir)
     rpath = os.path.relpath(srcfile, start=srcdir)
-    dpath = destdir + "/" + srcbase
+
     if rpath == ".":
-        return dpath
+        return destdir
     else:
-        return dpath + "/" + rpath
+        return destdir + "/" + rpath
 
 def conv_unit(s):
     " convert a unit to number"

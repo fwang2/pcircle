@@ -17,7 +17,7 @@ import sys
 import signal
 from pwalk import PWalk
 from collections import Counter, defaultdict
-from utils import bytes_fmt, hprint, eprint
+from utils import bytes_fmt, hprint, eprint, destpath
 from lru import LRU
 
 ARGS = None
@@ -112,7 +112,7 @@ class PCP(BaseTask):
         d = {}
         d['cmd'] = 'copy'
         d['src'] = f[0]
-        d['dest'] = self.dest + "/" + self.srcbase + "/" + os.path.relpath(f[0], start=self.src)
+        d['dest'] = destpath(self.src, self.dest, f[0])
 
         workcnt = 0
 
@@ -310,27 +310,35 @@ class PCP(BaseTask):
             self.checksum[work['dest']].append((work['off_start'], work['length'], digest, work['src']))
 
 
-def verify_path(src, dest):
+def verify_path(isrc, idest):
+    """ verify and return target destination"""
 
-    if not os.path.exists(src) or not os.access(src, os.R_OK):
-        eprint("source directory %s is not readable" % src)
+    if not os.path.exists(isrc) or not os.access(isrc, os.R_OK):
+        eprint("source directory %s is not readable" % isrc)
         circle.exit(0)
 
-    srcbase = os.path.basename(src)
-    if os.path.exists(dest+"/"+srcbase):
+    srcbase = os.path.basename(isrc)
+    odest = idest + "/" + srcbase
+
+    if os.path.exists(odest):
         eprint("Destination exists, will not overwrite!")
         circle.exit(0)
 
-    if not os.path.exists(dest):
-        try:
-            os.mkdir(dest)
-        except:
-            eprint("Error: failed to create %s" % dest)
-            circle.exit(0)
+    if os.path.exists(idest) and os.access(idest, os.W_OK):
+        #os.mkdir(odest)
+        return odest
+
+    parent_dir = os.path.dirname(idest)
+
+    if not os.path.exists(idest) and os.access(parent_dir, os.W_OK):
+        #os.mkdir(idest)
+        return idest
     else:
-        if not os.access(dest, os.W_OK):
-            eprint("Error: destination %s is not writable" % dest)
-            circle.exit(0)
+        eprint("Error: destination %s is not accessible" % idest)
+        circle.exit(0)
+
+    # should not come to this point
+    raise
 
 def main():
 
@@ -345,8 +353,10 @@ def main():
     src = os.path.abspath(ARGS.src)
     dest = os.path.abspath(ARGS.dest)
 
-    if circle.rank == 0: verify_path(src, dest)
+    if circle.rank == 0:
+        dest = verify_path(src, dest)
 
+    print(dest)
 
     # first task
     treewalk = PWalk(circle, src, dest, preserve = ARGS.preserve)

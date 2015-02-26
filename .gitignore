@@ -1,6 +1,10 @@
+.idea
 *.pyc
 .project
 .pydevproject
 .ropeproject
 .swp
+build
+dist
 tags
+pcircle.egg-info

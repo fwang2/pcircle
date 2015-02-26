@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("-i", "--interval", type=int, default=5, help="interval")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
     parser.add_argument("-f", "--force", action="store_true", help="force unlink")
+    parser.add_argument("--prune", action="store_true", help="prune empty directory")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -42,11 +43,13 @@ def sig_handler(signal, frame):
     sys.exit(1)
 
 class PCP(BaseTask):
-    def __init__(self, circle, treewalk, src, dest, totalsize=0, checksum=False, climit=0):
+    def __init__(self, circle, treewalk, src, dest, totalsize=0, checksum=False, climit=0,
+                 prune=False):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
         self.totalsize = totalsize
+        self.prune = prune
 
         self.src = os.path.abspath(src)
         self.srcbase = os.path.basename(src)
@@ -91,6 +94,13 @@ class PCP(BaseTask):
         for f in self.wfd_cache.values():
             os.close(f)
 
+    def enq_dir(self, f):
+        d = {}
+        d['cmd'] = "mkdir"
+        d['src'] = f[0]
+        d['dest'] = self.dest + "/" + self.srcbase + "/" + os.path.relpath(f[0], start=self.src)
+        self.enq(d)
+
     def enq_file(self, f):
         '''
         f[0] path f[1] mode f[2] size - we enq all in one shot
@@ -102,7 +112,6 @@ class PCP(BaseTask):
         d = {}
         d['cmd'] = 'copy'
         d['src'] = f[0]
-
         d['dest'] = self.dest + "/" + self.srcbase + "/" + os.path.relpath(f[0], start=self.src)
 
         workcnt = 0
@@ -145,6 +154,8 @@ class PCP(BaseTask):
         for f in self.treewalk.flist:
             if stat.S_ISREG(f[1]):
                 self.enq_file(f)
+            elif not self.prune and stat.S_ISDIR(f[1]):
+                self.enq_dir(f)
 
 
     def do_open(self, k, d, flag):
@@ -171,10 +182,15 @@ class PCP(BaseTask):
             if fd > 0: d[k] = fd
             return fd
 
+    def do_mkdir(self, work):
+        src = work['src']
+        dest = work['dest']
+        if not os.path.exists(dest):
+            os.makedirs(dest)
+
     def do_copy(self, work):
         src = work['src']
         dest = work['dest']
-
 
         basedir = os.path.dirname(dest)
         if not os.path.exists(basedir):
@@ -230,6 +246,8 @@ class PCP(BaseTask):
         work = self.deq()
         if work['cmd'] == 'copy':
             self.do_copy(work)
+        elif work['cmd'] == 'mkdir':
+            self.do_mkdir(work)
         elif work['cmd'] == 'fini_check':
             # self.do_fini_check(work)
             pass

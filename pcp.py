@@ -23,7 +23,7 @@ from lru import LRU
 ARGS    = None
 logger  = logging.getLogger("pcp")
 circle  = None
-CACHE_LIMIT = 2
+CACHE_LIMIT = 0
 
 def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
@@ -44,6 +44,7 @@ def sig_handler(signal, frame):
 
 class PCP(BaseTask):
     def __init__(self, circle, treewalk, src, dest, totalsize=0, checksum=False):
+        global CACHE_LIMIT
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
@@ -54,6 +55,7 @@ class PCP(BaseTask):
         self.dest = os.path.abspath(dest)
 
         # cache, keep the size conservative
+        CACHE_LIMIT = 1024/circle.size - 16
         self.rfd_cache = LRU(CACHE_LIMIT)
         self.wfd_cache = LRU(CACHE_LIMIT)
 

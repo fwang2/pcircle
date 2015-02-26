@@ -8,3 +8,4 @@ build
 dist
 tags
 pcircle.egg-info
+*.log

@@ -67,9 +67,15 @@ class PWalk(BaseTask):
             if self.preserve:
                 self.copy_xattr(i_dir, o_dir)
 
-        entries = os.listdir(i_dir)
+        entries = None
+        try:
+            entries = os.listdir(i_dir)
+        except OSError as err:
+            logger.error("access error %s, skipping ..." % i_dir, extra=self.d)
+            return False
         for entry in entries:
             self.enq(i_dir + "/" + entry) # conv to absolute path
+        return True
 
     def process(self):
 

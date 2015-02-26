@@ -30,8 +30,7 @@ def parse_args():
     parser.add_argument("--chunksize", default="1m", help="chunk size")
     parser.add_argument("-i", "--interval", type=int, default=5, help="interval")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
-    parser.add_argument("-f", "--force", action="store_true", help="force unlink")
-    parser.add_argument("--prune", action="store_true", help="prune empty directory")
+    parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta info")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -95,6 +94,7 @@ class PCP(BaseTask):
             os.close(f)
 
     def enq_dir(self, f):
+        """ Deprecated, should not be in use anymore """
         d = {}
         d['cmd'] = "mkdir"
         d['src'] = f[0]
@@ -154,8 +154,6 @@ class PCP(BaseTask):
         for f in self.treewalk.flist:
             if stat.S_ISREG(f[1]):
                 self.enq_file(f)
-            elif not self.prune and stat.S_ISDIR(f[1]):
-                self.enq_dir(f)
 
 
     def do_open(self, k, d, flag):
@@ -243,11 +241,15 @@ class PCP(BaseTask):
 
 
     def process(self):
+        """
+        The only work is "copy", TODO: clean up other actions such as mkdir/fini_check
+        """
         work = self.deq()
         if work['cmd'] == 'copy':
             self.do_copy(work)
         elif work['cmd'] == 'mkdir':
-            self.do_mkdir(work)
+            # self.do_mkdir(work)
+            pass
         elif work['cmd'] == 'fini_check':
             # self.do_fini_check(work)
             pass
@@ -315,8 +317,8 @@ def verify_path(src, dest):
         circle.exit(0)
 
     srcbase = os.path.basename(src)
-    if os.path.exists(dest+"/"+srcbase) and not ARGS.force:
-        eprint("Error, destination exists, use -f to overwrite")
+    if os.path.exists(dest+"/"+srcbase):
+        eprint("Destination exists, will not overwrite!")
         circle.exit(0)
 
     if not os.path.exists(dest):
@@ -347,7 +349,7 @@ def main():
 
 
     # first task
-    treewalk = PWalk(circle, src, dest)
+    treewalk = PWalk(circle, src, dest, preserve = ARGS.preserve)
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.interval)
@@ -360,8 +362,6 @@ def main():
     circle.finalize(reduce_interval=ARGS.interval)
     pcp.cleanup()
 
-    pcp.wtime_ended = MPI.Wtime()
-    pcp.epilogue()
 
     # third task
     if ARGS.checksum:
@@ -380,6 +380,9 @@ def main():
                 eprint("Verification failed")
 
 
+
+    pcp.wtime_ended = MPI.Wtime()
+    pcp.epilogue()
 
 if __name__ == "__main__": main()
 

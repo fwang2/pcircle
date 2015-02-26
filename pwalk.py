@@ -25,12 +25,13 @@ def parse_args():
     return parser.parse_args()
 
 class PWalk(BaseTask):
-    def __init__(self, circle, src, dest=None, preserve=False):
+    def __init__(self, circle, src, dest=None, preserve=False, force=False):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.src = src
         self.dest = dest
         self.preserve = preserve
+        self.force = force
         self.flist = []  # element is (filepath, filemode, filesize)
         self.src_flist = self.flist
 
@@ -47,7 +48,7 @@ class PWalk(BaseTask):
     def create(self):
         if self.circle.rank == 0:
             self.enq(self.src)
-            hprint("Starting tree walk ...")
+            hprint("Start analyzing ...")
 
     def copy_xattr(self, src, dest):
         attrs = xattr.listxattr(src)
@@ -67,9 +68,8 @@ class PWalk(BaseTask):
                 self.copy_xattr(i_dir, o_dir)
 
         entries = os.listdir(i_dir)
-        for e in entries:
-            # e is relative path, we convert to absolute path and enq
-            self.enq(dir + "/" + e)
+        for entry in entries:
+            self.enq(i_dir + "/" + entry) # conv to absolute path
 
     def process(self):
 
@@ -86,8 +86,12 @@ class PWalk(BaseTask):
                 self.cnt_filesize += st.st_size
                 if self.preserve:
                     o_file = destpath(self.src, self.dest, path)
-                    os.mknod(o_file, stat.S_IRWXU | stat.S_IFREG)
-                    self.copy_xattr(path, o_file)
+                    try:
+                        os.mknod(o_file, stat.S_IRWXU | stat.S_IFREG)
+                    except OSError as e:
+                        logger.warn("failed to mknod() for %s", o_file, extra=self.d)
+                    else:
+                        self.copy_xattr(path, o_file)
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
                 self.process_dir(path)

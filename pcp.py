@@ -17,8 +17,9 @@ import sys
 import signal
 from pwalk import PWalk
 from collections import Counter, defaultdict
-from utils import bytes_fmt, hprint, eprint, destpath
+from utils import bytes_fmt, destpath
 from lru import LRU
+
 
 ARGS = None
 logger = logging.getLogger("pcp")
@@ -84,7 +85,7 @@ class PCP(BaseTask):
         self.checksum = defaultdict(list)
 
         if self.circle.rank == 0:
-            hprint("Start copying process ...")
+            print("Start copying process ...")
 
     def cleanup(self):
         for f in self.rfd_cache.values():
@@ -289,8 +290,8 @@ class PCP(BaseTask):
             if self.totalsize == 0: return
             time = self.wtime_ended - self.wtime_started
             rate = float(self.totalsize)/time
-            hprint("Copy Job Completed In: %.2f seconds" % (time))
-            hprint("Average Transfer Rate: %s/s\n" % bytes_fmt(rate))
+            print("Copy Job Completed In: %.2f seconds" % (time))
+            print("Average Transfer Rate: %s/s\n" % bytes_fmt(rate))
 
 
     def write_bytes(self, rfd, wfd, work):
@@ -314,14 +315,14 @@ def verify_path(isrc, idest):
     """ verify and return target destination"""
 
     if not os.path.exists(isrc) or not os.access(isrc, os.R_OK):
-        eprint("source directory %s is not readable" % isrc)
+        print("source directory %s is not readable" % isrc)
         circle.exit(0)
 
     srcbase = os.path.basename(isrc)
     odest = idest + "/" + srcbase
 
     if os.path.exists(odest):
-        eprint("Destination exists, will not overwrite!")
+        print("Destination exists, will not overwrite!")
         circle.exit(0)
 
     if os.path.exists(idest) and os.access(idest, os.W_OK):
@@ -334,7 +335,7 @@ def verify_path(isrc, idest):
         #os.mkdir(idest)
         return idest
     else:
-        eprint("Error: destination %s is not accessible" % idest)
+        print("Error: destination %s is not accessible" % idest)
         circle.exit(0)
 
     # should not come to this point
@@ -355,8 +356,6 @@ def main():
 
     if circle.rank == 0:
         dest = verify_path(src, dest)
-
-    print(dest)
 
     # first task
     treewalk = PWalk(circle, src, dest, preserve = ARGS.preserve)
@@ -385,9 +384,9 @@ def main():
         if circle.rank == 0:
             print("")
             if tally == 0:
-                hprint("Verification passed!")
+                print("Verification passed!")
             else:
-                eprint("Verification failed")
+                print("Verification failed")
 
 
 

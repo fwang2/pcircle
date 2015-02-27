@@ -5,7 +5,7 @@ from task import BaseTask
 from circle import Circle
 from globals import G
 from mpi4py import MPI
-from utils import logging_init, bytes_fmt, hprint, destpath
+from utils import logging_init, bytes_fmt,destpath
 import stat
 import os
 import os.path
@@ -48,7 +48,7 @@ class PWalk(BaseTask):
     def create(self):
         if self.circle.rank == 0:
             self.enq(self.src)
-            hprint("Start analyzing ...")
+            print("Start analyzing ...")
 
     def copy_xattr(self, src, dest):
         attrs = xattr.listxattr(src)

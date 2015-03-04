@@ -60,6 +60,9 @@ class Circle:
         # tree
         self.tree_init(k)
 
+    def set_reduce_interval(self, interval):
+        self.reduce_time_interval = interval
+
     def token_init(self):
 
         self.token_src = (self.rank - 1 + self.size) % self.size
@@ -122,11 +125,8 @@ class Circle:
         """ entry point to work """
 
         self.task = task
-
-        #if self.rank == 0:
         self.task.create()
-
-        # work until terminate
+        self.comm.barrier()
         self.loop()
 
         if self.rank == 0:
@@ -137,6 +137,7 @@ class Circle:
     def loop(self):
         """ central loop to finish the work """
         while True:
+
             # check for and service requests
             self.workreq_check()
 
@@ -164,6 +165,9 @@ class Circle:
                 self.workq.append(work)
         else:
             logger.warn("enq work item is None")
+
+    def setq(self, q):
+        self.workq = q
 
     def deq(self):
         logger.debug("deq: %s" % self.workq[0], extra=self.d)
@@ -314,11 +318,13 @@ class Circle:
                 # add rank to requesters
                 self.requestors.append(rank)
 
+        # out of while loop
+
         if len(self.requestors) == 0:
             return
         else:
-            logger.debug("have %s requesters, with work items in queue: %s" %
-                         (len(self.requestors), self.workq), extra=self.d)
+            logger.debug("have %s requesters, with %s work items in queue: %s" %
+                         (len(self.requestors), len(self.workq), self.workq), extra=self.d)
             # have work requesters
             if len(self.workq) == 0 or cleanup:
                 for rank in self.requestors:
@@ -348,6 +354,7 @@ class Circle:
         buf = { G.KEY: G.ABORT } if self.abort else { G.KEY: G.ZERO }
         r = self.comm.isend(buf, dest = rank, tag = T.WORK_REPLY)
         r.wait()
+        logger.debug("Send no work reply to %s" % rank, extra=self.d)
 
     def send_work_to_many(self):
         rcount = len(self.requestors)
@@ -368,6 +375,9 @@ class Circle:
         @dest   - the rank of requester
         @count  - the number of work to send
         """
+        if count <= 0:
+            self.send_no_work(rank)
+
         # for termination detection
         if (rank < self.rank) or (rank == self.token_src):
             self.token_proc = G.BLACK
@@ -382,10 +392,7 @@ class Circle:
         del self.workq[0:count]
 
     def request_work(self, cleanup = False):
-        # check if we have request outstanding
         if self.workreq_outstanding:
-            logger.debug("has req outstanding, dest = %s" % self.work_requested_rank,
-                         extra = self.d)
             st = MPI.Status()
             reply = self.comm.Iprobe(source = self.work_requested_rank,
                                      tag = T.WORK_REPLY, status = st)
@@ -393,6 +400,10 @@ class Circle:
                 self.work_receive(self.work_requested_rank)
                 # flip flag to indicate we no longer waiting for reply
                 self.workreq_outstanding = False
+            else:
+                logger.debug("has req outstanding, dest = %s, no reply" %
+                             self.work_requested_rank, extra = self.d)
+
         elif not cleanup:
             # send request
             dest = self.next_proc()
@@ -401,7 +412,7 @@ class Circle:
                 return
             buf = G.ABORT if self.abort else G.MSG
             # blocking send
-            logger.debug("send work request to %s : %s" % (dest, G.str[buf]),
+            logger.debug("send work request to rank %s : %s" % (dest, G.str[buf]),
                          extra = self.d)
             self.comm.send(buf, dest, T.WORK_REQUEST)
             self.workreq_outstanding = True
@@ -422,6 +433,7 @@ class Circle:
         else:
             assert type(buf[G.VAL]) == list
             self.workq.extend(buf[G.VAL])
+
 
     def token_recv(self):
         # verify we don't have a local token
@@ -484,7 +496,8 @@ class Circle:
     def token_issend(self):
 
         if self.abort: return
-        logger.debug("token send: token_color = %s" % G.str[self.token_color], extra=self.d)
+        logger.debug("token send to rank %s: token_color = %s" %
+                     (self.token_dest, G.str[self.token_color]), extra=self.d)
         self.token_send_req = self.comm.issend(self.token_color,
             self.token_dest, tag = T.TOKEN)
         # now we don't have the token

@@ -167,7 +167,6 @@ def main():
 
     global ARGS, logger
     ARGS = parse_args()
-    #root = os.path.abspath(ARGS.path)
     root = os.path.abspath(ARGS.path)
     circle = Circle(reduce_interval = ARGS.interval)
     logger = logging_init(logger, ARGS.loglevel)

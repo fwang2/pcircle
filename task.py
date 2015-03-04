@@ -35,4 +35,9 @@ class BaseTask:
     def deq(self):
         return self.circle.deq()
 
+    def setq(self, q):
+        self.circle.setq(q)
 
+
+    def get_workq(self):
+        return self.circle.workq

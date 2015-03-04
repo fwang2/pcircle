@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-from task import BaseTask
-from pcheck import PCheck
-from circle import Circle
-from globals import G
 from mpi4py import MPI
 import stat
 import os
@@ -15,10 +11,19 @@ import utils
 import hashlib
 import sys
 import signal
-from pwalk import PWalk
+import cPickle as pickle
+
 from collections import Counter, defaultdict
 from utils import bytes_fmt, destpath
 from lru import LRU
+from threading import Thread
+
+from task import BaseTask
+from pcheck import PCheck
+from circle import Circle
+from globals import G
+from pwalk import PWalk
+from checkpoint import Checkpoint
 
 
 ARGS = None
@@ -29,7 +34,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("--chunksize", default="1m", help="chunk size")
-    parser.add_argument("-i", "--interval", type=int, default=5, help="interval")
+    parser.add_argument("--reduce-interval", type=int, default=10, help="interval")
+    parser.add_argument("--checkpoint-interval", type=int, default=360, help="checkpoint interval")
+    parser.add_argument("--checkpoint-id", default=None, help="checkpoint id")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify")
     parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta info")
     parser.add_argument("src", help="copy from")
@@ -43,13 +50,21 @@ def sig_handler(signal, frame):
     sys.exit(1)
 
 class PCP(BaseTask):
-    def __init__(self, circle, treewalk, src, dest, totalsize=0, checksum=False, climit=0,
-                 prune=False):
+    def __init__(self, circle, src, dest,
+                 treewalk = None,
+                 totalsize=0,
+                 checksum=False,
+                 climit=0,
+                 prune=False,
+                 workq=None):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
         self.totalsize = totalsize
         self.prune = prune
+        self.workq = workq
+
+        self.checkpoint_file = None
 
         self.src = os.path.abspath(src)
         self.srcbase = os.path.basename(src)
@@ -75,8 +90,8 @@ class PCP(BaseTask):
         self.wtime_started = MPI.Wtime()
         self.wtime_ended = None
         self.workcnt = 0
-
-        logger.debug("treewalk files = %s" % treewalk.flist, extra=self.d)
+        if self.treewalk:
+            logger.debug("treewalk files = %s" % treewalk.flist, extra=self.d)
 
         # fini_check
         self.fini_cnt = Counter()
@@ -84,8 +99,21 @@ class PCP(BaseTask):
         # checksum
         self.checksum = defaultdict(list)
 
+        # checkpointing
+        self.checkpoint_interval = sys.maxsize
+        self.checkpoint_last = MPI.Wtime()
+
         if self.circle.rank == 0:
             print("Start copying process ...")
+
+    def set_chunksize(self, sz):
+        self.chunksize = sz
+
+    def set_checkpoint_interval(self, interval):
+        self.checkpoint_interval = interval
+
+    def set_checkpoint_file(self, f):
+        self.checkpoint_file = f
 
     def cleanup(self):
         for f in self.rfd_cache.values():
@@ -93,6 +121,10 @@ class PCP(BaseTask):
 
         for f in self.wfd_cache.values():
             os.close(f)
+
+        # remove checkpoint file
+        if os.path.exists(self.checkpoint_file):
+            os.remove(self.checkpoint_file)
 
     def enq_dir(self, f):
         """ Deprecated, should not be in use anymore """
@@ -151,11 +183,19 @@ class PCP(BaseTask):
 
 
     def create(self):
+        if self.workq:  # restart
+            self.setq(self.workq)
+            return
+
         # construct and enable all copy operations
         for f in self.treewalk.flist:
             if stat.S_ISREG(f[1]):
                 self.enq_file(f)
 
+        # right after this, we do first checkpoint
+        if self.checkpoint_file:
+            self.do_no_interrupt_checkpoint()
+            self.checkpoint_last = MPI.Wtime()
 
     def do_open(self, k, d, flag):
         """
@@ -240,11 +280,35 @@ class PCP(BaseTask):
         del self.fini_cnt[src]
 
 
+    def do_no_interrupt_checkpoint(self):
+        a = Thread(target=self.do_checkpoint)
+        a.start()
+        a.join()
+        logger.debug("checkpoint: %s" % self.checkpoint_file, extra=self.d )
+
+    def do_checkpoint(self):
+        for k in self.wfd_cache.keys():
+            os.close(self.wfd_cache[k])
+
+        # clear the cache
+        self.wfd_cache.clear()
+
+        tmp_file = self.checkpoint_file + ".part"
+        with open(tmp_file, "wb") as f:
+            cobj = Checkpoint(self.src, self.dest, self.get_workq(), self.totalsize)
+            pickle.dump(cobj, f, pickle.HIGHEST_PROTOCOL)
+        # POSIX requires rename to be atomic
+        os.rename(tmp_file, self.checkpoint_file)
 
     def process(self):
         """
         The only work is "copy", TODO: clean up other actions such as mkdir/fini_check
         """
+        curtime = MPI.Wtime()
+        if curtime - self.checkpoint_last > self.checkpoint_interval:
+            self.do_no_interrupt_checkpoint()
+            self.checkpoint_last = curtime
+
         work = self.deq()
         if work['cmd'] == 'copy':
             self.do_copy(work)
@@ -312,19 +376,19 @@ class PCP(BaseTask):
             self.checksum[work['dest']].append((work['off_start'], work['length'], digest, work['src']))
 
 
-def verify_path(isrc, idest):
+def verify_path(circ, isrc, idest):
     """ verify and return target destination"""
 
     if not os.path.exists(isrc) or not os.access(isrc, os.R_OK):
-        print("source directory %s is not readable" % isrc)
-        circle.exit(0)
+        if circ.rank == 0: print("source directory %s is not readable" % isrc)
+        circ.exit(0)
 
     srcbase = os.path.basename(isrc)
     odest = idest + "/" + srcbase
 
     if os.path.exists(odest):
-        print("Destination exists, will not overwrite!")
-        circle.exit(0)
+        if circ.rank == 0: print("Destination [%s] exists, will not overwrite!" % odest)
+        circ.exit(0)
 
     if os.path.exists(idest) and os.access(idest, os.W_OK):
         #os.mkdir(odest)
@@ -336,8 +400,8 @@ def verify_path(isrc, idest):
         #os.mkdir(idest)
         return idest
     else:
-        print("Error: destination %s is not accessible" % idest)
-        circle.exit(0)
+        if circ.rank == 0: print("Error: destination %s is not accessible" % idest)
+        circ.exit(0)
 
     # should not come to this point
     raise
@@ -346,30 +410,41 @@ def main():
 
     global ARGS, logger, circle
     signal.signal(signal.SIGINT, sig_handler)
+
+
     ARGS = parse_args()
 
-    circle = Circle(reduce_interval=ARGS.interval)
+    circle = Circle(reduce_interval=ARGS.reduce_interval)
     circle.setLevel(logging.ERROR)
+
     logger = utils.logging_init(logger, ARGS.loglevel)
 
     src = os.path.abspath(ARGS.src)
     dest = os.path.abspath(ARGS.dest)
-
-    if circle.rank == 0:
-        dest = verify_path(src, dest)
+    dest = verify_path(circle, src, dest)
 
     # first task
     treewalk = PWalk(circle, src, dest, preserve = ARGS.preserve)
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
-    circle.finalize(reduce_interval=ARGS.interval)
+    circle.finalize(reduce_interval=ARGS.reduce_interval)
     tsz = treewalk.epilogue()
 
     # second task
-    pcp = PCP(circle, treewalk, src, dest, totalsize=tsz, checksum=ARGS.checksum)
-    pcp.chunksize = utils.conv_unit(ARGS.chunksize)
+    pcp = PCP(circle, src, dest, treewalk = treewalk,
+              totalsize=tsz, checksum=ARGS.checksum)
+
+    pcp.set_chunksize(utils.conv_unit(ARGS.chunksize))
+    pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
+    if ARGS.checkpoint_id:
+        pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ARGS.checkpoint_id, circle.rank))
+    else:
+        ts = utils.timestamp()
+        circle.comm.bcast(ts)
+        pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ts, circle.rank))
+
     circle.begin(pcp)
-    circle.finalize(reduce_interval=ARGS.interval)
+    circle.finalize(reduce_interval=ARGS.reduce_interval)
     pcp.cleanup()
 
 

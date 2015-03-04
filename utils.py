@@ -124,3 +124,7 @@ def hprint(msg):
 
 def eprint(msg):
     print bcolors.FAIL + msg + bcolors.ENDC
+
+def timestamp():
+    import time
+    return time.strftime("%Y.%m.%d.%H%M%S")

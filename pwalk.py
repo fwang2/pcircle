@@ -45,6 +45,9 @@ class PWalk(BaseTask):
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
 
+        self.time_started = MPI.Wtime()
+        self.time_ended = None
+
     def create(self):
         if self.circle.rank == 0:
             self.enq(self.src)
@@ -144,12 +147,15 @@ class PWalk(BaseTask):
 
     def epilogue(self):
         total_dirs, total_files, total_filesize = self.total_tally()
+        self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
+
             print("")
             print("Directory count: %s" % total_dirs)
             print("File count: %s" % total_files)
             print("File size: %s" % bytes_fmt(total_filesize))
+            print("Tree talk time: %.2f seconds" % (self.time_ended - self.time_started))
             print("")
         return total_filesize
 

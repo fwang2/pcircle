@@ -285,6 +285,7 @@ class PCP(BaseTask):
         pass
 
     def epilogue(self):
+        self.wtime_ended = MPI.Wtime()
         if self.circle.rank == 0:
             print("")
             if self.totalsize == 0: return
@@ -388,9 +389,6 @@ def main():
             else:
                 print("Verification failed")
 
-
-
-    pcp.wtime_ended = MPI.Wtime()
     pcp.epilogue()
 
 if __name__ == "__main__": main()

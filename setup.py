@@ -20,12 +20,14 @@ setuptools.setup(name='pcircle',
     version='0.1a1',
     author='Feiyi Wang',
     author_email='fwang2@ornl.gov',
-    py_modules=['globals', 'utils', 'task', 'pcheck', 'pwalk', 'pcp', 'circle'],
+    py_modules=['globals', 'utils', 'task', 'pcheck', 'pwalk', 'pcp', 'circle', 'prestart',
+                'checkpoint.py'],
     data_files=[],
     entry_points={
         'console_scripts': [
             'pcp=pcp:main',
-            'pwalk=pwalk:main'
+            'pwalk=pwalk:main',
+            'prestart=prestart:main'
         ]
     },
    classifiers=[

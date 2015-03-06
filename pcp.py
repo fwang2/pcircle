@@ -385,32 +385,29 @@ class PCP(BaseTask):
             self.checksum[work['dest']].append((work['off_start'], work['length'], digest, work['src']))
 
 
-def verify_path(circ, isrc, idest):
+def err_and_exit(msg, code):
+    if circle.rank == 0:
+        print(msg)
+    circle.exit(0)
+
+def check_path(circ, isrc, idest):
     """ verify and return target destination"""
 
     if not os.path.exists(isrc) or not os.access(isrc, os.R_OK):
-        if circ.rank == 0: print("source directory %s is not readable" % isrc)
-        circ.exit(0)
+        err_and_exit("source directory %s is not readable" % isrc, 0)
 
-    srcbase = os.path.basename(isrc)
-    odest = idest + "/" + srcbase
+    if os.path.exists(idest):
+        err_and_exit("Destination [%s] exists, will not overwrite!" % idest, 0)
 
-    if os.path.exists(odest):
-        if circ.rank == 0: print("Destination [%s] exists, will not overwrite!" % odest)
-        circ.exit(0)
+    # idest doesn't exits at this point
+    # we check if its parent exists
 
-    if os.path.exists(idest) and os.access(idest, os.W_OK):
-        #os.mkdir(odest)
-        return odest
+    dest_parent = os.path.dirname(idest)
 
-    parent_dir = os.path.dirname(idest)
-
-    if not os.path.exists(idest) and os.access(parent_dir, os.W_OK):
-        #os.mkdir(idest)
+    if os.path.exists(dest_parent) and os.access(dest_parent, os.W_OK):
         return idest
     else:
-        if circ.rank == 0: print("Error: destination %s is not accessible" % idest)
-        circ.exit(0)
+        err_and_exit("Error: destination [%s] is not accessible" % dest_parent, 0)
 
     # should not come to this point
     raise
@@ -430,7 +427,7 @@ def main():
 
     src = os.path.abspath(ARGS.src)
     dest = os.path.abspath(ARGS.dest)
-    dest = verify_path(circle, src, dest)
+    dest = check_path(circle, src, dest)
 
     # first task
     treewalk = PWalk(circle, src, dest, preserve = ARGS.preserve)

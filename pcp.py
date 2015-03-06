@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+PCP provides MPI-based parallel data transfer functionality.
+
+Author:
+    Feiyi Wang (fwang2@ornl.gov)
+
+"""
 from __future__ import print_function
 
 from mpi4py import MPI
@@ -24,6 +31,7 @@ from circle import Circle
 from globals import G
 from pwalk import PWalk
 from checkpoint import Checkpoint
+from _version import __version__
 
 
 ARGS = None
@@ -32,6 +40,7 @@ circle = None
 
 def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
+    parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("--chunksize", default="1m", help="chunk size")
     parser.add_argument("--reduce-interval", type=int, default=10, help="interval")

@@ -12,12 +12,14 @@ import os.path
 import logging
 import argparse
 import xattr
+from _version import __version__
 
 ARGS    = None
 logger  = logging.getLogger("pwalk")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="pwalk")
+    parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")

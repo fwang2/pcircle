@@ -1,27 +1,27 @@
 #!/usr/bin/env python
+"""
+PRESTART provides restart functions, and it is meant to work with PCP
+checkpointing feature.
+
+Author:
+    Feiyi Wang (fwang2@ornl.gov)
+
+"""
 from __future__ import print_function
-import stat
 import os
 import os.path
 import logging
 import argparse
-import utils
-import hashlib
 import sys
 import signal
 import cPickle as pickle
 
-from task import BaseTask
+import utils
 from pcheck import PCheck
 from circle import Circle
-from globals import G
-from mpi4py import MPI
-from pwalk import PWalk
-from checkpoint import Checkpoint
 from pcp import PCP
-from collections import Counter, defaultdict
-from utils import bytes_fmt, destpath
-from lru import LRU
+from utils import bytes_fmt
+from _version import __version__
 
 
 ARGS = None
@@ -30,6 +30,7 @@ circle = None
 
 def parse_args():
     parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Restart Tool")
+    parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("-i", "--reduce-interval", type=int, default=5, help="reduce interval")
     parser.add_argument("--checkpoint-interval", type=int, default=60, help="checkpoint interval")

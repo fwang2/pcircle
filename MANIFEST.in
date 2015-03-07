@@ -1,2 +1,13 @@
 include versioneer.py
 include _version.py
+include checkpoint.py
+include cio.py
+include circle.py
+include globals.py
+include pcheck.py
+include pcp.py
+include prestart.py
+include pwalk.py
+include setup.py
+include task.py
+include utils.py

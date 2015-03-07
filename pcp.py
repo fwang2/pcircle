@@ -43,8 +43,9 @@ circle = None
 def parse_args():
 
     parser = argparse.ArgumentParser(description="Parallel Data Copy")
+    parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
+    
     parent_parser = argparse.ArgumentParser(add_help=False)
-    parent_parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parent_parser.add_argument("--loglevel", default="ERROR", help="log level")
     parent_parser.add_argument("--chunksize", default="1m", help="chunk size")
     parent_parser.add_argument("--reduce-interval", type=int, default=10, help="interval")

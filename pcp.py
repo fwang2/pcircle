@@ -41,17 +41,29 @@ logger = logging.getLogger("pcp")
 circle = None
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="A MPI-based Parallel Copy Tool")
-    parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
-    parser.add_argument("--loglevel", default="ERROR", help="log level")
-    parser.add_argument("--chunksize", default="1m", help="chunk size")
-    parser.add_argument("--reduce-interval", type=int, default=10, help="interval")
-    parser.add_argument("--checkpoint-interval", type=int, default=360, help="checkpoint interval")
-    parser.add_argument("--checkpoint-id", default=None, help="checkpoint id")
-    parser.add_argument("-c", "--checksum", action="store_true", help="verify")
-    parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta info")
-    parser.add_argument("src", help="copy from")
-    parser.add_argument("dest", help="copy to")
+
+    parser = argparse.ArgumentParser(description="Parallel Data Copy")
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
+    parent_parser.add_argument("--loglevel", default="ERROR", help="log level")
+    parent_parser.add_argument("--chunksize", default="1m", help="chunk size")
+    parent_parser.add_argument("--reduce-interval", type=int, default=10, help="interval")
+    parent_parser.add_argument("--checkpoint-interval", type=int, default=360, help="checkpoint interval")
+    parent_parser.add_argument("-c", "--checksum", action="store_true", help="verify")
+
+    subparsers = parser.add_subparsers(help="Provide one of the sub-commands")
+
+    start_parser = subparsers.add_parser("start", parents=[parent_parser], help="Start copy")
+    start_parser.add_argument("--checkpoint-id", default=None, help="checkpoint id")
+    start_parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta info")
+    start_parser.add_argument("src", help="copy from")
+    start_parser.add_argument("dest", help="copy to")
+    start_parser.set_defaults(func=main_start)
+
+    restart_parser = subparsers.add_parser("restart", parents=[parent_parser], help="Restart copy")
+    restart_parser.add_argument("rid", help="restart id")
+
+    restart_parser.set_defaults(func=main_restart)
 
     return parser.parse_args()
 
@@ -414,36 +426,24 @@ def check_path(circ, isrc, idest):
     # should not come to this point
     raise
 
-def main():
-
-    global ARGS, logger, circle
-    signal.signal(signal.SIGINT, sig_handler)
-
-
-    ARGS = parse_args()
-
-    circle = Circle(reduce_interval=ARGS.reduce_interval)
-    circle.setLevel(logging.ERROR)
-
-    logger = utils.logging_init(logger, ARGS.loglevel)
-
+def main_start():
+    global circle
     src = os.path.abspath(ARGS.src)
     dest = os.path.abspath(ARGS.dest)
     dest = check_path(circle, src, dest)
 
-    # first task
     treewalk = PWalk(circle, src, dest, preserve = ARGS.preserve)
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.reduce_interval)
     tsz = treewalk.epilogue()
 
-    # second task
     pcp = PCP(circle, src, dest, treewalk = treewalk,
               totalsize=tsz, checksum=ARGS.checksum)
 
     pcp.set_chunksize(utils.conv_unit(ARGS.chunksize))
     pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
+
     if ARGS.checkpoint_id:
         pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ARGS.checkpoint_id, circle.rank))
     else:
@@ -455,10 +455,104 @@ def main():
     circle.finalize(reduce_interval=ARGS.reduce_interval)
     pcp.cleanup()
 
+    return pcp, tsz
+
+def get_workq_size(workq):
+    if workq is None: return 0
+    sz = 0
+    for w in workq:
+        sz += w['length']
+    return sz
+
+
+def verify_checkpoint(total_checkpoint_cnt):
+    if total_checkpoint_cnt == 0:
+        if circle.rank == 0:
+            print("")
+            print("Error: Can't find checkpoint file.")
+            print("")
+
+        circle.exit(0)
+
+def main_restart():
+    global circle
+    dmsg = {"rank": "rank %s" % circle.rank}
+    oldsz = 0; tsz = 0; sz = 0
+    cobj = None
+    timestamp = None
+    workq = None
+    src = None
+    dest = None
+    local_checkpoint_cnt = 0
+    chk_file = ".pcp_workq.%s.%s" % (ARGS.rid, circle.rank)
+
+    if os.path.exists(chk_file):
+        local_checkpoint_cnt = 1
+        with open(chk_file, "rb") as f:
+            try:
+                cobj = pickle.load(f)
+                sz = get_workq_size(cobj.workq)
+                src = cobj.src
+                dest = cobj.dest
+                oldsz = cobj.totalsize
+
+            except:
+                logger.error("error reading %s" % chk_file, extra=dmsg)
+                circle.comm.Abort()
+
+    logger.debug("located chkpoint %s, sz=%s, local_cnt=%s" %
+                 (chk_file, sz, local_checkpoint_cnt), extra=dmsg)
+
+    # do we have any checkpoint files?
+
+    total_checkpoint_cnt = circle.comm.allreduce(local_checkpoint_cnt)
+    logger.debug("total_checkpoint_cnt = %s" % total_checkpoint_cnt, extra=dmsg)
+    verify_checkpoint(total_checkpoint_cnt)
+
+
+    # acquire total size
+    tsz = circle.comm.allreduce(sz)
+    if tsz == 0:
+        if circle.rank == 0:
+            print("Recovery size is 0 bytes, can't proceed.")
+        circle.exit(0)
+
+    if circle.rank == 0:
+        print("Original size: %s" % bytes_fmt(oldsz))
+        print("Recovery size: %s" % bytes_fmt(tsz))
+
+
+    # second task
+    pcp = PCP(circle, src, dest,
+              totalsize=tsz, checksum=ARGS.checksum,
+              workq = cobj.workq)
+    pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
+    if ARGS.rid:
+        pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ARGS.rid, circle.rank))
+    else:
+        ts = utils.timestamp()
+        circle.comm.bcast(ts)
+        pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ts, circle.rank))
+    circle.begin(pcp)
+    circle.finalize(reduce_interval=ARGS.reduce_interval)
+    pcp.cleanup()
+
+    return pcp, tsz
+
+def main():
+
+    global ARGS, logger, circle
+    signal.signal(signal.SIGINT, sig_handler)
+    ARGS = parse_args()
+    circle = Circle(reduce_interval=ARGS.reduce_interval)
+    circle.setLevel(logging.ERROR)
+    logger = utils.logging_init(logger, ARGS.loglevel)
+
+    pcp, totalsize = ARGS.func()
 
     # third task
     if ARGS.checksum:
-        pcheck = PCheck(circle, pcp, tsz)
+        pcheck = PCheck(circle, pcp, totalsize)
         pcheck.setLevel(ARGS.loglevel)
         circle.begin(pcheck)
         circle.finalize()

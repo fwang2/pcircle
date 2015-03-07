@@ -31,8 +31,10 @@ from circle import Circle
 from globals import G
 from pwalk import PWalk
 from checkpoint import Checkpoint
-from _version import __version__
+from _version import get_versions
 
+__version__ = get_versions()['version']
+del get_versions
 
 ARGS = None
 logger = logging.getLogger("pcp")

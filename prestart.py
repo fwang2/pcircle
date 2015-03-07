@@ -21,8 +21,10 @@ from pcheck import PCheck
 from circle import Circle
 from pcp import PCP
 from utils import bytes_fmt
-from _version import __version__
+from _version import get_versions
 
+__version__ = get_versions()['version']
+del get_versions
 
 ARGS = None
 logger = logging.getLogger("pcp-restart")

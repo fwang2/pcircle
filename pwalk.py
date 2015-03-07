@@ -12,10 +12,11 @@ import os.path
 import logging
 import argparse
 import xattr
-from _version import __version__
+from _version import get_versions
 
 ARGS    = None
 logger  = logging.getLogger("pwalk")
+__version__ = get_versions()['version']
 
 def parse_args():
     parser = argparse.ArgumentParser(description="pwalk")

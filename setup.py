@@ -29,7 +29,7 @@ setuptools.setup(name='pcircle',
     author='Feiyi Wang',
     author_email='fwang2@ornl.gov',
     py_modules=['globals', 'utils', 'task', 'pcheck', 'pwalk', 'pcp', 'circle', 'prestart',
-                'checkpoint', '_version'],
+                'checkpoint', '_version', 'cio'],
     data_files=[],
     entry_points={
         'console_scripts': [

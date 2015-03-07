@@ -1,8 +1,18 @@
-## Overview
+## Concepts
 
-TBD
 
-## Usage
+The ubiquitous MPI environment in HPC cluster + Work Stealing Pattern +
+Distributed Termination Detection = Efficient and Scalable Parallel Solution.
+
+## Features
+
+The `pcircle` name is to pay homage to its origin `libcircle`, though the
+pcircle itself contains a few useful tools as well:
+
+- `pwalk`: for parallel walk of the tree.
+
+- `pcp`: for parallel data transfer
+
 
 A typical use of parallel copy:
 

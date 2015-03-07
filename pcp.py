@@ -28,7 +28,7 @@ from threading import Thread
 from task import BaseTask
 from pcheck import PCheck
 from circle import Circle
-from globals import G
+from cio import readn, writen
 from pwalk import PWalk
 from checkpoint import Checkpoint
 from _version import get_versions
@@ -387,12 +387,8 @@ class PCP(BaseTask):
         os.lseek(rfd, work['off_start'], os.SEEK_SET)
         os.lseek(wfd, work['off_start'], os.SEEK_SET)
 
-        # FIXME: assumed read will return what we asked for
-        # in C, this is not the case though. A loop check
-        # might be needed.
-        buf = os.read(rfd, work['length'])
-        assert len(buf) == work['length']
-        os.write(wfd, buf)
+        buf = readn(work['src'], rfd, work['length'])
+        writen(work['dest'], wfd, buf)
 
         # are we doing checksum?
         if self.checksum:

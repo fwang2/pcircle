@@ -11,14 +11,12 @@ def readn(fd, size):
     ret = ''
     while len(ret) < size:
         buf = os.read(fd, size - len(ret))
-        if buf == '':
-            # EOF check
-            return ret
-        elif len(buf) == size:
-            return buf
-        elif len(buf) > 0:
+        if len(buf) > 0:
             tries = MAX_TRIES
             ret += buf
+        elif not buf:
+            # EOF
+            return ret
         else:
             tries -= 1
             if tries < 0:
@@ -42,3 +40,4 @@ def writen(fd, buf):
             if tries < 0:
                 raise IOError
             time.sleep(SLEEP)
+    return n

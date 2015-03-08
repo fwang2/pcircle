@@ -386,9 +386,17 @@ class PCP(BaseTask):
     def write_bytes(self, rfd, wfd, work):
         os.lseek(rfd, work['off_start'], os.SEEK_SET)
         os.lseek(wfd, work['off_start'], os.SEEK_SET)
+        buf = None
 
-        buf = readn(work['src'], rfd, work['length'])
-        writen(work['dest'], wfd, buf)
+        try:
+            buf = readn(rfd, work['length'])
+        except IOError:
+            self.circle.Abort("Failed to read %s", work['src'], extra=self.d)
+
+        try:
+            writen(wfd, buf)
+        except IOError:
+            self.circle.Abort("Failed to write %s", work['dest'], extra=self.d)
 
         # are we doing checksum?
         if self.checksum:

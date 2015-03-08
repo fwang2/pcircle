@@ -44,7 +44,7 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Parallel Data Copy")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
-    
+
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument("--loglevel", default="ERROR", help="log level")
     parent_parser.add_argument("--chunksize", default="1m", help="chunk size")
@@ -540,7 +540,16 @@ def main():
 
     global ARGS, logger, circle
     signal.signal(signal.SIGINT, sig_handler)
-    ARGS = parse_args()
+    if MPI.COMM_WORLD.rank == 0:
+        try:
+            ARGS = parse_args()
+        except:
+            MPI.COMM_WORLD.Abort()
+            sys.exit(0)
+
+    ARGS = MPI.COMM_WORLD.bcast(ARGS)
+
+
     circle = Circle(reduce_interval=ARGS.reduce_interval)
     circle.setLevel(logging.ERROR)
     logger = utils.logging_init(logger, ARGS.loglevel)

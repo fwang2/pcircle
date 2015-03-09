@@ -548,15 +548,20 @@ def main():
 
     global ARGS, logger, circle
     signal.signal(signal.SIGINT, sig_handler)
+    parse_flags = True
+
     if MPI.COMM_WORLD.rank == 0:
         try:
             ARGS = parse_args()
         except:
-            MPI.COMM_WORLD.Abort()
-            sys.exit(0)
+            parse_flags = False
 
-    ARGS = MPI.COMM_WORLD.bcast(ARGS)
+    parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
 
+    if parse_flags:
+        ARGS = MPI.COMM_WORLD.bcast(ARGS)
+    else:
+        sys.exit(0)
 
     circle = Circle(reduce_interval=ARGS.reduce_interval)
     circle.setLevel(logging.ERROR)

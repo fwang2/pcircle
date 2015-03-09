@@ -4,10 +4,11 @@
 The ubiquitous MPI environment in HPC cluster + Work Stealing Pattern +
 Distributed Termination Detection = Efficient and Scalable Parallel Solution.
 
+The `pcircle` name is to pay homage to its origin `libcircle` library.
+
 ## Features
 
-The `pcircle` name is to pay homage to its origin `libcircle`, though the
-pcircle itself contains a few useful tools as well:
+pcircle itself contains a few useful tools:
 
 - `pwalk`: for parallel walk of the tree.
 
@@ -16,13 +17,14 @@ pcircle itself contains a few useful tools as well:
 
 A typical use of parallel copy:
 
-    mpirun -H host1,host2,host3,host4 -np 8 pcp /path/of/source
+    mpirun -H host1,host2,host3,host4 -np 8 pcp start /path/of/source
         /path/of/destination
 
 Other notable features:
 
 - `--preserve`: to preserve extended attribute information
 - `--checksum`: to verify through parallel checksumming
+- `restart`: to resume from previous transfer
 
 
 ## Installation

@@ -45,26 +45,18 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Parallel Data Copy")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
 
-    parent_parser = argparse.ArgumentParser(add_help=False)
-    parent_parser.add_argument("--loglevel", default="ERROR", help="log level")
-    parent_parser.add_argument("--chunksize", default="1m", help="chunk size")
-    parent_parser.add_argument("--reduce-interval", type=int, default=10, help="interval")
-    parent_parser.add_argument("--checkpoint-interval", type=int, default=360, help="checkpoint interval")
-    parent_parser.add_argument("-c", "--checksum", action="store_true", help="verify")
+    parser.add_argument("--loglevel", default="ERROR", help="log level")
+    parser.add_argument("--chunksize", default="1m", help="chunk size")
+    parser.add_argument("--reduce-interval", type=int, default=10, help="interval")
+    parser.add_argument("--checkpoint-interval", type=int, default=360, help="checkpoint interval")
+    parser.add_argument("-c", "--checksum", action="store_true", help="verify")
 
-    subparsers = parser.add_subparsers(help="Provide one of the sub-commands")
+    parser.add_argument("--checkpoint-id", default=None, help="checkpoint id")
+    parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta info")
+    parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume id")
 
-    start_parser = subparsers.add_parser("start", parents=[parent_parser], help="Start copy")
-    start_parser.add_argument("--checkpoint-id", default=None, help="checkpoint id")
-    start_parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta info")
-    start_parser.add_argument("src", help="copy from")
-    start_parser.add_argument("dest", help="copy to")
-    start_parser.set_defaults(func=main_start)
-
-    restart_parser = subparsers.add_parser("restart", parents=[parent_parser], help="Restart copy")
-    restart_parser.add_argument("rid", help="restart id")
-
-    restart_parser.set_defaults(func=main_restart)
+    parser.add_argument("src", help="copy from")
+    parser.add_argument("dest", help="copy to")
 
     return parser.parse_args()
 
@@ -470,16 +462,16 @@ def get_workq_size(workq):
     return sz
 
 
-def verify_checkpoint(total_checkpoint_cnt):
+def verify_checkpoint(chk_file, total_checkpoint_cnt):
     if total_checkpoint_cnt == 0:
         if circle.rank == 0:
             print("")
-            print("Error: Can't find checkpoint file.")
+            print("Error: Can't find checkpoint file: %s" % chk_file)
             print("")
 
         circle.exit(0)
 
-def main_restart():
+def main_resume(rid):
     global circle
     dmsg = {"rank": "rank %s" % circle.rank}
     oldsz = 0; tsz = 0; sz = 0
@@ -489,7 +481,7 @@ def main_restart():
     src = None
     dest = None
     local_checkpoint_cnt = 0
-    chk_file = ".pcp_workq.%s.%s" % (ARGS.rid, circle.rank)
+    chk_file = ".pcp_workq.%s.%s" % (rid, circle.rank)
 
     if os.path.exists(chk_file):
         local_checkpoint_cnt = 1
@@ -512,7 +504,7 @@ def main_restart():
 
     total_checkpoint_cnt = circle.comm.allreduce(local_checkpoint_cnt)
     logger.debug("total_checkpoint_cnt = %s" % total_checkpoint_cnt, extra=dmsg)
-    verify_checkpoint(total_checkpoint_cnt)
+    verify_checkpoint(chk_file, total_checkpoint_cnt)
 
 
     # acquire total size
@@ -532,8 +524,8 @@ def main_restart():
               totalsize=tsz, checksum=ARGS.checksum,
               workq = cobj.workq)
     pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
-    if ARGS.rid:
-        pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ARGS.rid, circle.rank))
+    if rid:
+        pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (rid, circle.rank))
     else:
         ts = utils.timestamp()
         circle.comm.bcast(ts)
@@ -567,7 +559,13 @@ def main():
     circle.setLevel(logging.ERROR)
     logger = utils.logging_init(logger, ARGS.loglevel)
 
-    pcp, totalsize = ARGS.func()
+    pcp = None
+    totalsize = None
+
+    if ARGS.rid:
+        pcp, totalsize = main_resume(ARGS.rid[0])
+    else:
+        pcp, totalsize = main_start()
 
     # third task
     if ARGS.checksum:

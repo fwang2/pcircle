@@ -45,15 +45,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Parallel Data Copy")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
 
-    parser.add_argument("--loglevel", default="ERROR", help="log level")
-    parser.add_argument("--chunksize", default="1m", help="chunk size")
-    parser.add_argument("--reduce-interval", type=int, default=10, help="interval")
-    parser.add_argument("--checkpoint-interval", type=int, default=360, help="checkpoint interval")
-    parser.add_argument("-c", "--checksum", action="store_true", help="verify")
+    parser.add_argument("--loglevel", default="ERROR", help="log level, default ERROR")
+    parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
+    parser.add_argument("--reduce-interval", metavar="seconds", type=int, default=10, help="interval, default 10s")
+    parser.add_argument("--checkpoint-interval", metavar="seconds", type=int, default=360, help="checkpoint interval, default: 360s")
+    parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
 
-    parser.add_argument("--checkpoint-id", default=None, help="checkpoint id")
-    parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta info")
-    parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume id")
+    parser.add_argument("--checkpoint-id", metavar="ID", default=None, help="default: timestamp")
+    parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta, default: off")
+    parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
 
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")

@@ -33,9 +33,9 @@ setuptools.setup(name='pcircle',
     data_files=[],
     entry_points={
         'console_scripts': [
-            'pcp=pcp:main',
-            'pwalk=pwalk:main',
-            'prestart=prestart:main'
+            'fcp=pcp:main',
+            'fwalk=pwalk:main',
+            'frestart=prestart:main'
         ]
     },
    classifiers=[

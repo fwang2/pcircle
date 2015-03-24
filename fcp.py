@@ -91,9 +91,9 @@ class FCP(BaseTask):
         self.cache_limit = climit
         if  climit == 0:
             if circle.size == 1:
-                self.cache_limit = 512
+                self.cache_limit = 256
             else:
-                self.cache_limit = 1024/(circle.size*2) 
+                self.cache_limit = 1024/(circle.size*2)
 
         self.rfd_cache = LRU(self.cache_limit)
         self.wfd_cache = LRU(self.cache_limit)

@@ -222,7 +222,7 @@ class Circle:
         # barrier is complete, send messages to children if any and return true
         if complete:
             for child in self.child_ranks:
-                self.comm.send(dest=child, tag = T.BARRIER)
+                self.comm.send(None, dest=child, tag = T.BARRIER)
 
             # reset state for another barrier
             self.barrier_started = False

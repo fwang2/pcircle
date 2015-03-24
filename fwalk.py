@@ -27,7 +27,7 @@ def parse_args():
 
     return parser.parse_args()
 
-class PWalk(BaseTask):
+class FWalk(BaseTask):
     def __init__(self, circle, src, dest=None, preserve=False, force=False):
         BaseTask.__init__(self, circle)
         self.circle = circle
@@ -174,7 +174,7 @@ def main():
     circle = Circle(reduce_interval = ARGS.interval)
     logger = logging_init(logger, ARGS.loglevel)
 
-    task = PWalk(circle, root)
+    task = FWalk(circle, root)
     circle.begin(task)
     circle.finalize()
     task.epilogue()

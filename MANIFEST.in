@@ -4,10 +4,10 @@ include checkpoint.py
 include cio.py
 include circle.py
 include globals.py
-include pcheck.py
-include pcp.py
-include prestart.py
-include pwalk.py
+include verify.py
+include fcp.py
+include frestart.py
+include fwalk.py
 include setup.py
 include task.py
 include utils.py

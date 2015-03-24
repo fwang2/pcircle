@@ -6,7 +6,7 @@ from mpi4py import MPI
 
 logger = logging.getLogger("pcheck")
 
-class PCheck(BaseTask):
+class PVerify(BaseTask):
     def __init__(self, circle, pcp, totalsize=0):
         global logger
         BaseTask.__init__(self, circle)

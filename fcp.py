@@ -18,6 +18,7 @@ import utils
 import hashlib
 import sys
 import signal
+import resource
 import cPickle as pickle
 
 from collections import Counter, defaultdict
@@ -39,6 +40,7 @@ del get_versions
 ARGS = None
 logger = logging.getLogger("fcp")
 circle = None
+NUM_OF_HOSTS = 0
 
 def parse_args():
 
@@ -70,7 +72,7 @@ class FCP(BaseTask):
                  treewalk = None,
                  totalsize=0,
                  checksum=False,
-                 climit=0,
+                 hostcnt=0,
                  prune=False,
                  workq=None):
         BaseTask.__init__(self, circle)
@@ -88,15 +90,20 @@ class FCP(BaseTask):
 
         # cache, keep the size conservative
         # TODO: we need a more portable LRU size
-        self.cache_limit = climit
-        if  climit == 0:
-            if circle.size == 1:
-                self.cache_limit = 256
-            else:
-                self.cache_limit = 1024/(circle.size*2)
 
-        self.rfd_cache = LRU(self.cache_limit)
-        self.wfd_cache = LRU(self.cache_limit)
+        if hostcnt != 0:
+            max_ofile, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+            procs_per_host = self.circle.size / hostcnt
+            self._read_cache_limit = ((max_ofile - 64)/procs_per_host)/3
+            self._write_cache_limit = ((max_ofile - 64)/procs_per_host)*2/3
+
+        if self._read_cache_limit <= 0 or self._write_cache_limit <= 0:
+            self._read_cache_limit = 1
+            self._write_cache_limit = 8
+
+
+        self.rfd_cache = LRU(self._read_cache_limit)
+        self.wfd_cache = LRU(self._write_cache_limit)
 
         self.cnt_filesize_prior = 0
         self.cnt_filesize = 0
@@ -217,7 +224,7 @@ class FCP(BaseTask):
             self.do_no_interrupt_checkpoint()
             self.checkpoint_last = MPI.Wtime()
 
-    def do_open(self, k, d, flag):
+    def do_open(self, k, d, flag, limit):
         """
         :param k: key
         :param d: dict
@@ -226,7 +233,7 @@ class FCP(BaseTask):
         if d.has_key(k):
             return d[k]
 
-        if len(d.keys()) < self.cache_limit:
+        if len(d.keys()) < limit:
             fd = os.open(k, flag)
             if fd > 0: d[k] = fd
             return fd
@@ -255,8 +262,8 @@ class FCP(BaseTask):
         if not os.path.exists(basedir):
             os.makedirs(basedir)
 
-        rfd = self.do_open(src, self.rfd_cache, os.O_RDONLY)
-        wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT)
+        rfd = self.do_open(src, self.rfd_cache, os.O_RDONLY, self._read_cache_limit)
+        wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT, self._write_cache_limit)
         if wfd < 0:
             if ARGS.force:
                 os.unlink(dest)
@@ -440,7 +447,7 @@ def main_start():
     tsz = treewalk.epilogue()
 
     pcp = FCP(circle, src, dest, treewalk = treewalk,
-              totalsize=tsz, checksum=ARGS.checksum)
+              totalsize=tsz, checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
 
     pcp.set_chunksize(utils.conv_unit(ARGS.chunksize))
     pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
@@ -526,7 +533,8 @@ def main_resume(rid):
     # second task
     pcp = FCP(circle, src, dest,
               totalsize=tsz, checksum=ARGS.checksum,
-              workq = cobj.workq)
+              workq = cobj.workq,
+              hostcnt = NUM_OF_HOSTS)
     pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
     if rid:
         pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (rid, circle.rank))
@@ -542,7 +550,7 @@ def main_resume(rid):
 
 def main():
 
-    global ARGS, logger, circle
+    global ARGS, logger, circle, NUM_OF_HOSTS
     signal.signal(signal.SIGINT, sig_handler)
     parse_flags = True
 
@@ -558,6 +566,12 @@ def main():
         ARGS = MPI.COMM_WORLD.bcast(ARGS)
     else:
         sys.exit(0)
+
+    localhost = MPI.Get_processor_name()
+    hosts = MPI.COMM_WORLD.gather(localhost)
+    if MPI.COMM_WORLD.rank == 0:
+        NUM_OF_HOSTS = len(set(hosts))
+    NUM_OF_HOSTS = MPI.COMM_WORLD.bcast(NUM_OF_HOSTS)
 
     circle = Circle(reduce_interval=ARGS.reduce_interval)
     circle.setLevel(logging.ERROR)

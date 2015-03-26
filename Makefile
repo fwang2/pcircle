@@ -2,7 +2,7 @@ PYTHON=`which python`
 NAME=`python setup.py --name`
 VERSION=`python setup.py --version`
 SDIST=dist/$(NAME)-$(VERSION).tar.gz
-VENV=/tmp/venv
+VENV=$(HOME)/app-circle
 
 
 #all: check test source deb
@@ -19,7 +19,7 @@ deb:
 rpm:
 	$(PYTHON) setup.py bdist_rpm --post-install=rpm/postinstall --pre-uninstall=rpm/preuninstall
 
-install:
+install: uninstall
 	$(PYTHON) setup.py install
 
 uninstall:

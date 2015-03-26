@@ -47,6 +47,7 @@ def parse_args():
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
+    parser.add_argument("-o", "--output", default="sha1.txt", help="sha1 output file")
 
     return parser.parse_args()
 
@@ -252,7 +253,12 @@ def main():
         chunks = [ item for sublist in chunkl for item in sublist]
         chunks.sort()
         sys.stdout.write("%s chunks\n" % len(chunks))
-        print("\nSHA1: %s\n" % do_checksum(chunks))
+        sha1val = do_checksum(chunks)
+        with open(ARGS.output, "w") as f:
+            f.write(sha1val + "\n")
+
+        print("\nSHA1: %s" % sha1val)
+        print("The value is saved in [%s]\n" % ARGS.output)
 
     fcheck.epilogue()
 

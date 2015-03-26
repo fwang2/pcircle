@@ -2,7 +2,7 @@ PYTHON=`which python`
 NAME=`python setup.py --name`
 VERSION=`python setup.py --version`
 SDIST=dist/$(NAME)-$(VERSION).tar.gz
-VENV=$(HOME)/app-circle
+VENV=$(HOME)/app-pcircle
 
 
 #all: check test source deb

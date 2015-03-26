@@ -178,7 +178,7 @@ class Checksum(BaseTask):
     def reduce_report(self, buf):
         out = ""
         if self.totalsize != 0:
-            out += "%.2f %% verified, " % (100 * float(buf['vsize'])/self.totalsize)
+            out += "%.2f %% block checksummed, " % (100 * float(buf['vsize'])/self.totalsize)
 
         out += "%s bytes done" % bytes_fmt(buf['vsize'])
         print(out)
@@ -245,14 +245,15 @@ def main():
 
     if circle.rank == 0:
         sys.stdout.write("\nAggregating ... ")
+
     chunkl = circle.comm.gather(fcheck.chunkq)
 
     if circle.rank == 0:
-        chunks = chunkl[0]
+        chunks = [ item for sublist in chunkl for item in sublist]
         chunks.sort()
         sys.stdout.write("%s chunks\n" % len(chunks))
         print("\nSHA1: %s\n" % do_checksum(chunks))
 
     fcheck.epilogue()
-    
+
 if __name__ == "__main__": main()

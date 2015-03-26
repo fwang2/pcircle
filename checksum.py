@@ -1,10 +1,18 @@
 #!/usr/bin/env python
-
+#
+# author: Feiyi Wang
+#
+# This program provides a MPI-based parallization for checksumming
+#
+#
+from __future__ import print_function
 import os
 import logging
 import hashlib
 import argparse
 import stat
+import sys
+import signal
 
 from mpi4py import MPI
 from cStringIO import StringIO
@@ -17,12 +25,21 @@ from fwalk import FWalk
 from cio import readn, writen
 
 logger = logging.getLogger("checksum")
-CHUNKSIZE = 134217728   # 512 MiB = 536870912
-BLOCKSIZE = 4194304     # 4 MiB
+
+# 512 MiB = 536870912
+# 128 MiB = 134217728
+# 4 MiB = 4194304
+CHUNKSIZE = 536870912
+BLOCKSIZE = 4194304
 
 ARGS    = None
 __version__ = get_versions()['version']
 del get_versions
+
+def sig_handler(signal, frame):
+    # catch keyboard, do nothing
+    # eprint("\tUser cancelled ... cleaning up")
+    sys.exit(1)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fchecksum")
@@ -40,6 +57,11 @@ class Chunk:
         self.length = length
         self.digest = None
 
+    # FIXME: this is not Python 3 compatible
+    def __cmp__(self, other):
+        assert isinstance(other, Chunk)
+        return cmp((self.filename, self.off_start),
+                   (other.filename, other.off_start))
 
 
 class Checksum(BaseTask):
@@ -54,6 +76,8 @@ class Checksum(BaseTask):
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
+        self.wtime_started = MPI.Wtime()
+        self.wtime_ended = None
 
         # reduce
         self.vsize = 0
@@ -167,10 +191,43 @@ class Checksum(BaseTask):
         buf1['vsize'] += buf2['vsize']
         return buf1
 
+    def epilogue(self):
+        self.wtime_ended = MPI.Wtime()
+        if self.circle.rank == 0:
+            print("")
+            if self.totalsize == 0: return
+            time = self.wtime_ended - self.wtime_started
+            rate = float(self.totalsize)/time
+            print("Checksumming Completed In: %.2f seconds" % (time))
+            print("Average Rate: %s/s\n" % bytes_fmt(rate))
+
+def read_in_blocks(chunks, chunksize=26214):
+    idx = 0
+    total = len(chunks)
+    buf = StringIO()
+
+    while True:
+        if idx == total:
+            break
+        buf.write(chunks[idx].digest)
+        idx += 1
+        if idx % chunksize == 0 or idx == total:
+            yield hashlib.sha1(buf.getvalue()).hexdigest()
+            buf = StringIO()
+
+def do_checksum(chunks):
+
+    buf = StringIO()
+    for block in read_in_blocks(chunks):
+        buf.write(block)
+
+    return hashlib.sha1(buf.getvalue()).hexdigest()
 
 def main():
 
     global ARGS, logger
+    signal.signal(signal.SIGINT, sig_handler)
+
     ARGS = parse_args()
     root = os.path.abspath(ARGS.path)
     circle = Circle(reduce_interval = ARGS.interval)
@@ -186,5 +243,16 @@ def main():
     circle.begin(fcheck)
     circle.finalize()
 
+    if circle.rank == 0:
+        sys.stdout.write("\nAggregating ... ")
+    chunkl = circle.comm.gather(fcheck.chunkq)
 
+    if circle.rank == 0:
+        chunks = chunkl[0]
+        chunks.sort()
+        sys.stdout.write("%s chunks\n" % len(chunks))
+        print("\nSHA1: %s\n" % do_checksum(chunks))
+
+    fcheck.epilogue()
+    
 if __name__ == "__main__": main()

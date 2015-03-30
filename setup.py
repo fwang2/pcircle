@@ -36,7 +36,7 @@ setuptools.setup(name='pcircle',
             'fcp=fcp:main',
             'fwalk=fwalk:main',
             'frestart=frestart:main',
-            'checksum=checksum:main'
+            'fsum=checksum:main'
         ]
     },
    classifiers=[

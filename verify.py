@@ -32,9 +32,12 @@ class PVerify(BaseTask):
             print("Start verification process ...")
 
     def create(self):
+        logger.debug("Chunk count: %s" % len(self.pcp.checksum), extra=self.d)
         for k, v in self.pcp.checksum.iteritems():
             for chunk in v:
-                self.enq( [k, chunk] )
+                self.enq([k, chunk])
+
+
     def process(self):
         work = self.deq()
         src = work[0]
@@ -47,7 +50,13 @@ class PVerify(BaseTask):
 
         if not fd:
             # need to open for read
-            fd = open(src, "rb")
+            try:
+                fd = open(src, "rb")
+            except IOError as e:
+                logger.error(e)
+                self.failcnt += 1
+                return
+
             self.fd_cache[src] = fd
 
         fd.seek(chunk[0])

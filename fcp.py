@@ -57,6 +57,8 @@ def parse_args():
     parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta, default: off")
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
 
+    parser.add_argument("--pause", action="store_true", help="pause after copy, test only")
+
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -71,9 +73,9 @@ class FCP(BaseTask):
     def __init__(self, circle, src, dest,
                  treewalk = None,
                  totalsize=0,
-                 checksum=False,
                  hostcnt=0,
                  prune=False,
+                 do_checksum=False,
                  workq=None):
         BaseTask.__init__(self, circle)
         self.circle = circle
@@ -124,6 +126,7 @@ class FCP(BaseTask):
         self.fini_cnt = Counter()
 
         # checksum
+        self.do_checksum = do_checksum
         self.checksum = defaultdict(list)
 
         # checkpointing
@@ -402,7 +405,7 @@ class FCP(BaseTask):
             self.circle.Abort("Failed to write %s", work['dest'], extra=self.d)
 
         # are we doing checksum?
-        if self.checksum:
+        if self.do_checksum:
             digest = hashlib.md5(buf).hexdigest()
             self.checksum[work['dest']].append((work['off_start'], work['length'], digest, work['src']))
 
@@ -447,7 +450,7 @@ def main_start():
     tsz = treewalk.epilogue()
 
     pcp = FCP(circle, src, dest, treewalk = treewalk,
-              totalsize=tsz, checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
+              totalsize=tsz, do_checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
 
     pcp.set_chunksize(utils.conv_unit(ARGS.chunksize))
     pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
@@ -548,6 +551,8 @@ def main_resume(rid):
 
     return pcp, tsz
 
+
+
 def main():
 
     global ARGS, logger, circle, NUM_OF_HOSTS
@@ -585,6 +590,15 @@ def main():
     else:
         pcp, totalsize = main_start()
 
+    # pause
+
+    if ARGS.pause and ARGS.checksum:
+        if circle.rank == 0:
+            raw_input("\n--> Press any key to continue ...\n")
+            sys.stdout.flush()
+
+        circle.comm.Barrier()
+
     # third task
     if ARGS.checksum:
         pcheck = PVerify(circle, pcp, totalsize)
@@ -600,6 +614,7 @@ def main():
                 print("Verification passed!")
             else:
                 print("Verification failed")
+                print("Note that checksum errors can't be corrected by checkpoint/resume!")
 
     pcp.epilogue()
 

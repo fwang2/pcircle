@@ -6,7 +6,7 @@ import os
 import sys
 import random
 
-if len(sys.argv) != 3 and not sys.argv[2]:
+if len(sys.argv) != 3 or not sys.argv[2]:
     print('''
     Usage: corrupt.py filename magic_string
 

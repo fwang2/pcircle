@@ -30,7 +30,7 @@ setuptools.setup(name='pcircle',
     author_email='fwang2@ornl.gov',
     py_modules=['globals', 'utils', 'task', 'verify', 'fwalk', 'fcp', 'circle', 'frestart',
                 'checkpoint', '_version', 'cio', 'versioneer', 'checksum',
-                'fcorruptor'],
+                'fcorruptor', 'chunk'],
     data_files=[],
     entry_points={
         'console_scripts': [

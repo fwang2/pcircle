@@ -24,6 +24,7 @@ from task import BaseTask
 from utils import logging_init, bytes_fmt
 from fwalk import FWalk
 from cio import readn, writen
+from chunk import Chunk
 
 logger = logging.getLogger("checksum")
 
@@ -51,19 +52,6 @@ def parse_args():
     parser.add_argument("-o", "--output", default="sha1.sig", help="sha1 output file")
 
     return parser.parse_args()
-
-class Chunk:
-    def __init__(self, filename, off_start=0, length=0):
-        self.filename = filename
-        self.off_start = off_start
-        self.length = length
-        self.digest = None
-
-    # FIXME: this is not Python 3 compatible
-    def __cmp__(self, other):
-        assert isinstance(other, Chunk)
-        return cmp((self.filename, self.off_start),
-                   (other.filename, other.off_start))
 
 
 class Checksum(BaseTask):
@@ -217,6 +205,8 @@ def read_in_blocks(chunks, chunksize=26214):
             yield hashlib.sha1(buf.getvalue()).hexdigest()
             buf = StringIO()
 
+
+
 def do_checksum(chunks):
 
     buf = StringIO()
@@ -230,6 +220,14 @@ def export_checksum(chunks):
     ex_base = os.path.basename(fullpath).split(".")[0] + ".checksums"
     ex_dir = os.path.dirname(fullpath)
     ex_path = os.path.join(ex_dir, ex_base)
+
+    # TODO: more metadata information
+    # out = {'chunks': chunks}
+    # out['path'] = ARGS.path
+
+    for c in chunks:
+        c.filename = os.path.relpath(c.filename, start=ARGS.path)
+
     with open(ex_path, "wb") as f:
         pickle.dump(chunks, f, pickle.HIGHEST_PROTOCOL)
 

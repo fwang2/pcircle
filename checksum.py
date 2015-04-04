@@ -13,6 +13,7 @@ import argparse
 import stat
 import sys
 import signal
+import cPickle as pickle
 
 from mpi4py import MPI
 from cStringIO import StringIO
@@ -47,7 +48,7 @@ def parse_args():
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
-    parser.add_argument("-o", "--output", default="sha1.txt", help="sha1 output file")
+    parser.add_argument("-o", "--output", default="sha1.sig", help="sha1 output file")
 
     return parser.parse_args()
 
@@ -224,6 +225,16 @@ def do_checksum(chunks):
 
     return hashlib.sha1(buf.getvalue()).hexdigest()
 
+def export_checksum(chunks):
+    fullpath = os.path.abspath(ARGS.output)
+    ex_base = os.path.basename(fullpath).split(".")[0] + ".checksums"
+    ex_dir = os.path.dirname(fullpath)
+    ex_path = os.path.join(ex_dir, ex_base)
+    with open(ex_path, "wb") as f:
+        pickle.dump(chunks, f, pickle.HIGHEST_PROTOCOL)
+
+    return os.path.basename(ex_path)
+
 def main():
 
     global ARGS, logger
@@ -258,7 +269,9 @@ def main():
             f.write(sha1val + "\n")
 
         print("\nSHA1: %s" % sha1val)
-        print("The value is saved in [%s]\n" % ARGS.output)
+        print("Exporting singular signature to [%s]" % ARGS.output)
+        print("Exporting block signatures to [%s] \n" % export_checksum(chunks))
+
 
     fcheck.epilogue()
 

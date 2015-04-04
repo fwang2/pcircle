@@ -128,3 +128,8 @@ def eprint(msg):
 def timestamp():
     import time
     return time.strftime("%Y.%m.%d.%H%M%S")
+
+
+def timestamp2():
+    import time
+    return time.strftime("%Y-%m-%d-%H%M%S")

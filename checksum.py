@@ -21,7 +21,7 @@ from cStringIO import StringIO
 from circle import Circle
 from _version import get_versions
 from task import BaseTask
-from utils import logging_init, bytes_fmt
+from utils import logging_init, bytes_fmt, timestamp2
 from fwalk import FWalk
 from cio import readn, writen
 from chunk import Chunk
@@ -36,6 +36,7 @@ BLOCKSIZE = 4194304
 
 ARGS    = None
 __version__ = get_versions()['version']
+
 del get_versions
 
 def sig_handler(signal, frame):
@@ -49,7 +50,7 @@ def parse_args():
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
-    parser.add_argument("-o", "--output", default="sha1.sig", help="sha1 output file")
+    parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
 
     return parser.parse_args()
 

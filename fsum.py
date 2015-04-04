@@ -24,7 +24,7 @@ from task import BaseTask
 from utils import logging_init, bytes_fmt, timestamp2
 from fwalk import FWalk
 from cio import readn, writen
-from chunk import Chunk
+from chunksum import ChunkSum
 
 logger = logging.getLogger("checksum")
 
@@ -105,7 +105,7 @@ class Checksum(BaseTask):
         workcnt = 0
 
         if f[2] == 0: # empty file
-            ck = Chunk(f[0])
+            ck = ChunkSum(f[0])
             ck.off_start = 0
             ck.length = 0
             self.enq(ck)
@@ -113,7 +113,7 @@ class Checksum(BaseTask):
             workcnt += 1
         else:
             for i in range(chunks):
-                ck = Chunk(f[0])
+                ck = ChunkSum(f[0])
                 ck.off_start = i * CHUNKSIZE
                 ck.length = CHUNKSIZE
                 self.enq(ck)
@@ -122,7 +122,7 @@ class Checksum(BaseTask):
 
         if remaining > 0:
             # send remainder
-            ck = Chunk(f[0])
+            ck = ChunkSum(f[0])
             ck.off_start = chunks * CHUNKSIZE
             ck.length  = remaining
             self.enq(ck)

@@ -29,16 +29,17 @@ setuptools.setup(name='pcircle',
     author='Feiyi Wang',
     author_email='fwang2@ornl.gov',
     py_modules=['globals', 'utils', 'task', 'verify', 'fwalk', 'fcp', 'circle', 'frestart',
-                'checkpoint', '_version', 'cio', 'versioneer', 'checksum',
-                'fcorruptor', 'chunk'],
+                'checkpoint', '_version', 'cio', 'versioneer', 'fsum',
+                'fcorruptor', 'chunksum'],
     data_files=[],
     entry_points={
         'console_scripts': [
             'fcp=fcp:main',
             'fwalk=fwalk:main',
             'frestart=frestart:main',
-            'fsum=checksum:main',
-            'fcorruptor=fcorruptor:main'
+            'fsum=fsum:main',
+            'fcorruptor=fcorruptor:main',
+            'fdiff=fdiff:main'
         ]
     },
    classifiers=[

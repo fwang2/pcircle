@@ -34,9 +34,10 @@ Notable features:
 
 
 - `--checkpoint-d ID`: we use timestamp as default checkpoint ID, which is
-  need for resume. You can supply a custom string value for this.
+  required for later resume. You can supply a custom string value for this.
 
-- `--resume`: to resume from previous transfer (need a resume ID)
+- `--resume`: to resume from previous transfer (resume ID must match previous
+  checkpoint ID)
 
 
 

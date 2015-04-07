@@ -1,21 +1,21 @@
 ## Concepts
 
-
 The ubiquitous MPI environment in HPC cluster + Work Stealing Pattern +
 Distributed Termination Detection = Efficient and Scalable Parallel Solution.
 
-`pcircle` software package contains a suite of file system tools that we are
+`pcircle` contains a suite of file system tools that we are
 developing at OLCF to take advantage of highly scalable parallel file system
-such as Lustre. Early tests show very promising scaling properties. However,
-it is still in active development, please use it at your own risk. Any
-feedbacks and bug report are appreciated. 
+such as Lustre and GPFS. Early tests show very promising scaling properties. However,
+it is still in active development, please use it at your own risk. For bug report and feedbacks, 
+please post it here at https://github.com/ORNL-TechInt/pcircle/issues. 
 
 
 ## Features
 
 A typical use of parallel copy:
 
-    mpirun -H host1,host2,host3,host4 -np 16 fcp /path/of/source
+    mpirun -H host1,host2,host3,host4 -np 16 fcp \
+        /path/of/source
         /path/of/destination
 
 Notable features:
@@ -26,7 +26,7 @@ Notable features:
 
 - `--checksum`: to verify through parallel checksumming. This
   involves re-read all the files back from destination, therefore the
-  performance penalty.
+  performance penalty applies.
 
 - `--checkpoint-interval`: specify checkpoint interval in seconds. For very
   large data transfer (TiBs or PiBs), frequent checkpoint will have

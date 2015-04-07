@@ -15,7 +15,7 @@ please post it here at https://github.com/ORNL-TechInt/pcircle/issues.
 A typical use of parallel copy:
 
     mpirun -H host1,host2,host3,host4 -np 16 fcp \
-        /path/of/source
+        /path/of/source \
         /path/of/destination
 
 Notable features:

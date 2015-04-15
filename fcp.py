@@ -49,6 +49,7 @@ def parse_args():
 
     parser.add_argument("--loglevel", default="ERROR", help="log level, default ERROR")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
+    parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
     parser.add_argument("--reduce-interval", metavar="seconds", type=int, default=10, help="interval, default 10s")
     parser.add_argument("--checkpoint-interval", metavar="seconds", type=int, default=360, help="checkpoint interval, default: 360s")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
@@ -138,6 +139,22 @@ class FCP(BaseTask):
 
     def set_chunksize(self, sz):
         self.chunksize = sz
+
+    def set_adaptive_chunksize(self, totalsz):
+        MB = 1024*1024
+        TB = 1024*1024*1024*1024
+        if totalsz < 10*TB:
+            self.chunksize = MB
+        elif totalsz < 100*TB:
+            self.chunksize = 32*MB
+        elif totalsz < 512*TB:
+            self.chunksize = 128*MB
+        elif totalsz < 1024*TB:
+            self.chunksize = 256*MB
+        else:
+            self.chunksize = 512*MB
+
+        print("Adaptive chunksize: %s" %  bytes_fmt(self.chunksize))
 
     def set_checkpoint_interval(self, interval):
         self.checkpoint_interval = interval
@@ -388,14 +405,10 @@ class FCP(BaseTask):
             print("Copy Job Completed In: %.2f seconds" % (time))
             print("Average Transfer Rate: %s/s\n" % bytes_fmt(rate))
 
-
-    def write_bytes(self, rfd, wfd, work):
-        os.lseek(rfd, work['off_start'], os.SEEK_SET)
-        os.lseek(wfd, work['off_start'], os.SEEK_SET)
+    def read_then_write(self, rfd, wfd, work, num_of_bytes, m):
         buf = None
-
         try:
-            buf = readn(rfd, work['length'])
+            buf = readn(rfd, num_of_bytes)
         except IOError:
             self.circle.Abort("Failed to read %s", work['src'], extra=self.d)
 
@@ -404,10 +417,30 @@ class FCP(BaseTask):
         except IOError:
             self.circle.Abort("Failed to write %s", work['dest'], extra=self.d)
 
+        if m:
+            m.update(buf)
+
+
+    def write_bytes(self, rfd, wfd, work):
+        os.lseek(rfd, work['off_start'], os.SEEK_SET)
+        os.lseek(wfd, work['off_start'], os.SEEK_SET)
+
+        m = None
+        if self.do_checksum:
+            m = hashlib.sha1()
+
+        remaining = work['length']
+        while remaining != 0:
+            if remaining >= self.blocksize:
+                self.read_then_write(rfd, wfd, work, self.blocksize, m)
+                remaining -= self.blocksize
+            else:
+                self.read_then_write(rfd, wfd, work, remaining, m)
+                remaining = 0
+
         # are we doing checksum?
         if self.do_checksum:
-            digest = hashlib.md5(buf).hexdigest()
-            self.checksum[work['dest']].append((work['off_start'], work['length'], digest, work['src']))
+            self.checksum[work['dest']].append((work['off_start'], work['length'], m.hex_digest(), work['src']))
 
 
 def err_and_exit(msg, code):
@@ -437,6 +470,13 @@ def check_path(circ, isrc, idest):
     # should not come to this point
     raise
 
+def set_adaptive_chunksize(pcp, tsz):
+
+    if ARGS.adaptive:
+        pcp.set_adaptive_chunksize(tsz)
+    else:
+        pcp.set_chunksize(utils.conv_unit(ARGS.chunksize))
+
 def main_start():
     global circle
     src = os.path.abspath(ARGS.src)
@@ -452,7 +492,8 @@ def main_start():
     pcp = FCP(circle, src, dest, treewalk = treewalk,
               totalsize=tsz, do_checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
 
-    pcp.set_chunksize(utils.conv_unit(ARGS.chunksize))
+    set_adaptive_chunksize(pcp, tsz)
+
     pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
 
     if ARGS.checkpoint_id:
@@ -538,6 +579,9 @@ def main_resume(rid):
               totalsize=tsz, checksum=ARGS.checksum,
               workq = cobj.workq,
               hostcnt = NUM_OF_HOSTS)
+
+    set_adaptive_chunksize(pcp, tsz)
+
     pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
     if rid:
         pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (rid, circle.rank))

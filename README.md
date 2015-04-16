@@ -46,19 +46,33 @@ Notable features:
 `xattr` dependency requires `cffi`, which depends on `libffi`, which is
 notoriously difficult to install right.
 
-### On Mac, you might have to manually do:
+- On Mac, you might have to manually do:
 
-    brew install pkg-config libffi
-    PKG_CONFIG_PATH=/usr/local/opt/libffi/lib/pkgconfig pip install cffi
+        brew install pkg-config libffi
+        PKG_CONFIG_PATH=/usr/local/opt/libffi/lib/pkgconfig pip install cffi
 
-### On Redhat:
+- On Redhat:
 
-    sudo yum install openmpi-devel
-    sudo yum install libffi-devel
-  
-Then, the rest of setup is pretty much Python standard:
+        sudo yum install openmpi-devel
+        sudo yum install libffi-devel
+      
+- Then, the rest of setup is pretty much Python standard:
 
-    python setup.py install
+        python setup.py install
+
+## Scalability and Performance
+
+There has no detailed study on performance, CPU and memory usage yet. It
+varies based on number of files, size distribution, the transfer cluster size
+etc. It also depends on how well striped of the source file, and if the
+bandwidth if balanced between source and destination. 
+
+The scaling limits most likely come from one of the worst case scenario:
+tens or hundreds of millions small files. In this case, we have no choice by
+to treat each file as a single chunk. 
+
+
+
 
 ## Help
 

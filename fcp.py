@@ -236,7 +236,11 @@ class FCP(BaseTask):
 
         # construct and enable all copy operations
         for f in self.treewalk.flist:
-            if stat.S_ISREG(f[1]):
+            if os.path.islink(f[0]):
+                dest = destpath(self.src, self.dest, f[0])
+                linkto = os.readlink(f[0])
+                os.symlink(linkto, dest)
+            elif stat.S_ISREG(f[1]):
                 self.enq_file(f)
 
         # right after this, we do first checkpoint

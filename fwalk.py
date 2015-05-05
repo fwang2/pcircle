@@ -76,7 +76,7 @@ class FWalk(BaseTask):
         entries = None
         try:
             entries = os.listdir(i_dir)
-        except OSError as err:
+        except OSError as e:
             logger.error("access error %s, skipping ..." % i_dir, extra=self.d)
             return False
         for entry in entries:
@@ -84,12 +84,18 @@ class FWalk(BaseTask):
         return True
 
     def process(self):
-
+        ''' process a work unit'''
         path = self.deq()
         logger.debug("process: %s" %  path, extra=self.d)
-
         if path:
-            st = os.stat(path)
+            st = None
+            try:
+                st = os.stat(path)
+            except OSError as e:
+                logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, path),
+                             extra=self.d)
+                return False
+
             self.flist.append( (path, st.st_mode, st.st_size ))
             self.reduce_items += 1
 

@@ -44,7 +44,8 @@ NUM_OF_HOSTS = 0
 
 def parse_args():
 
-    parser = argparse.ArgumentParser(description="Parallel Data Copy")
+    parser = argparse.ArgumentParser(description="Parallel Data Copy",
+                epilog="Please report issues to help@nccs.gov")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
 
     parser.add_argument("--loglevel", default="ERROR", help="log level, default ERROR")

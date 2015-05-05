@@ -63,16 +63,17 @@ notoriously difficult to install right.
 
 ## Virtualenv
 
-If you have setuptools and virtualenv packages, then
+If you have **setuptools** and **virtualenv** packages, then
+
         make deploy
 
-should produce you a **container**, which isolate you from the default
+should grab all dependencies and produce you a **container**, which isolate you from the default
 installation:
 
         source ~/app-pcircle/bin/activate
         fcp -h
 
-
+For this command to work, you do need a working `libffi` as well.
         
 
 ## Scalability and Performance

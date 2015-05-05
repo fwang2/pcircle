@@ -60,6 +60,21 @@ notoriously difficult to install right.
 
         python setup.py install
 
+
+## Virtualenv
+
+If you have setuptools and virtualenv packages, then
+        make deploy
+
+should produce you a **container**, which isolate you from the default
+installation:
+
+        source ~/app-pcircle/bin/activate
+        fcp -h
+
+
+        
+
 ## Scalability and Performance
 
 There has no detailed study on performance, CPU and memory usage yet. It

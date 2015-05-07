@@ -56,7 +56,7 @@ class FWalk(BaseTask):
     def create(self):
         if self.circle.rank == 0:
             self.enq(self.src)
-            print("Start analyzing ...")
+            print("Analyzing workload ...")
 
     def copy_xattr(self, src, dest):
         attrs = xattr.listxattr(src)
@@ -89,11 +89,17 @@ class FWalk(BaseTask):
             self.enq(i_dir + "/" + entry) # conv to absolute path
         return True
 
-    def append_to_flist(self, path, st):
-
+    def flist_append(self, spath, st):
+        self.flist.append((spath, st.st_mode, st.st_size, st.st_uid, st.st_gid))
         self.reduce_items += 1
         self.cnt_files += 1
         self.cnt_filesize += st.st_size
+
+    def flist_pop(self, spath, st):
+        self.flist.pop()
+        self.reduce_items -= 1
+        self.cnt_files -= 1
+        self.cnt_filesize -= st.st_size
 
     def do_metadata_preserve(self, src_file, dest_file):
         if self.preserve:
@@ -142,14 +148,13 @@ class FWalk(BaseTask):
                              extra=self.d)
                 return False
 
-            self.flist.append((spath, st.st_mode, st.st_size, st.st_uid, st.st_gid))
-
+            self.flist_append(spath, st)
             if stat.S_ISREG(st.st_mode) and self.dest:
                 dpath = destpath(self.src, self.dest, spath)
                 if not self.check_dest_exists(spath, dpath):
                     self.do_metadata_preserve(spath, dpath)
                 else: # dest exist and same as source
-                    self.flist.pop()
+                    self.flist_pop(spath, st)
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
                 self.process_dir(spath)

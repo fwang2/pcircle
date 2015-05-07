@@ -128,26 +128,31 @@ class FWalk(BaseTask):
             return False
 
     def process(self):
-        ''' process a work unit'''
-        path = self.deq()
-        logger.debug("process: %s" %  path, extra=self.d)
-        if path:
+        ''' process a work unit, spath, dpath refers to
+            source and destination respectively
+        '''
+        spath = self.deq()
+        logger.debug("process: %s" %  spath, extra=self.d)
+        if spath:
             st = None
             try:
-                st = os.stat(path)
+                st = os.stat(spath)
             except OSError as e:
-                logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, path),
+                logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, spath),
                              extra=self.d)
                 return False
 
             if stat.S_ISREG(st.st_mode):
-                o_file = destpath(self.src, self.dest, path)
-                if not self.check_dest_exists(path, o_file):
-                    self.append_to_flist(path, st)
-                    self.do_metadata_preserve(path, o_file)
+                if self.dest is None:           # fwalk or fsum, no need for dest check
+                    self.append_to_flist(spath, st)
+                else:
+                    dpath = destpath(self.src, self.dest, spath)
+                    if not self.check_dest_exists(spath, dpath):
+                        self.append_to_flist(spath, st)
+                        self.do_metadata_preserve(spath, dpath)
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
-                self.process_dir(path)
+                self.process_dir(spath)
 
     def tally(self, t):
         """ t is a tuple element of flist """

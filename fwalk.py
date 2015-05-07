@@ -37,7 +37,7 @@ class FWalk(BaseTask):
         self.dest = dest
         self.preserve = preserve
         self.force = force
-        self.flist = []  # element is (filepath, filemode, filesize)
+        self.flist = []  # element is (filepath, filemode, filesize, uid, gid)
         self.src_flist = self.flist
 
         self.cnt_dirs = 0
@@ -90,7 +90,7 @@ class FWalk(BaseTask):
         return True
 
     def append_to_flist(self, path, st):
-        self.flist.append((path, st.st_mode, st.st_size ))
+
         self.reduce_items += 1
         self.cnt_files += 1
         self.cnt_filesize += st.st_size
@@ -142,14 +142,14 @@ class FWalk(BaseTask):
                              extra=self.d)
                 return False
 
-            if stat.S_ISREG(st.st_mode):
-                if self.dest is None:           # fwalk or fsum, no need for dest check
-                    self.append_to_flist(spath, st)
-                else:
-                    dpath = destpath(self.src, self.dest, spath)
-                    if not self.check_dest_exists(spath, dpath):
-                        self.append_to_flist(spath, st)
-                        self.do_metadata_preserve(spath, dpath)
+            self.flist.append((spath, st.st_mode, st.st_size, st.st_uid, st.st_gid))
+
+            if stat.S_ISREG(st.st_mode) and self.dest:
+                dpath = destpath(self.src, self.dest, spath)
+                if not self.check_dest_exists(spath, dpath):
+                    self.do_metadata_preserve(spath, dpath)
+                else: # dest exist and same as source
+                    self.flist.pop()
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
                 self.process_dir(spath)

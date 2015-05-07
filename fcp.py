@@ -61,6 +61,7 @@ def parse_args():
 
     parser.add_argument("--force", action="store_true", help="force overwrite")
     parser.add_argument("--pause", action="store_true", help="pause after copy, test only")
+    parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
 
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
@@ -514,7 +515,7 @@ def main_start():
     circle.finalize(reduce_interval=ARGS.reduce_interval)
     pcp.cleanup()
 
-    return pcp, tsz
+    return treewalk, pcp, tsz
 
 def get_workq_size(workq):
     if workq is None: return 0
@@ -603,12 +604,16 @@ def main_resume(rid):
     return pcp, tsz
 
 
+def fix_opt(treewalk):
+    flist = treewalk.flist
+
 
 def main():
 
     global ARGS, logger, circle, NUM_OF_HOSTS
     signal.signal(signal.SIGINT, sig_handler)
     parse_flags = True
+    treewalk = None
 
     if MPI.COMM_WORLD.rank == 0:
         try:
@@ -642,7 +647,7 @@ def main():
     if ARGS.rid:
         pcp, totalsize = main_resume(ARGS.rid[0])
     else:
-        pcp, totalsize = main_start()
+        treewalk, pcp, totalsize = main_start()
 
     # pause
 
@@ -669,6 +674,10 @@ def main():
             else:
                 print("Verification failed")
                 print("Note that checksum errors can't be corrected by checkpoint/resume!")
+
+    # final task
+    if ARGS.fix_opt:
+        fix_opt(treewalk)
 
     pcp.epilogue()
 

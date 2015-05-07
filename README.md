@@ -40,6 +40,16 @@ Notable features:
   checkpoint ID)
 
 
+## Dependencies
+
+`pcircle` is largely a Python implementation, but we don't rule out possible
+and judicious integration of C/C++ code for performance gains. Currently, it
+has the following dependencies:
+
+- `mpi4py` - wraps the MPI library
+- `xattr` - wraps the libattr library
+- `cffi` - python interface to `libffi`
+- `lru-dict` - wrap a small C-based LRU cache
 
 ## Installation
 

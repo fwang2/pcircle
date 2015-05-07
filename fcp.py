@@ -59,6 +59,7 @@ def parse_args():
     parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta, default: off")
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
 
+    parser.add_argument("--force", action="store_true", help="force overwrite")
     parser.add_argument("--pause", action="store_true", help="pause after copy, test only")
 
     parser.add_argument("src", help="copy from")
@@ -459,7 +460,7 @@ def check_path(circ, isrc, idest):
     if not os.path.exists(isrc) or not os.access(isrc, os.R_OK):
         err_and_exit("source directory %s is not readable" % isrc, 0)
 
-    if os.path.exists(idest):
+    if os.path.exists(idest) and not ARGS.force:
         err_and_exit("Destination [%s] exists, will not overwrite!" % idest, 0)
 
     # idest doesn't exits at this point
@@ -488,7 +489,8 @@ def main_start():
     dest = os.path.abspath(ARGS.dest)
     dest = check_path(circle, src, dest)
 
-    treewalk = FWalk(circle, src, dest, preserve = ARGS.preserve)
+    treewalk = FWalk(circle, src, dest, preserve = ARGS.preserve,
+                     force=ARGS.force)
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.reduce_interval)

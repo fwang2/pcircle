@@ -11,6 +11,8 @@ import os
 import os.path
 import logging
 import argparse
+import filecmp
+
 import xattr
 from _version import get_versions
 
@@ -69,7 +71,11 @@ class FWalk(BaseTask):
         if self.dest:
             # we create destination directory
             o_dir = destpath(self.src, self.dest, i_dir)
-            os.mkdir(o_dir, stat.S_IRWXU)
+            try:
+                os.mkdir(o_dir, stat.S_IRWXU)
+            except OSError as e:
+                logger.warn("Skipping %s" % o_dir)
+
             if self.preserve:
                 self.copy_xattr(i_dir, o_dir)
 
@@ -82,6 +88,40 @@ class FWalk(BaseTask):
         for entry in entries:
             self.enq(i_dir + "/" + entry) # conv to absolute path
         return True
+
+    def append_to_flist(self, path, st):
+        self.flist.append((path, st.st_mode, st.st_size ))
+        self.reduce_items += 1
+        self.cnt_files += 1
+        self.cnt_filesize += st.st_size
+
+    def do_metadata_preserve(self, o_file, path):
+        if self.preserve:
+            try:
+                os.mknod(o_file, stat.S_IRWXU | stat.S_IFREG)
+            except OSError as e:
+                logger.warn("failed to mknod() for %s", o_file, extra=self.d)
+            else:
+                self.copy_xattr(path, o_file)
+
+
+    def check_dest_exists(self, path, o_file):
+        '''
+        :param path:
+        :param o_file:
+        :return: True if dest exists and checksum verified correct
+        '''
+        if not os.path.exists(o_file):
+            return False
+
+        # well, destination exists, now we have to check
+        if filecmp.cmp(path, o_file):
+            logger.warn("CHECK OKAY: src: %s, dest=%s" % (path, o_file))
+            return True
+        else:
+            logger.warn("RETRANSFER: %s" % path)
+            os.unlink(o_file)
+            return False
 
     def process(self):
         ''' process a work unit'''
@@ -96,20 +136,11 @@ class FWalk(BaseTask):
                              extra=self.d)
                 return False
 
-            self.flist.append( (path, st.st_mode, st.st_size ))
-            self.reduce_items += 1
-
             if stat.S_ISREG(st.st_mode):
-                self.cnt_files += 1
-                self.cnt_filesize += st.st_size
-                if self.preserve:
-                    o_file = destpath(self.src, self.dest, path)
-                    try:
-                        os.mknod(o_file, stat.S_IRWXU | stat.S_IFREG)
-                    except OSError as e:
-                        logger.warn("failed to mknod() for %s", o_file, extra=self.d)
-                    else:
-                        self.copy_xattr(path, o_file)
+                o_file = destpath(self.src, self.dest, path)
+                if not self.check_dest_exists(path, o_file):
+                    self.append_to_flist(path, st)
+                    self.do_metadata_preserve(o_file, path)
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
                 self.process_dir(path)

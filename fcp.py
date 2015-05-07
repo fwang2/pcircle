@@ -605,8 +605,11 @@ def main_resume(rid):
 
 
 def fix_opt(treewalk):
-    flist = treewalk.flist
 
+    flist = treewalk.flist
+    for f in flist:
+        dpath = destpath(treewalk.src, treewalk.dest, f[0])
+        os.chown(dpath, f[3], f[4])
 
 def main():
 
@@ -676,7 +679,7 @@ def main():
                 print("Note that checksum errors can't be corrected by checkpoint/resume!")
 
     # final task
-    if ARGS.fix_opt:
+    if ARGS.fix_opt and treewalk and os.geteuid() == 0:
         fix_opt(treewalk)
 
     pcp.epilogue()

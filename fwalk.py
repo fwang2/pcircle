@@ -95,14 +95,14 @@ class FWalk(BaseTask):
         self.cnt_files += 1
         self.cnt_filesize += st.st_size
 
-    def do_metadata_preserve(self, o_file, path):
+    def do_metadata_preserve(self, src_file, dest_file):
         if self.preserve:
             try:
-                os.mknod(o_file, stat.S_IRWXU | stat.S_IFREG)
+                os.mknod(dest_file, stat.S_IRWXU | stat.S_IFREG)
             except OSError as e:
-                logger.warn("failed to mknod() for %s", o_file, extra=self.d)
+                logger.warn("failed to mknod() for %s", dest_file, extra=self.d)
             else:
-                self.copy_xattr(path, o_file)
+                self.copy_xattr(src_file, dest_file)
 
 
     def check_dest_exists(self, src_file, dest_file):
@@ -144,7 +144,7 @@ class FWalk(BaseTask):
                 o_file = destpath(self.src, self.dest, path)
                 if not self.check_dest_exists(path, o_file):
                     self.append_to_flist(path, st)
-                    self.do_metadata_preserve(o_file, path)
+                    self.do_metadata_preserve(path, o_file)
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
                 self.process_dir(path)

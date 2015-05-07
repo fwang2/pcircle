@@ -105,22 +105,26 @@ class FWalk(BaseTask):
                 self.copy_xattr(path, o_file)
 
 
-    def check_dest_exists(self, path, o_file):
+    def check_dest_exists(self, src_file, dest_file):
         '''
-        :param path:
-        :param o_file:
+        :param src_file:
+        :param dest_file:
         :return: True if dest exists and checksum verified correct
+                False if (1) no overwrite (2) destination doesn't exist
         '''
-        if not os.path.exists(o_file):
+        if not self.force:
+            return False
+
+        if not os.path.exists(dest_file):
             return False
 
         # well, destination exists, now we have to check
-        if filecmp.cmp(path, o_file):
-            logger.warn("CHECK OKAY: src: %s, dest=%s" % (path, o_file))
+        if filecmp.cmp(src_file, dest_file):
+            logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file))
             return True
         else:
-            logger.warn("RETRANSFER: %s" % path)
-            os.unlink(o_file)
+            logger.warn("Retransfer: %s" % src_file)
+            os.unlink(dest_file)
             return False
 
     def process(self):

@@ -633,6 +633,9 @@ def main():
     circle.setLevel(logging.ERROR)
     logger = utils.logging_init(logger, ARGS.loglevel)
 
+    if MPI.COMM_WORLD.rank == 0:
+        logger.debug(ARGS)
+
     pcp = None
     totalsize = None
 

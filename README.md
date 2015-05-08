@@ -10,7 +10,7 @@ it is still in active development, please use it at your own risk. For bug repor
 please post it here at https://github.com/ORNL-TechInt/pcircle/issues. 
 
 
-## Features
+## Parallel Data Transfer
 
 A typical use of parallel copy:
 
@@ -38,6 +38,19 @@ Notable features:
 
 - `--resume`: to resume from previous transfer (resume ID must match previous
   checkpoint ID)
+
+## Parallel Checksumming
+
+A typical use of parallel checksumming:
+
+    mpirun -H host1,host2 -np 8 fsum \
+        /path/to/dataset
+
+Differing from typical checksumming, the `fsum` handles a directory and compute
+one signature for the whole dataset. Since we parallelize the compute process,
+it is both scalable and high performance. On a 8 node cluster, we observed as
+high as 6.25 GB/s average processing rate. This is a likely a I/O bound
+process instead of compute-bound.
 
 
 ## Dependencies

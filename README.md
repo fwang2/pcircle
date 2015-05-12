@@ -64,7 +64,7 @@ and judicious integration of C/C++ code for performance gains. Currently, it
 has the following dependencies:
 
 - `Python 2.7.x` - it is not Python3 compatible, yet.
-- `mpi4py` - wraps the MPI library
+- `mpi4py` - wraps the MPI library 
 - `xattr` - wraps the libattr library
 - `cffi` - python interface to `libffi`
 - `lru-dict` - wrap a small C-based LRU cache
@@ -95,7 +95,7 @@ If you have **setuptools** and **virtualenv** packages, then
 
         make deploy
 
-should grab all dependencies and produce you a **container**, which isolate you from the default
+It grab all dependencies and produce you a **container**, which isolate you from the default
 installation:
 
         source ~/app-pcircle/bin/activate
@@ -118,7 +118,7 @@ to treat each file as a single chunk.
 
 
 
-## Help
+## Author
 
-Please contact Feiyi Wang AT fwang2@ornl.gov
+- Feiyi Wang | Oak Ridge National Laboratory | fwang2@ornl.gov
 

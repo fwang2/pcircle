@@ -1,13 +1,17 @@
-## Concepts
+# PCircle
+
+
+## About
 
 The ubiquitous MPI environment in HPC cluster + Work Stealing Pattern +
 Distributed Termination Detection = Efficient and Scalable Parallel Solution.
 
-`pcircle` contains a suite of file system tools that we are
-developing at OLCF to take advantage of highly scalable parallel file system
-such as Lustre and GPFS. Early tests show very promising scaling properties. However,
-it is still in active development, please use it at your own risk. For bug report and feedbacks, 
-please post it here at https://github.com/ORNL-TechInt/pcircle/issues. 
+`pcircle` contains a suite of file system tools that we are developing at OLCF
+to take advantage of highly scalable parallel file system such as Lustre and
+GPFS. Early tests show very promising scaling properties. However, it is still
+in active development, please use it at your own risk. For bug report and
+feedbacks, please post it here at
+https://github.com/ORNL-TechInt/pcircle/issues. 
 
 
 ## Parallel Data Transfer
@@ -59,6 +63,7 @@ process instead of compute-bound.
 and judicious integration of C/C++ code for performance gains. Currently, it
 has the following dependencies:
 
+- `Python 2.7.x` - it is not Python3 compatible, yet.
 - `mpi4py` - wraps the MPI library
 - `xattr` - wraps the libattr library
 - `cffi` - python interface to `libffi`
@@ -84,7 +89,7 @@ notoriously difficult to install right.
         python setup.py install
 
 
-## Virtualenv
+## virtualenv
 
 If you have **setuptools** and **virtualenv** packages, then
 

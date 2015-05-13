@@ -19,7 +19,10 @@ deb:
 rpm:
 	$(PYTHON) setup.py bdist_rpm --post-install=rpm/postinstall --pre-uninstall=rpm/preuninstall
 
-install: uninstall
+reinstall: uninstall
+	$(PYTHON) setup.py install
+
+install:
 	$(PYTHON) setup.py install
 
 uninstall:

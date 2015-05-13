@@ -10,3 +10,5 @@ tags
 pcircle.egg-info
 *.log
 MANIFEST
+.DS_Store
+test/*.sh

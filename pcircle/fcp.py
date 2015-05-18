@@ -434,7 +434,7 @@ class FCP(BaseTask):
 
         m = None
         if self.do_checksum:
-            m = hashlib.md5()
+            m = hashlib.sha1()
 
         remaining = work['length']
         while remaining != 0:

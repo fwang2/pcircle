@@ -60,7 +60,7 @@ class PVerify(BaseTask):
             self.fd_cache[src] = fd
 
         fd.seek(chunk[0])
-        digest = hashlib.md5(fd.read(chunk[1])).hexdigest()
+        digest = hashlib.sha1(fd.read(chunk[1])).hexdigest()
         if digest != chunk[2]:
             logger.error("Verification failed for %s \n src-digest: %s\n dst-digest: %s \n"
                          % (src, chunk[2], digest), extra=self.d)

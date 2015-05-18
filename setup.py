@@ -19,8 +19,8 @@ import glob
 requires = [
         'mpi4py',
         'lru-dict',
-        'xattr',
-        'plyvel']
+        'xattr'
+        ]
 
 if (3, 0, 0) < sys.version_info[:3] < (2,7,0):
     raise RuntimeError("This application requires Python 2.7.x")

@@ -434,7 +434,7 @@ class FCP(BaseTask):
 
         m = None
         if self.do_checksum:
-            m = hashlib.sha1()
+            m = hashlib.md5()
 
         remaining = work['length']
         while remaining != 0:
@@ -447,7 +447,7 @@ class FCP(BaseTask):
 
         # are we doing checksum?
         if self.do_checksum:
-            self.checksum[work['dest']].append((work['off_start'], work['length'], m.hex_digest(), work['src']))
+            self.checksum[work['dest']].append((work['off_start'], work['length'], m.hexdigest(), work['src']))
 
 
 def err_and_exit(msg, code):

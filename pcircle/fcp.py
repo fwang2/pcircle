@@ -33,6 +33,9 @@ from circle import Circle
 from cio import readn, writen
 from fwalk import FWalk
 from checkpoint import Checkpoint
+from fdef import FileChunk, ChunkSum
+from globals import G
+from dbstore import DbStore
 from _version import get_versions
 
 __version__ = get_versions()['version']
@@ -48,7 +51,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Parallel Data Copy",
                 epilog="Please report issues to help@nccs.gov")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
-
+    parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     parser.add_argument("--loglevel", default="ERROR", help="log level, default ERROR")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
@@ -81,6 +84,7 @@ class FCP(BaseTask):
                  hostcnt=0,
                  prune=False,
                  do_checksum=False,
+                 resume=False,
                  workq=None):
         BaseTask.__init__(self, circle)
         self.circle = circle
@@ -88,7 +92,7 @@ class FCP(BaseTask):
         self.totalsize = totalsize
         self.prune = prune
         self.workq = workq
-
+        self.resume = resume
         self.checkpoint_file = None
 
         self.src = os.path.abspath(src)
@@ -132,7 +136,7 @@ class FCP(BaseTask):
 
         # checksum
         self.do_checksum = do_checksum
-        self.checksum = defaultdict(list)
+        self.checksum = []
 
         # checkpointing
         self.checkpoint_interval = sys.maxsize
@@ -161,22 +165,44 @@ class FCP(BaseTask):
         if self.circle.rank == 0:
             print("Adaptive chunksize: %s" %  bytes_fmt(self.chunksize))
 
-    def set_checkpoint_interval(self, interval):
-        self.checkpoint_interval = interval
 
     def set_checkpoint_file(self, f):
         self.checkpoint_file = f
 
     def cleanup(self):
         for f in self.rfd_cache.values():
-            os.close(f)
+            try:
+                os.close(f)
+            except:
+                pass
 
         for f in self.wfd_cache.values():
-            os.close(f)
+            try:
+                os.close(f)
+            except:
+                pass
 
         # remove checkpoint file
-        if os.path.exists(self.checkpoint_file):
+        if self.checkpoint_file and os.path.exists(self.checkpoint_file):
             os.remove(self.checkpoint_file)
+
+
+        # we need to do this because if last job didn't finish cleanly
+        # the fwalk files can be found as leftovers
+        # and if fcp cleanup has a chance, it should clean up that
+
+        fwalk = "%s/fwalk.%s" % (self.circle.tempdir, self.circle.rank)
+        if os.path.exists(fwalk):
+            os.remove(fwalk)
+
+    def new_fchunk(self, f):
+        fchunk = FileChunk()  # default cmd = copy
+        fchunk.src = f.path
+        fchunk.dest = destpath(self.src, self.dest, f.path)
+        return fchunk
+
+
+
 
     def enq_dir(self, f):
         """ Deprecated, should not be in use anymore """
@@ -186,72 +212,92 @@ class FCP(BaseTask):
         d['dest'] = self.dest + "/" + self.srcbase + "/" + os.path.relpath(f[0], start=self.src)
         self.enq(d)
 
-    def enq_file(self, f):
-        '''
-        f[0] path f[1] mode f[2] size - we enq all in one shot
-        CMD = copy src  dest  off_start  last_chunk
-        '''
-        chunks    = f[2] / self.chunksize
-        remaining = f[2] % self.chunksize
-
-        d = {}
-        d['cmd'] = 'copy'
-        d['src'] = f[0]
-        d['dest'] = destpath(self.src, self.dest, f[0])
+    def enq_file(self, fi):
+        """
+        we enq all in one shot
+        """
+        chunks = fi.st_size / self.chunksize
+        remaining = fi.st_size % self.chunksize
 
         workcnt = 0
 
-        if f[2] == 0:
-            # empty file
-            d['off_start'] = 0
-            d['length'] = 0
-            self.enq(d)
-            logger.debug("%s" % d, extra=self.d)
+        if fi.st_size == 0:  # empty file
+            fchunk = self.new_fchunk(fi)
+            fchunk.offset = 0
+            fchunk.length = 0
+            self.enq(fchunk)
+            logger.debug("%s" % fchunk, extra=self.d)
             workcnt += 1
         else:
             for i in range(chunks):
-                d['off_start'] = i * self.chunksize
-                d['length'] = self.chunksize
-                self.enq(d)
-                logger.debug("%s" % d, extra=self.d)
+                fchunk = self.new_fchunk(fi)
+                fchunk.offset = i * self.chunksize
+                fchunk.length = self.chunksize
+                self.enq(fchunk)
+                logger.debug("%s" % fchunk, extra=self.d)
             workcnt += chunks
 
         if remaining > 0:
             # send remainder
-            d['off_start'] = chunks * self.chunksize
-            d['length' ] = remaining
-            self.enq(d)
-            logger.debug("%s" % d, extra=self.d)
+            fchunk = self.new_fchunk(fi)
+            fchunk.offset = chunks * self.chunksize
+            fchunk.length = remaining
+            self.enq(fchunk)
+            logger.debug("%s" % fchunk, extra=self.d)
             workcnt += 1
 
-        # tally work cnt
+        # save work cnt
         self.workcnt += workcnt
 
-        # --------------------------------------
-        # TODO: make finish token for this file
-        # --------------------------------------
-        # t = {'cmd' : 'fini_check', 'workcnt' : workcnt, 'src' : f[0], 'dest': d['dest'] }
-        # self.enq(t)
 
+    def handle_fitem(self, fi):
+        if os.path.islink(fi.path):
+            dest = destpath(self.src, self.dest, fi.path)
+            linkto = os.readlink(fi.path)
+            try:
+                os.symlink(linkto, dest)
+            except Exception as e:
+                logger.error("Fail to handle sym link %s" % fi.path)
+        elif stat.S_ISREG(fi.st_mode):
+            self.enq_file(fi)  # where chunking takes place
 
     def create(self):
-        if self.workq:  # restart
+        if not G.use_store and self.workq:  # restart
             self.setq(self.workq)
             return
 
-        # construct and enable all copy operations
-        for f in self.treewalk.flist:
-            if os.path.islink(f[0]):
-                dest = destpath(self.src, self.dest, f[0])
-                linkto = os.readlink(f[0])
-                os.symlink(linkto, dest)
-            elif stat.S_ISREG(f[1]):
-                self.enq_file(f)
+        if self.resume:
+            return
 
-        # right after this, we do first checkpoint
-        if self.checkpoint_file:
-            self.do_no_interrupt_checkpoint()
-            self.checkpoint_last = MPI.Wtime()
+
+        # construct and enable all copy operations
+        # we batch operation hard-coded
+        logger.debug("creat() starts, flist.qsize=%s" % len(self.treewalk.flist))
+
+        if G.use_store:
+            while self.treewalk.flist.qsize > 0:
+                fitems, _ = self.treewalk.flist.mget(G.DB_BUFSIZE)
+                for fi in fitems:
+                    self.handle_fitem(fi)
+                self.treewalk.flist.mdel(G.DB_BUFSIZE)
+
+            # store checkpoint
+            logger.debug("dbname = %s" % self.circle.dbname)
+            dirname = os.path.dirname(self.circle.dbname)
+            basename = os.path.basename(self.circle.dbname)
+            chkpointname = basename + ".CHECK_OK"
+            self.checkpoint_file = os.path.join(dirname, chkpointname)
+            with open(self.checkpoint_file, "w") as f:
+                f.write("%s" % self.totalsize)
+
+        else:  # use memory
+            for fi in self.treewalk.flist:
+                self.handle_fitem(fi)
+
+            # memory-checkpoint
+            if self.checkpoint_file:
+                self.do_no_interrupt_checkpoint()
+                self.checkpoint_last = MPI.Wtime()
 
     def do_open(self, k, d, flag, limit):
         """
@@ -280,14 +326,14 @@ class FCP(BaseTask):
             return fd
 
     def do_mkdir(self, work):
-        src = work['src']
-        dest = work['dest']
+        src = work.src
+        dest = work.dest
         if not os.path.exists(dest):
             os.makedirs(dest)
 
     def do_copy(self, work):
-        src = work['src']
-        dest = work['dest']
+        src = work.src
+        dest = work.dest
 
         basedir = os.path.dirname(dest)
         if not os.path.exists(basedir):
@@ -309,35 +355,11 @@ class FCP(BaseTask):
         self.write_bytes(rfd, wfd, work)
 
         # update tally
-        self.cnt_filesize += work['length']
+        self.cnt_filesize += work.length
         logger.debug("transfer bytes %s" % self.cnt_filesize, extra=self.d)
 
         #self.fini_cnt[src] += 1
         #logger.debug("Inc workcnt for %s (workcnt=%s)" % (src, self.fini_cnt[src]), extra=self.d)
-
-    def do_fini_check(self, work):
-        src = work['src']
-        dest = work['dest']
-        workcnt = work['workcnt']
-
-        mycnt = self.fini_cnt[src]
-        if workcnt == mycnt:
-            # all job finished
-            # we should have cached this before
-            rfd = self.rfd_cache[src]
-            wfd = self.wfd_cache[dest]
-            os.close(rfd)
-            os.close(wfd)
-            del self.rfd_cache[src]
-            del self.wfd_cache[dest]
-            logger.debug("Finish done: %s" % src, extra=self.d)
-        elif mycnt < workcnt:
-            # worked some, but not yet done
-            work['workcnt'] -= mycnt
-            self.enq(work)
-            logger.debug("Finish enq: %s (workcnt=%s) " % (src, work['workcnt']), extra=self.d)
-        # either way, clear the cnt
-        del self.fini_cnt[src]
 
 
     def do_no_interrupt_checkpoint(self):
@@ -364,22 +386,17 @@ class FCP(BaseTask):
         """
         The only work is "copy", TODO: clean up other actions such as mkdir/fini_check
         """
-        curtime = MPI.Wtime()
-        if curtime - self.checkpoint_last > self.checkpoint_interval:
-            self.do_no_interrupt_checkpoint()
-            self.checkpoint_last = curtime
+        if not G.use_store:
+            curtime = MPI.Wtime()
+            if curtime - self.checkpoint_last > self.checkpoint_interval:
+                self.do_no_interrupt_checkpoint()
+                self.checkpoint_last = curtime
 
         work = self.deq()
-        if work['cmd'] == 'copy':
+        if work.cmd == 'copy':
             self.do_copy(work)
-        elif work['cmd'] == 'mkdir':
-            # self.do_mkdir(work)
-            pass
-        elif work['cmd'] == 'fini_check':
-            # self.do_fini_check(work)
-            pass
         else:
-            logger.error("Unknown command %s" % work['cmd'], extra=self.d)
+            logger.error("Unknown command %s" % work.cmd, extra=self.d)
             self.abort()
 
     def reduce_init(self, buf):
@@ -423,26 +440,26 @@ class FCP(BaseTask):
         try:
             buf = readn(rfd, num_of_bytes)
         except IOError:
-            self.circle.Abort("Failed to read %s", work['src'], extra=self.d)
+            self.circle.Abort("Failed to read %s", work.src, extra=self.d)
 
         try:
             writen(wfd, buf)
         except IOError:
-            self.circle.Abort("Failed to write %s", work['dest'], extra=self.d)
+            self.circle.Abort("Failed to write %s", work.dest, extra=self.d)
 
         if m:
             m.update(buf)
 
 
     def write_bytes(self, rfd, wfd, work):
-        os.lseek(rfd, work['off_start'], os.SEEK_SET)
-        os.lseek(wfd, work['off_start'], os.SEEK_SET)
+        os.lseek(rfd, work.offset, os.SEEK_SET)
+        os.lseek(wfd, work.offset, os.SEEK_SET)
 
         m = None
         if self.do_checksum:
             m = hashlib.sha1()
 
-        remaining = work['length']
+        remaining = work.length
         while remaining != 0:
             if remaining >= self.blocksize:
                 self.read_then_write(rfd, wfd, work, self.blocksize, m)
@@ -451,15 +468,47 @@ class FCP(BaseTask):
                 self.read_then_write(rfd, wfd, work, remaining, m)
                 remaining = 0
 
-        # are we doing checksum?
         if self.do_checksum:
-            self.checksum[work['dest']].append((work['off_start'], work['length'], m.hexdigest(), work['src']))
+            ck = ChunkSum(work.dest, offset=work.offset, length=work.length,
+                          digest=m.hexdigest())
+            self.checksum.append(ck)
 
 
 def err_and_exit(msg, code):
     if circle.rank == 0:
         print(msg)
     circle.exit(0)
+
+
+def check_dbstore_resume_condition(rid):
+    global circle
+
+    local_checkpoint_cnt = 0
+    local_dbfile_cnt = 0
+    db_file = "workq.%s-%s" % (rid, circle.rank)
+    db_full =  os.path.join(".pcircle", db_file)
+    chk_file = "workq.%s-%s.CHECK_OK" % (rid, circle.rank)
+    chk_full = os.path.join(".pcircle", chk_file)
+    if not os.path.exists(db_full):
+        err_and_exit("Resume condition not met, can't locate %s" % db_file, 0)
+    else:
+        local_dbfile_cnt = 1
+    if not os.path.exists(chk_full):
+        err_and_exit("Resume condition not met, can't locate %s" % chk_file, 0)
+    else:
+        local_checkpoint_cnt = 1
+    total_checkpoint_cnt = circle.comm.allreduce(local_checkpoint_cnt)
+    total_dbfile_cnt = circle.comm.allreduce(local_dbfile_cnt)
+    if total_dbfile_cnt != 0 and total_checkpoint_cnt == total_dbfile_cnt:
+        if circle.rank == 0:
+            print("Resume condition ... OK\n")
+    else:
+        if circle.rank == 0:
+            err_and_exit("Resume conditon not be met: mismatch db and check file", 0)
+
+
+    return chk_full, db_full
+
 
 def check_path(circ, isrc, idest):
     """ verify and return target destination"""
@@ -490,7 +539,7 @@ def set_adaptive_chunksize(pcp, tsz):
     else:
         pcp.set_chunksize(utils.conv_unit(ARGS.chunksize))
 
-def main_start():
+def mem_start():
     global circle
     src = os.path.abspath(ARGS.src)
     dest = os.path.abspath(ARGS.dest)
@@ -508,7 +557,7 @@ def main_start():
 
     set_adaptive_chunksize(pcp, tsz)
 
-    pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
+    pcp.checkpoint_interval = ARGS.checkpoint_interval
 
     if ARGS.checkpoint_id:
         pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ARGS.checkpoint_id, circle.rank))
@@ -540,7 +589,7 @@ def verify_checkpoint(chk_file, total_checkpoint_cnt):
 
         circle.exit(0)
 
-def main_resume(rid):
+def mem_resume(rid):
     global circle
     dmsg = {"rank": "rank %s" % circle.rank}
     oldsz = 0; tsz = 0; sz = 0
@@ -596,7 +645,7 @@ def main_resume(rid):
 
     set_adaptive_chunksize(pcp, tsz)
 
-    pcp.set_checkpoint_interval(ARGS.checkpoint_interval)
+    pcp.checkpoint_interval = ARGS.checkpoint_interval
     if rid:
         pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (rid, circle.rank))
     else:
@@ -610,55 +659,175 @@ def main_resume(rid):
     return pcp, tsz
 
 
+def get_oldsize(chk_file):
+    totalsize = 0
+    with open(chk_file) as f:
+        totalsize = int(f.read())
+    return totalsize
+
+
 def fix_opt(treewalk):
 
     flist = treewalk.flist
     for f in flist:
-        dpath = destpath(treewalk.src, treewalk.dest, f[0])
-        os.chown(dpath, f[3], f[4])
+        dpath = destpath(treewalk.src, treewalk.dest, f.path) # f[0]
+        os.chown(dpath, f.st_uid, f.st_gid)  # f[3] f[4]
 
-def main():
-
-    global ARGS, logger, circle, NUM_OF_HOSTS
-    signal.signal(signal.SIGINT, sig_handler)
+def parse_and_bcast():
+    global ARGS
     parse_flags = True
-    treewalk = None
-
     if MPI.COMM_WORLD.rank == 0:
         try:
             ARGS = parse_args()
         except:
             parse_flags = False
-
     parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
-
     if parse_flags:
         ARGS = MPI.COMM_WORLD.bcast(ARGS)
     else:
         sys.exit(0)
 
+    if MPI.COMM_WORLD.rank == 0:
+        logger.debug(ARGS)
+
+
+def store_resume(rid):
+    global circle, ARGS
+    dmsg = {"rank": "rank %s" % circle.rank}
+
+    # check and exchange old dataset size
+    oldsz = 0
+    chk_file, db_file = check_resume_condition(rid)
+    if circle.rank == 0:
+        oldsz = get_oldsize(chk_file)
+    oldsz = circle.comm.bcast(oldsz)
+
+    # check and exchange recovery size
+    localsz = circle.workq.fsize
+    tsz = circle.comm.allreduce(localsz)
+
+    if circle.rank == 0:
+        print("Original size: %s" % bytes_fmt(oldsz))
+        print("Recovery size: %s" % bytes_fmt(tsz))
+
+
+    if tsz == 0:
+        if circle.rank == 0:
+            print("Recovery size is 0 bytes, can't proceed.")
+        circle.exit(0)
+
+    # src, dest probably not needed here anymore.
+    src = os.path.abspath(ARGS.src)
+    dest = os.path.abspath(ARGS.dest)
+
+    # resume mode, we don't check destination path
+    # dest = check_path(circle, src, dest)
+    # note here that we use resume flag
+    pcp = FCP(circle, src, dest, resume=True,
+              totalsize=tsz, do_checksum=ARGS.checksum,
+              hostcnt = NUM_OF_HOSTS)
+
+    pcp.checkpoint_file = chk_file
+
+    set_adaptive_chunksize(pcp, tsz)
+    circle.begin(pcp)
+    circle.finalize(cleanup=True)
+
+    return pcp, tsz
+
+
+def store_start():
+    global circle
+    src = os.path.abspath(ARGS.src)
+    dest = os.path.abspath(ARGS.dest)
+    dest = check_path(circle, src, dest)
+
+    treewalk = FWalk(circle, src, dest, preserve = ARGS.preserve,
+                     force=ARGS.force)
+    treewalk.set_loglevel(ARGS.loglevel)
+    circle.begin(treewalk)
+    treewalk.flushdb()
+
+    circle.finalize(cleanup=False)
+    total_sz = treewalk.epilogue()
+
+    pcp = FCP(circle, src, dest, treewalk = treewalk,
+              totalsize=total_sz, do_checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
+    set_adaptive_chunksize(pcp, total_sz)
+    circle.begin(pcp)
+
+    # cleanup the db trails
+    treewalk.cleanup()
+    pcp.cleanup()
+
+    # we hold this off until last
+    # since it is possible pcheck will need the database
+    # as well
+    # circle.finalize(cleanup=True)
+
+    return treewalk, pcp, total_sz
+
+def get_dbname():
+    global ARGS
+    name = None
+    if ARGS.checkpoint_id:
+        name = "workq.%s" % ARGS.checkpoint_id
+    elif ARGS.rid:
+        name = "workq.%s" % ARGS.rid[0]
+    else:
+        ts = utils.timestamp()
+        MPI.COMM_WORLD.bcast(ts)
+        name = "workq.%s" % ts
+    return name
+
+def tally_hosts():
+    """ How many physical hosts are there?
+    """
+    global NUM_OF_HOSTS
     localhost = MPI.Get_processor_name()
     hosts = MPI.COMM_WORLD.gather(localhost)
     if MPI.COMM_WORLD.rank == 0:
         NUM_OF_HOSTS = len(set(hosts))
     NUM_OF_HOSTS = MPI.COMM_WORLD.bcast(NUM_OF_HOSTS)
 
-    circle = Circle(reduce_interval=ARGS.reduce_interval)
-    circle.setLevel(logging.ERROR)
-    logger = utils.logging_init(logger, ARGS.loglevel)
 
-    if MPI.COMM_WORLD.rank == 0:
-        logger.debug(ARGS)
 
-    pcp = None
-    totalsize = None
+def main():
+
+    global ARGS, logger, circle
+    signal.signal(signal.SIGINT, sig_handler)
+
+    treewalk = None; pcp = None; totalsize = None
+
+    parse_and_bcast()
+    tally_hosts()
+    G.loglevel = ARGS.loglevel
+    G.use_store = ARGS.use_store
+    dbname = get_dbname()
 
     if ARGS.rid:
-        pcp, totalsize = main_resume(ARGS.rid[0])
+        circle = Circle(dbname=dbname, reduce_interval=ARGS.reduce_interval, resume=True)
     else:
-        treewalk, pcp, totalsize = main_start()
+        circle = Circle(dbname=dbname, reduce_interval=ARGS.reduce_interval)
+    circle.setLevel(logging.ERROR)
 
-    # pause
+
+    #
+    # TODO: there are some redundant code brought in by merging
+    #   memory/store-based checkpoint/restart, need to be refactored
+    #
+
+
+    if ARGS.rid:
+        if G.use_store:
+            pcp, totalsize = store_resume(ARGS.rid[0])
+        else:
+            treewalk, pcp, totalsize = mem_resume(ARGS.rid[0])
+    else:
+        if G.use_store:
+            treewalk, pcp, totalsize = store_start()
+        else:
+            treewalk, pcp, totalsize = mem_start()
 
     if ARGS.pause and ARGS.checksum:
         if circle.rank == 0:
@@ -673,8 +842,6 @@ def main():
         pcheck = PVerify(circle, pcp, totalsize)
         pcheck.setLevel(ARGS.loglevel)
         circle.begin(pcheck)
-        circle.finalize()
-
         tally = pcheck.fail_tally()
 
         if circle.rank == 0:
@@ -689,7 +856,20 @@ def main():
     if ARGS.fix_opt and treewalk and os.geteuid() == 0:
         fix_opt(treewalk)
 
-    pcp.epilogue()
+    if treewalk:
+        treewalk.cleanup()
+
+    if pcp:
+        pcp.epilogue()
+        pcp.cleanup()
+
+    # if circle:
+    #     circle.finalize(cleanup=True)
+    # TODO: a close file error can happen when circle.finalize()
+    #
+    if isinstance(circle.workq, DbStore):
+        circle.workq.cleanup()
+
 
 if __name__ == "__main__": main()
 

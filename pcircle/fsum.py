@@ -21,17 +21,15 @@ from cStringIO import StringIO
 from circle import Circle
 from _version import get_versions
 from task import BaseTask
-from utils import logging_init, bytes_fmt, timestamp2
+from utils import logging_init, bytes_fmt, timestamp2, conv_unit
 from fwalk import FWalk
 from cio import readn, writen
-from chunksum import ChunkSum
+from fdef import ChunkSum
+from globals import G
+
 
 logger = logging.getLogger("checksum")
 
-# 512 MiB = 536870912
-# 128 MiB = 134217728
-# 4 MiB = 4194304
-CHUNKSIZE = 536870912
 BLOCKSIZE = 4194304
 
 ARGS    = None
@@ -51,12 +49,15 @@ def parse_args():
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
+    parser.add_argument("--chunksize", metavar="sz", default="512m", help="chunk size (KB, MB, GB, TB), default: 512MB")
+    parser.add_argument("--use-store", action="store_true", help="Use persistent store")
+    parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
     return parser.parse_args()
 
 
 class Checksum(BaseTask):
-    def __init__(self, circle, treewalk, totalsize=0):
+    def __init__(self, circle, treewalk, chunksize, totalsize=0):
         global logger
         BaseTask.__init__(self, circle)
         self.circle = circle
@@ -64,6 +65,7 @@ class Checksum(BaseTask):
         self.totalsize = totalsize
         self.workcnt = 0
         self.chunkq = []
+        self.chunksize = chunksize
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
@@ -79,13 +81,18 @@ class Checksum(BaseTask):
 
     def create(self):
 
-        #if self.workq:  # restart
-        #    self.setq(self.workq)
-        #    return
+        if G.use_store:
+            while self.treewalk.flist.qsize > 0:
+                fitems, _ = self.treewalk.flist.mget(G.DB_BUFSIZE)
+                for fi in fitems:
+                    if stat.S_ISREG(fi.st_mode):
+                        self.enq_file(fi)  # where chunking takes place
+                self.treewalk.flist.mdel(G.DB_BUFSIZE)
 
-        for f in self.treewalk.flist:
-            if stat.S_ISREG(f[1]):
-                self.enq_file(f)
+        else:
+            for fi in self.treewalk.flist:
+                if stat.S_ISREG(fi.st_mode):
+                    self.enq_file(fi)
 
         # right after this, we do first checkpoint
 
@@ -98,41 +105,36 @@ class Checksum(BaseTask):
         f[0] path f[1] mode f[2] size - we enq all in one shot
         CMD = copy src  dest  off_start  last_chunk
         '''
-        chunks    = f[2] / CHUNKSIZE
-        remaining = f[2] % CHUNKSIZE
-
+        chunks = f.st_size / self.chunksize
+        remaining = f.st_size % self.chunksize
 
         workcnt = 0
 
-        if f[2] == 0: # empty file
-            ck = ChunkSum(f[0])
-            ck.off_start = 0
-            ck.length = 0
+        if f.st_size == 0: # empty file
+            ck = ChunkSum(f.path)
             self.enq(ck)
             logger.debug("%s" % ck, extra=self.d)
             workcnt += 1
         else:
             for i in range(chunks):
-                ck = ChunkSum(f[0])
-                ck.off_start = i * CHUNKSIZE
-                ck.length = CHUNKSIZE
+                ck = ChunkSum(f.path)
+                ck.offset = i * self.chunksize
+                ck.length = self.chunksize
                 self.enq(ck)
                 logger.debug("%s" % ck, extra=self.d)
             workcnt += chunks
 
         if remaining > 0:
             # send remainder
-            ck = ChunkSum(f[0])
-            ck.off_start = chunks * CHUNKSIZE
-            ck.length  = remaining
+            ck = ChunkSum(f.path)
+            ck.offset = chunks * self.chunksize
+            ck.length = remaining
             self.enq(ck)
             logger.debug("%s" % ck, extra=self.d)
             workcnt += 1
 
         # tally work cnt
         self.workcnt += workcnt
-
-
 
     def process(self):
         ck = self.deq()
@@ -143,7 +145,7 @@ class Checksum(BaseTask):
         chunk_digests = StringIO()
 
         fd = os.open(ck.filename, os.O_RDONLY)
-        os.lseek(fd, ck.off_start, os.SEEK_SET)
+        os.lseek(fd, ck.offset, os.SEEK_SET)
 
         for i in range(blocks):
             chunk_digests.write(hashlib.sha1(readn(fd, BLOCKSIZE)).hexdigest())
@@ -222,10 +224,6 @@ def export_checksum(chunks):
     ex_dir = os.path.dirname(fullpath)
     ex_path = os.path.join(ex_dir, ex_base)
 
-    # TODO: more metadata information
-    # out = {'chunks': chunks}
-    # out['path'] = ARGS.path
-
     for c in chunks:
         c.filename = os.path.relpath(c.filename, start=ARGS.path)
 
@@ -234,22 +232,46 @@ def export_checksum(chunks):
 
     return os.path.basename(ex_path)
 
+def parse_and_bcast():
+    global ARGS
+    parse_flags = True
+    if MPI.COMM_WORLD.rank == 0:
+        try:
+            ARGS = parse_args()
+        except:
+            parse_flags = False
+    parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
+    if parse_flags:
+        ARGS = MPI.COMM_WORLD.bcast(ARGS)
+    else:
+        sys.exit(0)
+
+    if MPI.COMM_WORLD.rank == 0:
+        logger.debug(ARGS)
+
+
 def main():
 
     global ARGS, logger
     signal.signal(signal.SIGINT, sig_handler)
 
     ARGS = parse_args()
+    parse_and_bcast()
+
     root = os.path.abspath(ARGS.path)
     circle = Circle(reduce_interval = ARGS.interval)
     logger = logging_init(logger, ARGS.loglevel)
+    chunksize = conv_unit(ARGS.chunksize)
+    G.use_store = ARGS.use_store
 
     fwalk = FWalk(circle, root)
     circle.begin(fwalk)
-    circle.finalize()
+    if G.use_store:
+        fwalk.flushdb()
     totalsize = fwalk.epilogue()
+    circle.finalize(reduce_interval = ARGS.interval)
 
-    fcheck = Checksum(circle, fwalk, totalsize)
+    fcheck = Checksum(circle, fwalk, chunksize, totalsize)
     fcheck.setLevel(ARGS.loglevel)
     circle.begin(fcheck)
     circle.finalize()
@@ -265,12 +287,13 @@ def main():
         sys.stdout.write("%s chunks\n" % len(chunks))
         sha1val = do_checksum(chunks)
         with open(ARGS.output, "w") as f:
-            f.write(sha1val + "\n")
+            f.write("chunksize: %s\n" % chunksize)
+            f.write("sha1: %s\n" % sha1val)
 
         print("\nSHA1: %s" % sha1val)
         print("Exporting singular signature to [%s]" % ARGS.output)
-        print("Exporting block signatures to [%s] \n" % export_checksum(chunks))
-
+        if ARGS.export_block_signatures:
+            print("Exporting block signatures to [%s] \n" % export_checksum(chunks))
 
     fcheck.epilogue()
 

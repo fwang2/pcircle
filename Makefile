@@ -5,10 +5,8 @@ SDIST=dist/$(NAME)-$(VERSION).tar.gz
 VENV=$(HOME)/app-pcircle
 
 
-#all: check test source deb
-all: source 
-
-dist: source deb
+all: source
+dist: source
 
 source:
 	$(PYTHON) setup.py sdist
@@ -19,11 +17,12 @@ deb:
 rpm:
 	$(PYTHON) setup.py bdist_rpm --post-install=rpm/postinstall --pre-uninstall=rpm/preuninstall
 
-reinstall: uninstall
-	$(PYTHON) setup.py install
 
 install:
-	$(PYTHON) setup.py install
+	# $(PYTHON) setup.py install
+	rm -rf dist
+	$(PYTHON) setup.py sdist
+	$(VENV)/bin/pip install $(SDIST)
 
 uninstall:
 	pip uninstall -y pcircle
@@ -44,7 +43,7 @@ upload:
 	$(PYTHON) setup.py bdist_wininst upload
 
 init:
-	pip install -r requirements.txt --use-mirrors
+	pip install -r requirements.txt --allow-all-external
 
 update:
 	rm ez_setup.py
@@ -54,17 +53,21 @@ daily:
 	$(PYTHON) setup.py bdist egg_info --tag-date
 
 deploy:
-	# make sdist
 	rm -rf dist
-	python setup.py sdist
-
-	# setup venv
+	$(PYTHON) setup.py sdist
 	rm -rf $(VENV)
 	virtualenv --no-site-packages $(VENV)
 	$(VENV)/bin/pip install $(SDIST)
 
+dev:
+	#rm -rf dist
+	#$(PYTHON) setup.py sdist
+	$(VENV)/bin/pip install -e .
+
 clean:
 	$(PYTHON) setup.py clean
-	rm -rf build/ MANIFEST dist build my_program.egg-info deb_dist
+	rm -rf build/ MANIFEST dist build pcircle.egg-info deb_dist
 	find . -name '*.pyc' -delete
+	find . -name '*.checksums' -delete
+	find . -name '*.sig' -delete
 

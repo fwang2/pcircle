@@ -1,6 +1,7 @@
 from task import BaseTask
 import logging
 from utils import logging_init, bytes_fmt
+from fdef import ChunkSum
 import hashlib
 from mpi4py import MPI
 
@@ -33,42 +34,39 @@ class PVerify(BaseTask):
 
     def create(self):
         logger.debug("Chunk count: %s" % len(self.pcp.checksum), extra=self.d)
-        for k, v in self.pcp.checksum.iteritems():
-            for chunk in v:
-                self.enq([k, chunk])
+        for ck in self.pcp.checksum:
+            self.enq(ck)
 
 
     def process(self):
-        work = self.deq()
-        src = work[0]
-        chunk = work[1] # offset, length, digest
-        logger.debug("process: %s -> %s" % (src, chunk), extra = self.d)
+        chunk = self.deq()
+        logger.debug("process: %s" % chunk, extra = self.d)
 
         fd = None
-        if src in self.fd_cache:
-            fd = self.fd_cache[src]
+        if chunk.filename in self.fd_cache:
+            fd = self.fd_cache[chunk.filename]
 
         if not fd:
             # need to open for read
             try:
-                fd = open(src, "rb")
+                fd = open(chunk.filename, "rb")
             except IOError as e:
                 logger.error(e)
                 self.failcnt += 1
                 return
 
-            self.fd_cache[src] = fd
+            self.fd_cache[chunk.filename] = fd
 
-        fd.seek(chunk[0])
-        digest = hashlib.sha1(fd.read(chunk[1])).hexdigest()
-        if digest != chunk[2]:
+        fd.seek(chunk.offset)
+        digest = hashlib.sha1(fd.read(chunk.length)).hexdigest()
+        if digest != chunk.digest:
             logger.error("Verification failed for %s \n src-digest: %s\n dst-digest: %s \n"
-                         % (src, chunk[2], digest), extra=self.d)
-            if src not in self.failed:
-                self.failed[src] = chunk[3]
+                         % (chunk.filename, chunk.digest, digest), extra=self.d)
+            if chunk.filename not in self.failed:
+                self.failed[chunk.filename] = chunk.digest
                 self.failcnt += 1
 
-        self.vsize += chunk[1]
+        self.vsize += chunk.length
 
     def fail_tally(self):
         total_fails = self.circle.comm.reduce(self.failcnt, op=MPI.SUM)

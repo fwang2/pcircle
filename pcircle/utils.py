@@ -5,9 +5,11 @@ import logging
 import re
 import os.path
 
-from globals import G
+from pcircle.globals import G
 
-def logging_init(logger, loglevel):
+__author__ = 'Feiyi Wang'
+
+def setlevel(logger, loglevel):
 
     numeric_level = getattr(logging, loglevel.upper(), None)
     if not isinstance(numeric_level, int):
@@ -15,13 +17,34 @@ def logging_init(logger, loglevel):
 
     logger.setLevel(level=numeric_level)
 
-    fmt = logging.Formatter(G.simple_fmt)
+def numeric_level(loglevel):
 
-    console = logging.StreamHandler()
-    console.setFormatter(fmt)
-    logger.addHandler(console)
+    level = getattr(logging, loglevel.upper(), None)
+    if not isinstance(level, int):
+        raise ValueError("Invalid log level: %s" % loglevel)
+    return level
 
-    return logger
+def getLogger(name, level=G.loglevel):
+
+    if not G.logger:
+        G.logger = logging.getLogger() # root logger
+        fmt = logging.Formatter(G.simple_fmt)
+
+        # console handler
+        console = logging.StreamHandler()
+        console.setLevel(numeric_level(level)) #
+        console.setFormatter(fmt)
+        G.logger.addHandler(console)
+
+        # file handler, honor request
+        fh = logging.FileHandler(G.logfile, "w")
+        fh.setLevel(numeric_level(level))
+        fh.setFormatter(fmt)
+        G.logger.addHandler(fh)
+
+
+    return logging.getLogger(name)
+
 
 def destpath(srcdir, destdir, srcfile):
     """
@@ -53,7 +76,7 @@ def conv_unit(s):
         u = items[1]
         return v * d[u]
 
-    return False
+    raise ValueError("Can't convert %s" % s)
 
 def bytes_fmt(n):
     d = {'1mb': 1048576,
@@ -120,10 +143,10 @@ class bcolors:
         self.ENDC = ''
 
 def hprint(msg):
-    print bcolors.INFO + msg + bcolors.ENDC
+    print(bcolors.INFO + msg + bcolors.ENDC)
 
 def eprint(msg):
-    print bcolors.FAIL + msg + bcolors.ENDC
+    print(bcolors.FAIL + msg + bcolors.ENDC)
 
 def timestamp():
     import time
@@ -133,3 +156,4 @@ def timestamp():
 def timestamp2():
     import time
     return time.strftime("%Y-%m-%d-%H%M%S")
+

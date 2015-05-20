@@ -1,4 +1,2 @@
 include versioneer.py
 include pcircle/*.py
-
-include pcircle/_version.py

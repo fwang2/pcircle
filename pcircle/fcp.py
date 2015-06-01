@@ -9,6 +9,7 @@ Author:
 from __future__ import print_function
 
 from mpi4py import MPI
+import time
 import stat
 import os
 import os.path
@@ -60,7 +61,7 @@ def parse_args():
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
 
     parser.add_argument("--force", action="store_true", help="force overwrite")
-    parser.add_argument("--pause", action="store_true", help="pause after copy, test only")
+    parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
     parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
 
     parser.add_argument("src", help="copy from")
@@ -656,9 +657,10 @@ def main():
 
     if ARGS.pause and ARGS.checksum:
         if circle.rank == 0:
-            raw_input("\n--> Press any key to continue ...\n")
+            # raw_input("\n--> Press any key to continue ...\n")
+            print("Pause, resume after %s seconds ..." % ARGS.pause)
             sys.stdout.flush()
-
+        time.sleep(ARGS.pause)
         circle.comm.Barrier()
 
     # third task

@@ -158,7 +158,8 @@ class FCP(BaseTask):
         else:
             self.chunksize = 512*MB
 
-        print("Adaptive chunksize: %s" %  bytes_fmt(self.chunksize))
+        if self.circle.rank == 0:
+            print("Adaptive chunksize: %s" %  bytes_fmt(self.chunksize))
 
     def set_checkpoint_interval(self, interval):
         self.checkpoint_interval = interval
@@ -254,26 +255,28 @@ class FCP(BaseTask):
 
     def do_open(self, k, d, flag, limit):
         """
-        :param k: key
-        :param d: dict
-        :return: file handle
+        :param k: the file path
+        :param d: dictionary of <path, file descriptor>
+        :return: file descriptor
         """
         if d.has_key(k):
             return d[k]
 
-        if len(d.keys()) < limit:
-            fd = os.open(k, flag)
-            if fd > 0: d[k] = fd
-            return fd
-        else:
+        if len(d.keys()) >= limit:
             # over the limit
             # clean up the least used
             old_k, old_v = d.items()[-1]
             logger.debug("Closing fd for %s" % old_k, extra=self.d)
             os.close(old_v)
 
+        fd = -1
+        try:
             fd = os.open(k, flag)
-            if fd > 0: d[k] = fd
+            if fd > 0:
+                d[k] = fd
+        except OSError as e:
+            logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
+        finally:
             return fd
 
     def do_mkdir(self, work):
@@ -291,6 +294,8 @@ class FCP(BaseTask):
             os.makedirs(basedir)
 
         rfd = self.do_open(src, self.rfd_cache, os.O_RDONLY, self._read_cache_limit)
+        if rfd < 0:
+            return
         wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT, self._write_cache_limit)
         if wfd < 0:
             if ARGS.force:

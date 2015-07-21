@@ -254,7 +254,7 @@ class FWalk(BaseTask):
     def reduce_report(self, buf):
         # progress report
         rate = (buf['cnt_files'] - self.last_cnt)/(MPI.Wtime() - self.last_reduce_time)
-        print("Processed objects: %s, estimated process rate: %d/s" % (buf['cnt_files'], rate))
+        print("Processed objects: %s, estimated processing rate: %d/s" % (buf['cnt_files'], rate))
         self.last_cnt = buf['cnt_files']
         self.last_reduce_time = MPI.Wtime()
 

@@ -363,8 +363,12 @@ class FCP(BaseTask):
         wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT, self._write_cache_limit)
         if wfd < 0:
             if ARGS.force:
-                os.unlink(dest)
-                wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY)
+                try:
+                    os.unlink(dest)
+                except:
+                    logger.error("Failed to unlink %s" % dest)
+                else:
+                    wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY)
             else:
                 logger.error("Failed to create output file %s" % dest, extra=self.d)
                 return
@@ -374,10 +378,10 @@ class FCP(BaseTask):
 
         # update tally
         self.cnt_filesize += work.length
-        logger.debug("transfer bytes %s" % self.cnt_filesize, extra=self.d)
 
-        #self.fini_cnt[src] += 1
-        #logger.debug("Inc workcnt for %s (workcnt=%s)" % (src, self.fini_cnt[src]), extra=self.d)
+        logger.debug("Transferred %s bytes from:\n [%s] to [%s]" %
+                     (self.cnt_filesize, src, dest), extra=self.d)
+
 
 
     def do_no_interrupt_checkpoint(self):

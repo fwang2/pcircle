@@ -2,8 +2,20 @@
 """
 PCP provides MPI-based parallel data transfer functionality.
 
-Author:
-    Feiyi Wang (fwang2@ornl.gov)
+Author: Feiyi Wang (fwang2@ornl.gov)
+
+Note on Logging:
+    1. Define global variable "logger"
+    2. Assign G.loglevel based on command line args
+    3. Assign G.logfile based on command line args
+    4. Assign "logger" with utils.getLogger(name, loglevel, logfile)
+       Here the logfile arg can be G.logfile
+
+    The logging will only write out ERROR messgage to console, the command line
+    --loglevel is for controling the loglevel of logfile
+
+    The logfile is per-rank, which could be problematic when it gets large.
+    A better solution remains to be found.
 
 """
 from __future__ import print_function
@@ -810,7 +822,7 @@ def main():
     G.use_store = ARGS.use_store
     dbname = get_dbname()
 
-    G.logfile = "pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
+    G.logfile = ".pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
     logger = utils.getLogger("fcp", ARGS.loglevel, G.logfile)
 
 

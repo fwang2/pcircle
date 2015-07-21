@@ -12,3 +12,4 @@ pcircle.egg-info
 MANIFEST
 .DS_Store
 test/*.sh
+.*

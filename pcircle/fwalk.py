@@ -295,7 +295,7 @@ def main():
     ARGS = parse_args()
     G.use_store = ARGS.use_store
     G.loglevel = ARGS.loglevel
-    G.logfile = "pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
+    G.logfile = ".pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
     logger = utils.getLogger("fwalk", ARGS.loglevel)
     root = os.path.abspath(ARGS.path)
     circle = Circle(reduce_interval = ARGS.interval)

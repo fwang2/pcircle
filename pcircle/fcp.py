@@ -64,7 +64,7 @@ def parse_args():
                 epilog="Please report issues to help@nccs.gov")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
-    parser.add_argument("--loglevel", default="info", help="log level for file, default INFO")
+    parser.add_argument("--loglevel", default="error", help="log level for file, default ERROR")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
     parser.add_argument("--reduce-interval", metavar="seconds", type=int, default=10, help="interval, default 10s")
@@ -359,19 +359,20 @@ class FCP(BaseTask):
 
         rfd = self.do_open(src, self.rfd_cache, os.O_RDONLY, self._read_cache_limit)
         if rfd < 0:
-            return
+            return False
         wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT, self._write_cache_limit)
         if wfd < 0:
             if ARGS.force:
                 try:
                     os.unlink(dest)
                 except:
-                    logger.error("Failed to unlink %s" % dest)
+                    logger.error("Failed to unlink %s, skipping ... " % dest)
+                    return False
                 else:
                     wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY)
             else:
                 logger.error("Failed to create output file %s" % dest, extra=self.d)
-                return
+                return False
 
         # do the actual copy
         self.write_bytes(rfd, wfd, work)
@@ -379,10 +380,10 @@ class FCP(BaseTask):
         # update tally
         self.cnt_filesize += work.length
 
-        logger.debug("Transferred %s bytes from:\n [%s] to [%s]" %
+        logger.debug("Transferred %s bytes from:\n\t [%s] to [%s]" %
                      (self.cnt_filesize, src, dest), extra=self.d)
 
-
+        return True
 
     def do_no_interrupt_checkpoint(self):
         a = Thread(target=self.do_checkpoint)
@@ -412,6 +413,7 @@ class FCP(BaseTask):
             curtime = MPI.Wtime()
             if curtime - self.checkpoint_last > self.checkpoint_interval:
                 self.do_no_interrupt_checkpoint()
+                logger.info("Checkpointing done ...")
                 self.checkpoint_last = curtime
 
         work = self.deq()

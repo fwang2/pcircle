@@ -9,14 +9,6 @@ from pcircle.globals import G
 
 __author__ = 'Feiyi Wang'
 
-def setlevel(logger, loglevel):
-
-    numeric_level = getattr(logging, loglevel.upper(), None)
-    if not isinstance(numeric_level, int):
-        raise ValueError("Invalid log level: %s" % loglevel)
-
-    logger.setLevel(level=numeric_level)
-
 def numeric_level(loglevel):
 
     level = getattr(logging, loglevel.upper(), None)
@@ -24,27 +16,31 @@ def numeric_level(loglevel):
         raise ValueError("Invalid log level: %s" % loglevel)
     return level
 
-def getLogger(name, level=G.loglevel):
 
-    if not G.logger:
-        G.logger = logging.getLogger() # root logger
-        fmt = logging.Formatter(G.simple_fmt)
-
-        # console handler
-        console = logging.StreamHandler()
-        console.setLevel(numeric_level(level)) #
-        console.setFormatter(fmt)
-        G.logger.addHandler(console)
-
+def getLogger(name, level, logfile=None):
+    """
+    :param name: logger name
+    :param level: string value e.g. "error"
+    :param logfile: destination file, optional
+    :return: logger
+    """
+    simple_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logger = logging.getLogger(name)
+    ll = numeric_level(level)
+    logger.setLevel(ll)
+    # console handler
+    console = logging.StreamHandler()
+    console.setLevel(logging.ERROR)  #
+    console.setFormatter(logging.Formatter(simple_fmt))
+    logger.addHandler(console)
+    if logfile:
         # file handler, honor request
-        fh = logging.FileHandler(G.logfile, "w")
-        fh.setLevel(numeric_level(level))
-        fh.setFormatter(fmt)
-        G.logger.addHandler(fh)
+        fh = logging.FileHandler(logfile, mode="a")
+        fh.setLevel(ll)
+        fh.setFormatter(logging.Formatter(simple_fmt))
+        logger.addHandler(fh)
 
-
-    return logging.getLogger(name)
-
+    return logger
 
 def destpath(srcdir, destdir, srcfile):
     """

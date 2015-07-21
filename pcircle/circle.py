@@ -29,8 +29,7 @@ class Circle:
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
-
-        self.logger = getLogger(__name__, G.loglevel)
+        self.logger = getLogger("pcircle", G.loglevel)
 
         # debug
         self.d = {"rank" : "rank %s" % self.rank}

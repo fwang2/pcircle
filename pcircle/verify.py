@@ -1,6 +1,6 @@
 from task import BaseTask
 import logging
-from utils import logging_init, bytes_fmt
+from utils import bytes_fmt
 from fdef import ChunkSum
 import hashlib
 from mpi4py import MPI

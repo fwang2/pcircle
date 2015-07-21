@@ -28,7 +28,7 @@ class G:
     KEY = "key"
     VAL = "val"
     logger = None
-    logfile = "pcircle.log"
+    logfile = None
     loglevel = "error"
     use_store = False
     DB_BUFSIZE = 10000

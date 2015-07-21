@@ -5,10 +5,11 @@ from task import BaseTask
 from circle import Circle
 from globals import G
 from mpi4py import MPI
-from utils import getLogger, bytes_fmt,destpath
+from utils import timestamp,bytes_fmt,destpath
 from dbstore import DbStore
 from fdef import FileItem
 from scandir import scandir
+import utils
 
 import stat
 import os
@@ -21,8 +22,8 @@ import xattr
 from _version import get_versions
 
 ARGS = None
-logger = None
 __version__ = get_versions()['version']
+logger = None
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fwalk")
@@ -36,6 +37,8 @@ def parse_args():
 class FWalk(BaseTask):
     def __init__(self, circle, src, dest=None, preserve=False, force=False):
         BaseTask.__init__(self, circle)
+        global logger
+
         self.circle = circle
         self.src = src
         self.dest = dest
@@ -69,6 +72,8 @@ class FWalk(BaseTask):
 
         self.time_started = MPI.Wtime()
         self.time_ended = None
+
+        logger = utils.getLogger("fwalk", G.loglevel, G.logfile)
 
     def create(self):
         if self.circle.rank == 0:
@@ -290,7 +295,8 @@ def main():
     ARGS = parse_args()
     G.use_store = ARGS.use_store
     G.loglevel = ARGS.loglevel
-    logger = getLogger(__name__)
+    G.logfile = "pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
+    logger = utils.getLogger("fwalk", ARGS.loglevel)
     root = os.path.abspath(ARGS.path)
     circle = Circle(reduce_interval = ARGS.interval)
 
@@ -303,6 +309,7 @@ def main():
     treewalk.epilogue()
     treewalk.cleanup()
     circle.finalize()
+
 
 if __name__ == "__main__": main()
 

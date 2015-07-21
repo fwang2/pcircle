@@ -42,7 +42,7 @@ __version__ = get_versions()['version']
 del get_versions
 
 ARGS = None
-logger = logging.getLogger("fcp")
+logger = None
 circle = None
 NUM_OF_HOSTS = 0
 
@@ -312,16 +312,21 @@ class FCP(BaseTask):
             # over the limit
             # clean up the least used
             old_k, old_v = d.items()[-1]
-            logger.debug("Closing fd for %s" % old_k, extra=self.d)
-            os.close(old_v)
+            try:
+                os.close(old_v)
+            except OSError as e:
+                logger.error("FD for %s not valid when closing" % old_k, extra=self.d)
+            else:
+                logger.debug("Closing fd for %s" % old_k, extra=self.d)
 
         fd = -1
         try:
             fd = os.open(k, flag)
-            if fd > 0:
-                d[k] = fd
         except OSError as e:
             logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
+        else:
+            if fd > 0:
+                d[k] = fd
         finally:
             return fd
 
@@ -547,7 +552,7 @@ def mem_start():
 
     treewalk = FWalk(circle, src, dest, preserve = ARGS.preserve,
                      force=ARGS.force)
-    treewalk.set_loglevel(ARGS.loglevel)
+    # treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.reduce_interval)
     tsz = treewalk.epilogue()
@@ -687,8 +692,8 @@ def parse_and_bcast():
     else:
         sys.exit(0)
 
-    if MPI.COMM_WORLD.rank == 0:
-        logger.debug(ARGS)
+    if MPI.COMM_WORLD.rank == 0 and ARGS.loglevel == "debug":
+        print("ARGUMENT DEBUG: %s", ARGS)
 
 
 def store_resume(rid):
@@ -805,12 +810,14 @@ def main():
     G.use_store = ARGS.use_store
     dbname = get_dbname()
 
+    G.logfile = "pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
+    logger = utils.getLogger("fcp", ARGS.loglevel, G.logfile)
+
+
     if ARGS.rid:
         circle = Circle(dbname=dbname, reduce_interval=ARGS.reduce_interval, resume=True)
     else:
         circle = Circle(dbname=dbname, reduce_interval=ARGS.reduce_interval)
-    circle.setLevel(logging.ERROR)
-
 
     #
     # TODO: there are some redundant code brought in by merging

@@ -64,7 +64,7 @@ def parse_args():
                 epilog="Please report issues to help@nccs.gov")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
-    parser.add_argument("--loglevel", default="ERROR", help="log level, default ERROR")
+    parser.add_argument("--loglevel", default="info", help="log level for file, default INFO")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
     parser.add_argument("--reduce-interval", metavar="seconds", type=int, default=10, help="interval, default 10s")
@@ -157,7 +157,7 @@ class FCP(BaseTask):
         if self.circle.rank == 0:
             print("Start copying process ...")
 
-    def set_chunksize(self, sz):
+    def set_fixed_chunksize(self, sz):
         self.chunksize = sz
 
     def set_adaptive_chunksize(self, totalsz):
@@ -261,6 +261,7 @@ class FCP(BaseTask):
         # save work cnt
         self.workcnt += workcnt
 
+        logger.info("enq_file: %s, size = %s, workcnt = %s" %(fi.path, fi.st_size, workcnt))
 
     def handle_fitem(self, fi):
         if os.path.islink(fi.path):
@@ -327,7 +328,7 @@ class FCP(BaseTask):
             try:
                 os.close(old_v)
             except OSError as e:
-                logger.error("FD for %s not valid when closing" % old_k, extra=self.d)
+                logger.warn("FD for %s not valid when closing" % old_k, extra=self.d)
             else:
                 logger.debug("Closing fd for %s" % old_k, extra=self.d)
 
@@ -549,12 +550,12 @@ def check_path(circ, isrc, idest):
     # should not come to this point
     raise
 
-def set_adaptive_chunksize(pcp, tsz):
+def set_chunksize(pcp, tsz):
 
     if ARGS.adaptive:
         pcp.set_adaptive_chunksize(tsz)
     else:
-        pcp.set_chunksize(utils.conv_unit(ARGS.chunksize))
+        pcp.set_fixed_chunksize(utils.conv_unit(ARGS.chunksize))
 
 def mem_start():
     global circle
@@ -564,7 +565,6 @@ def mem_start():
 
     treewalk = FWalk(circle, src, dest, preserve = ARGS.preserve,
                      force=ARGS.force)
-    # treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.reduce_interval)
     tsz = treewalk.epilogue()
@@ -572,7 +572,7 @@ def mem_start():
     pcp = FCP(circle, src, dest, treewalk = treewalk,
               totalsize=tsz, do_checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
 
-    set_adaptive_chunksize(pcp, tsz)
+    set_chunksize(pcp, tsz)
 
     pcp.checkpoint_interval = ARGS.checkpoint_interval
 
@@ -660,7 +660,7 @@ def mem_resume(rid):
               workq = cobj.workq,
               hostcnt = NUM_OF_HOSTS)
 
-    set_adaptive_chunksize(pcp, tsz)
+    set_chunksize(pcp, tsz)
 
     pcp.checkpoint_interval = ARGS.checkpoint_interval
     if rid:
@@ -746,7 +746,7 @@ def store_resume(rid):
 
     pcp.checkpoint_file = chk_file
 
-    set_adaptive_chunksize(pcp, tsz)
+    set_chunksize(pcp, tsz)
     circle.begin(pcp)
     circle.finalize(cleanup=True)
 
@@ -770,7 +770,7 @@ def store_start():
 
     pcp = FCP(circle, src, dest, treewalk = treewalk,
               totalsize=total_sz, do_checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
-    set_adaptive_chunksize(pcp, total_sz)
+    set_chunksize(pcp, total_sz)
     circle.begin(pcp)
 
     # cleanup the db trails

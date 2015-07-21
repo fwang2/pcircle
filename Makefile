@@ -70,4 +70,4 @@ clean:
 	find . -name '*.pyc' -delete
 	find . -name '*.checksums' -delete
 	find . -name '*.sig' -delete
-
+	find . -name '*.log' -delete

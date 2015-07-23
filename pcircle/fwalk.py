@@ -24,6 +24,7 @@ from _version import get_versions
 ARGS = None
 __version__ = get_versions()['version']
 logger = None
+taskloads = []
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fwalk")
@@ -263,10 +264,12 @@ class FWalk(BaseTask):
         pass
 
     def total_tally(self):
+        global taskloads
         # self.summarize()
         total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
         total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
         total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
+        taskloads = self.circle.comm.gather(self.reduce_items)
         return total_dirs, total_files, total_filesize
 
     def epilogue(self):
@@ -281,6 +284,8 @@ class FWalk(BaseTask):
             print("File size: %s" % bytes_fmt(total_filesize))
             print("Tree talk time: %.2f seconds" % (self.time_ended - self.time_started))
             print("")
+            print("Task Loads: %s" % taskloads)
+
         return total_filesize
 
 

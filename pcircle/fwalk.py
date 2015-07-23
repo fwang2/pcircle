@@ -283,8 +283,8 @@ class FWalk(BaseTask):
             print("File count: %s" % total_files)
             print("File size: %s" % bytes_fmt(total_filesize))
             print("Tree talk time: %.2f seconds" % (self.time_ended - self.time_started))
+            print("FWALK Loads: %s" % taskloads)
             print("")
-            print("Task Loads: %s" % taskloads)
 
         return total_filesize
 

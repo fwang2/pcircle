@@ -57,6 +57,7 @@ ARGS = None
 logger = None
 circle = None
 NUM_OF_HOSTS = 0
+taskloads = []
 
 def parse_args():
 
@@ -139,7 +140,8 @@ class FCP(BaseTask):
         self.d = {"rank": "rank %s" % circle.rank}
         self.wtime_started = MPI.Wtime()
         self.wtime_ended = None
-        self.workcnt = 0
+        self.workcnt = 0            # this is the cnt for the enqued items
+        self.reduce_items = 0       # this is the cnt for processed items
         if self.treewalk:
             logger.debug("treewalk files = %s" % treewalk.flist, extra=self.d)
 
@@ -407,7 +409,8 @@ class FCP(BaseTask):
 
     def process(self):
         """
-        The only work is "copy", TODO: clean up other actions such as mkdir/fini_check
+        The only work is "copy"
+        TODO: clean up other actions such as mkdir/fini_check
         """
         if not G.use_store:
             curtime = MPI.Wtime()
@@ -417,6 +420,7 @@ class FCP(BaseTask):
                 self.checkpoint_last = curtime
 
         work = self.deq()
+        self.reduce_items += 1
         if work.cmd == 'copy':
             self.do_copy(work)
         else:
@@ -450,7 +454,9 @@ class FCP(BaseTask):
         pass
 
     def epilogue(self):
+        global taskloads
         self.wtime_ended = MPI.Wtime()
+        taskloads = self.circle.comm.gather(self.reduce_items)
         if self.circle.rank == 0:
             print("")
             if self.totalsize == 0: return
@@ -458,6 +464,7 @@ class FCP(BaseTask):
             rate = float(self.totalsize)/time
             print("Copy Job Completed In: %.2f seconds" % (time))
             print("Average Transfer Rate: %s/s\n" % bytes_fmt(rate))
+            print("FCP Loads: %s" % taskloads)
 
     def read_then_write(self, rfd, wfd, work, num_of_bytes, m):
         buf = None

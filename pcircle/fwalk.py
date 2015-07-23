@@ -36,7 +36,7 @@ def parse_args():
     return parser.parse_args()
 
 class FWalk(BaseTask):
-    def __init__(self, circle, src, dest=None, preserve=False, force=False):
+    def __init__(self, circle, src, dest=None, preserve=False, force=False, sizeonly=True):
         BaseTask.__init__(self, circle)
         global logger
 
@@ -45,6 +45,7 @@ class FWalk(BaseTask):
         self.dest = dest
         self.preserve = preserve
         self.force = force
+        self.sizeonly = sizeonly
 
         self.workdir = os.getcwd()
         self.tempdir = os.path.join(self.workdir, ".pcircle")
@@ -139,13 +140,18 @@ class FWalk(BaseTask):
             return False
 
         # well, destination exists, now we have to check
-        if filecmp.cmp(src_file, dest_file):
+        if self.sizeonly:
+            if os.path.getsize(src_file) == os.path.getsize(dest_file):
+                logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file))
+                return True
+        elif filecmp.cmp(src_file, dest_file):
             logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file))
             return True
-        else:
-            logger.warn("Retransfer: %s" % src_file)
-            os.unlink(dest_file)
-            return False
+
+        # check failed
+        logger.warn("Retransfer: %s" % src_file)
+        os.unlink(dest_file)
+        return False
 
     def process_retired(self):
         ''' process a work unit, spath, dpath refers to
@@ -206,8 +212,6 @@ class FWalk(BaseTask):
             self.reduce_items += 1
 
             if stat.S_ISREG(st.st_mode):
-                self.cnt_files += 1
-                self.cnt_filesize += fitem.st_size
 
                 if not self.dest:
                     self.append_fitem(fitem)
@@ -215,12 +219,16 @@ class FWalk(BaseTask):
                     # self.dest specified, need to check if it is there
                     dpath = destpath(self.src, self.dest, spath)
                     flag = self.check_dest_exists(spath, dpath)
-                    if not flag:
+                    if flag:
+                        return
+                    else:
                         # if src and dest not the same
                         # including the case dest is not there
                         # then we do the following
                         self.append_fitem(fitem)
                         self.do_metadata_preserve(spath, dpath)
+                self.cnt_files += 1
+                self.cnt_filesize += fitem.st_size
 
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1

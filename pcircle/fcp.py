@@ -77,6 +77,8 @@ def parse_args():
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
 
     parser.add_argument("--force", action="store_true", help="force overwrite")
+    parser.add_argument("--sizeonly", action="store_true", help="compare file by size")
+
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
     parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
 
@@ -577,7 +579,8 @@ def mem_start():
     dest = check_path(circle, src, dest)
 
     treewalk = FWalk(circle, src, dest, preserve = ARGS.preserve,
-                     force=ARGS.force)
+                     force=ARGS.force, sizeonly=ARGS.sizeonly)
+
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.reduce_interval)
     tsz = treewalk.epilogue()
@@ -773,7 +776,8 @@ def store_start():
     dest = check_path(circle, src, dest)
 
     treewalk = FWalk(circle, src, dest, preserve = ARGS.preserve,
-                     force=ARGS.force)
+                     force=ARGS.force, sizeonly=ARGS.sizeonly)
+
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     treewalk.flushdb()

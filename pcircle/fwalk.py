@@ -250,21 +250,25 @@ class FWalk(BaseTask):
         buf['cnt_files'] = self.cnt_files
         buf['cnt_dirs'] = self.cnt_dirs
         buf['cnt_filesize'] = self.cnt_filesize
-
+        buf['reduce_items'] = self.reduce_items
 
 
     def reduce(self, buf1, buf2):
         buf1['cnt_dirs'] += buf2['cnt_dirs']
         buf1['cnt_files'] += buf2['cnt_files']
         buf1['cnt_filesize'] += buf2['cnt_filesize']
-
+        buf1['reduce_items'] += buf2['reduce_items']
         return buf1
 
     def reduce_report(self, buf):
         # progress report
-        rate = (buf['cnt_files'] - self.last_cnt)/(MPI.Wtime() - self.last_reduce_time)
-        print("Processed objects: %s, estimated processing rate: %d/s" % (buf['cnt_files'], rate))
-        self.last_cnt = buf['cnt_files']
+        # rate = (buf['cnt_files'] - self.last_cnt)/(MPI.Wtime() - self.last_reduce_time)
+        # print("Processed objects: %s, estimated processing rate: %d/s" % (buf['cnt_files'], rate))
+        # self.last_cnt = buf['cnt_files']
+
+        rate = (buf['reduce_items'] - self.last_cnt)/(MPI.Wtime() - self.last_reduce_time)
+        print("Processed objects: %s, estimated processing rate: %d/s" % (buf['reduce_items'], rate))
+        self.last_cnt = buf['reduce_items']
         self.last_reduce_time = MPI.Wtime()
 
     def reduce_finish(self, buf):

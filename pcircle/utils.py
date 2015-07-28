@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import time
 import itertools
@@ -153,3 +154,24 @@ def timestamp2():
     import time
     return time.strftime("%Y-%m-%d-%H%M%S")
 
+
+def breakline(line, size=60, minsz=10):
+    ret = ''
+    total = len(line)
+    if total <= size:
+        return line
+
+    while total > size:
+        ret += line[0:size]
+        ret += ' \ \n    '
+        total -= size
+        line = line[size:]
+
+    if total < minsz:
+        return ret[:-8] + line[:]
+    else:
+        return ret + line[:]
+
+def print_cmdline():
+    cmdline = " ".join(sys.argv[:])
+    print("Command Line:\t", breakline(cmdline), "\n")

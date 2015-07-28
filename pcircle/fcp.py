@@ -848,6 +848,9 @@ def main():
     else:
         circle = Circle(dbname=dbname, reduce_interval=ARGS.reduce_interval)
 
+    if circle.rank == 0:
+        utils.print_cmdline()
+
     #
     # TODO: there are some redundant code brought in by merging
     #   memory/store-based checkpoint/restart, need to be refactored

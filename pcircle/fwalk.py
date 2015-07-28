@@ -14,7 +14,7 @@ import utils
 import stat
 import os
 import os.path
-import logging
+import sys
 import argparse
 import filecmp
 
@@ -316,6 +316,8 @@ def main():
     logger = utils.getLogger("fwalk", ARGS.loglevel)
     root = os.path.abspath(ARGS.path)
     circle = Circle(reduce_interval = ARGS.interval)
+    if circle.rank == 0:
+        utils.print_cmdline()
 
     treewalk = FWalk(circle, root)
     circle.begin(treewalk)

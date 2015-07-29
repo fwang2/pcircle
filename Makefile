@@ -71,3 +71,4 @@ clean:
 	find . -name '*.checksums' -delete
 	find . -name '*.sig' -delete
 	find . -name '*.log' -delete
+	find . -name '*pcp_workq*' -delete

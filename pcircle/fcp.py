@@ -168,9 +168,9 @@ class FCP(BaseTask):
         MB = 1024*1024
         TB = 1024*1024*1024*1024
         if totalsz < 10*TB:
-            self.chunksize = MB
+            self.chunksize = 16*MB
         elif totalsz < 100*TB:
-            self.chunksize = 32*MB
+            self.chunksize = 64*MB
         elif totalsz < 512*TB:
             self.chunksize = 128*MB
         elif totalsz < 1024*TB:

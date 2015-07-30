@@ -109,11 +109,15 @@ class FWalk(BaseTask):
                 self.copy_xattr(i_dir, o_dir)
 
         count = 0
-
-        for entry in scandir(i_dir):
-            # entry.path should be equivalent to:
-            # self.circle.enq(FileItem(os.path.join(i_dir, entry.name)))
-            self.circle.enq(FileItem(entry.path))
+        try:
+            entries = scandir(i_dir)
+        except OSError as e:
+            logger.error("%s, skipping." % e.msg)
+        else:
+            for entry in entries:
+                # entry.path should be equivalent to:
+                # self.circle.enq(FileItem(os.path.join(i_dir, entry.name)))
+                self.circle.enq(FileItem(entry.path))
 
 
     def do_metadata_preserve(self, src_file, dest_file):

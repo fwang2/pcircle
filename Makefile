@@ -64,6 +64,7 @@ dev:
 	rm -rf $(VDEV)
 	$(PYTHON) setup.py sdist
 	virtualenv --no-site-packages $(VDEV)
+	$(VDEV)/bin/pip install flake8
 	$(VDEV)/bin/pip install -e .
 
 clean:

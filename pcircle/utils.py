@@ -5,6 +5,7 @@ import itertools
 import logging
 import re
 import os.path
+import traceback
 
 from pcircle.globals import G
 
@@ -175,3 +176,12 @@ def breakline(line, size=60, minsz=10):
 def print_cmdline():
     cmdline = " ".join(sys.argv[:])
     print("Command Line:\t", breakline(cmdline), "\n")
+
+def emsg(e):
+    '''
+    Exception string: filename, line no, error type, error message
+    '''
+
+    top = traceback.extract_stack()[-2]
+    return ', '.join([os.path.basename(top[0]), 'Line ' + str(top[1]),
+        type(e).__name__ + ': ' + str(e)])

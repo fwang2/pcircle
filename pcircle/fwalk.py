@@ -112,7 +112,7 @@ class FWalk(BaseTask):
         try:
             entries = scandir(i_dir)
         except OSError as e:
-            logger.error("%s, skipping." % e.msg)
+            logger.warn("%s, skipping %s." % (utils.emsg(e), i_dir))
         else:
             for entry in entries:
                 # entry.path should be equivalent to:

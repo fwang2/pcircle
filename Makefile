@@ -3,7 +3,7 @@ NAME=`python setup.py --name`
 VERSION=`python setup.py --version`
 SDIST=dist/$(NAME)-$(VERSION).tar.gz
 VENV=$(HOME)/app-pcircle
-
+VDEV=$(HOME)/app-pcircle-dev
 
 all: source
 dist: source
@@ -59,10 +59,12 @@ deploy:
 	virtualenv --no-site-packages $(VENV)
 	$(VENV)/bin/pip install $(SDIST)
 
-dev:
-	#rm -rf dist
-	#$(PYTHON) setup.py sdist
-	$(VENV)/bin/pip install -e .
+dev:	
+	rm -rf dist
+	rm -rf $(VDEV)
+	$(PYTHON) setup.py sdist
+	virtualenv --no-site-packages $(VDEV)
+	$(VDEV)/bin/pip install -e .
 
 clean:
 	$(PYTHON) setup.py clean

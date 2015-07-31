@@ -116,7 +116,9 @@ class FWalk(BaseTask):
         try:
             entries = scandir(i_dir)
         except OSError as e:
-            logger.warn("%s, skipping %s." % (e, i_dir))
+            logger.warn(e)
+            self.skipped += 1
+
         else:
             for entry in entries:
                 # entry.path should be equivalent to:
@@ -186,6 +188,7 @@ class FWalk(BaseTask):
                 st = os.stat(spath)
             except OSError as e:
                 logger.warn(e, extra=self.d)
+                self.skipped += 1
                 return False
 
             fitem = FileItem(spath, st_mode=st.st_mode,

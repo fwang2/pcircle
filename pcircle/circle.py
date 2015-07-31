@@ -12,29 +12,23 @@ from pcircle.globals import T, G
 from pcircle.dbstore import DbStore
 from pcircle.utils import getLogger
 
-# NOT IN USE
-logger = None
-
 DB_BUFSIZE = 10000
 
-class Token:
-    pass
-
 class Circle:
+
     def __init__(self, name="Circle Work Comm", split="equal",
                 reduce_interval=10, k=2,
                 dbname=None, resume=False):
 
-        global logger
+        self.logger = getLogger(__name__)
 
         random.seed()  # use system time to seed
 
-        self.comm = MPI.COMM_WORLD.Dup()
+        #self.comm = MPI.COMM_WORLD.Dup()
+        self.comm = MPI.COMM_WORLD
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
-
-        self.logger = getLogger("pcircle", G.loglevel)
 
         # debug
         self.d = {"rank" : "rank %s" % self.rank}

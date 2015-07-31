@@ -29,6 +29,6 @@ class G:
     VAL = "val"
     logger = None
     logfile = None
-    loglevel = "error"
+    loglevel = "debug"
     use_store = False
     DB_BUFSIZE = 10000

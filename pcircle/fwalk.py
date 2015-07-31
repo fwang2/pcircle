@@ -38,7 +38,7 @@ def parse_args():
 class FWalk(BaseTask):
     def __init__(self, circle, src, dest=None, preserve=False, force=False, sizeonly=True):
         BaseTask.__init__(self, circle)
-        global logger
+
 
         self.circle = circle
         self.src = src
@@ -79,7 +79,7 @@ class FWalk(BaseTask):
         self.time_started = MPI.Wtime()
         self.time_ended = None
 
-        logger = utils.getLogger("fwalk", G.loglevel, G.logfile)
+        self.logger = utils.getLogger(__name__)
 
     def create(self):
         if self.circle.rank == 0:
@@ -107,7 +107,7 @@ class FWalk(BaseTask):
             try:
                 os.mkdir(o_dir, stat.S_IRWXU)
             except OSError as e:
-                logger.warn("Skipping creation of %s" % o_dir)
+                self.logger.warn("Skipping creation of %s" % o_dir)
 
             if self.preserve:
                 self.copy_xattr(i_dir, o_dir)
@@ -116,7 +116,7 @@ class FWalk(BaseTask):
         try:
             entries = scandir(i_dir)
         except OSError as e:
-            logger.warn(e)
+            self.logger.warn(e)
             self.skipped += 1
 
         else:
@@ -131,7 +131,7 @@ class FWalk(BaseTask):
             try:
                 os.mknod(dest_file, stat.S_IRWXU | stat.S_IFREG)
             except OSError as e:
-                logger.warn("failed to mknod() for %s", dest_file, extra=self.d)
+                self.logger.warn("failed to mknod() for %s", dest_file, extra=self.d)
             else:
                 self.copy_xattr(src_file, dest_file)
 
@@ -152,14 +152,14 @@ class FWalk(BaseTask):
         # well, destination exists, now we have to check
         if self.sizeonly:
             if os.path.getsize(src_file) == os.path.getsize(dest_file):
-                logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file))
+                self.logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file))
                 return True
         elif filecmp.cmp(src_file, dest_file):
-            logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file))
+            self.logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file))
             return True
 
         # check failed
-        logger.warn("Retransfer: %s" % src_file)
+        self.logger.warn("Retransfer: %s" % src_file)
         os.unlink(dest_file)
         return False
 
@@ -177,17 +177,17 @@ class FWalk(BaseTask):
         ''' process a work unit, spath, dpath refers to
             source and destination respectively
         '''
-        logger.info("q length = %s" % self.circle.qsize())
+        self.logger.info("q length = %s" % self.circle.qsize())
 
         fitem = self.circle.deq()
         spath = fitem.path
 
-        logger.debug("process: %s" %  spath, extra=self.d)
+        self.logger.debug("process: %s" %  spath, extra=self.d)
         if spath:
             try:
                 st = os.stat(spath)
             except OSError as e:
-                logger.warn(e, extra=self.d)
+                self.logger.warn(e, extra=self.d)
                 self.skipped += 1
                 return False
 
@@ -305,8 +305,7 @@ def main():
     ARGS = parse_args()
     G.use_store = ARGS.use_store
     G.loglevel = ARGS.loglevel
-    G.logfile = ".pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
-    logger = utils.getLogger("fwalk", ARGS.loglevel)
+    logger = utils.getLogger(__name__)
     root = os.path.abspath(ARGS.path)
     root = os.path.realpath(root)
     if not os.path.exists(root):

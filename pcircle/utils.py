@@ -19,28 +19,14 @@ def numeric_level(loglevel):
     return level
 
 
-def getLogger(name, level, logfile=None):
-    """
-    :param name: logger name
-    :param level: string value e.g. "error"
-    :param logfile: destination file, optional
-    :return: logger
-    """
-    simple_fmt = '%(asctime)s - %(filename)s:%(lineno)d - %(message)s'
+def getLogger(name, logfile=None):
     logger = logging.getLogger(name)
-    ll = numeric_level(level)
+    ll = numeric_level(G.loglevel)
     logger.setLevel(ll)
     # console handler
-    console = logging.StreamHandler()
-    console.setLevel(logging.ERROR)  #
-    console.setFormatter(logging.Formatter(simple_fmt))
-    logger.addHandler(console)
-    if logfile:
-        # file handler, honor request
-        fh = logging.FileHandler(logfile, mode="a")
-        fh.setLevel(ll)
-        fh.setFormatter(logging.Formatter(simple_fmt))
-        logger.addHandler(fh)
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter(G.simple_fmt))
+    logger.addHandler(ch)
 
     return logger
 

@@ -177,7 +177,7 @@ class FWalk(BaseTask):
         ''' process a work unit, spath, dpath refers to
             source and destination respectively
         '''
-        self.logger.info("q length = %s" % self.circle.qsize())
+        self.logger.info("q length = %s" % self.circle.qsize(), extra=self.d)
 
         fitem = self.circle.deq()
         spath = fitem.path

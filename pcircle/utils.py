@@ -25,7 +25,7 @@ def getLogger(name, logfile=None):
     logger.setLevel(ll)
     # console handler
     ch = logging.StreamHandler()
-    ch.setFormatter(logging.Formatter(G.simple_fmt))
+    ch.setFormatter(logging.Formatter(G.fmt1))
     logger.addHandler(ch)
 
     return logger

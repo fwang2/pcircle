@@ -3,7 +3,7 @@ NAME=`python setup.py --name`
 VERSION=`python setup.py --version`
 SDIST=dist/$(NAME)-$(VERSION).tar.gz
 VENV=$(HOME)/app-pcircle
-VDEV=$(HOME)/app-pcircle-dev
+VDEV=$(HOME)/dev-pcircle
 
 all: source
 dist: source

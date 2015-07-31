@@ -308,6 +308,13 @@ def main():
     G.logfile = ".pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
     logger = utils.getLogger("fwalk", ARGS.loglevel)
     root = os.path.abspath(ARGS.path)
+    root = os.path.realpath(root)
+    if not os.path.exists(root):
+        if MPI.COMM_WORLD.Get_rank() == 0:
+            print("Root path: %s doesn't exist!" % root)
+        MPI.Finalize()
+        sys.exit(0)
+
     circle = Circle(reduce_interval = ARGS.interval)
     if circle.rank == 0:
         utils.print_cmdline()

@@ -17,7 +17,7 @@ class G:
     MSG_VALID = True
     MSG_INVALID = False
 
-    simple_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    simple_fmt = '%(asctime)s - %(filename)s:%(lineno)d - %(message)s'
     bare_fmt = '%(name)s - %(levelname)s - %(message)s'
     mpi_fmt = '%(name)s - %(levelname)s - %(rank)s - %(message)s'
     bare_fmt2 = '%(message)s'

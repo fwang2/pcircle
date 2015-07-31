@@ -274,7 +274,7 @@ class FCP(BaseTask):
             try:
                 os.symlink(linkto, dest)
             except Exception as e:
-                logger.error("Fail to handle sym link %s" % fi.path)
+                logger.warn("%s, skipping sym link %s." % (utils.emsg(e), fi.path))
         elif stat.S_ISREG(fi.st_mode):
             self.enq_file(fi)  # where chunking takes place
 

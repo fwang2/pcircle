@@ -55,7 +55,7 @@ class Circle:
         else:
             self.workq = []
 
-        self.logger.debug("Circle initialized")
+        self.logger.debug("Circle initialized", extra=self.d)
 
     def finalize(self, cleanup=True, reduce_interval=10):
         self.var_init()

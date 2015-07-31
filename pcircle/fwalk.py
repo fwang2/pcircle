@@ -107,7 +107,7 @@ class FWalk(BaseTask):
             try:
                 os.mkdir(o_dir, stat.S_IRWXU)
             except OSError as e:
-                self.logger.warn("Skipping creation of %s" % o_dir)
+                self.logger.warn("Skipping creation of %s" % o_dir, extra=self.d)
 
             if self.preserve:
                 self.copy_xattr(i_dir, o_dir)
@@ -155,7 +155,7 @@ class FWalk(BaseTask):
                 self.logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file))
                 return True
         elif filecmp.cmp(src_file, dest_file):
-            self.logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file))
+            self.logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file), extra=self.d)
             return True
 
         # check failed

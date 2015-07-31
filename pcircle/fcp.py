@@ -265,7 +265,8 @@ class FCP(BaseTask):
         # save work cnt
         self.workcnt += workcnt
 
-        logger.info("enq_file: %s, size = %s, workcnt = %s" %(fi.path, fi.st_size, workcnt))
+        logger.info("enq_file: %s, size = %s, workcnt = %s" %(fi.path, fi.st_size, workcnt),
+                    extra=self.d)
 
     def handle_fitem(self, fi):
         if os.path.islink(fi.path):
@@ -289,7 +290,8 @@ class FCP(BaseTask):
 
         # construct and enable all copy operations
         # we batch operation hard-coded
-        logger.debug("creat() starts, flist.qsize=%s" % len(self.treewalk.flist))
+        logger.debug("creat() starts, flist.qsize=%s" % len(self.treewalk.flist),
+                     extra=self.d)
 
         if G.use_store:
             while self.treewalk.flist.qsize > 0:
@@ -840,7 +842,7 @@ def main():
     dbname = get_dbname()
 
     G.logfile = ".pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
-    logger = utils.getLogger("fcp", ARGS.loglevel, G.logfile)
+    logger = utils.getLogger("fcp")
 
 
     if ARGS.rid:

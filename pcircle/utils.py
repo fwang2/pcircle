@@ -26,7 +26,7 @@ def getLogger(name, level, logfile=None):
     :param logfile: destination file, optional
     :return: logger
     """
-    simple_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    simple_fmt = '%(asctime)s - %(filename)s:%(lineno)d - %(message)s'
     logger = logging.getLogger(name)
     ll = numeric_level(level)
     logger.setLevel(ll)
@@ -181,7 +181,7 @@ def breakline2(linearr, size=60, minsz=10):
         if len(curline) > size:
             ret = ret + curline + "\ \n"
             curline = ''
-    
+
     if len(linearr[-1]) < minsz:
         return " ".join([ret, linearr[-1]])
     else:

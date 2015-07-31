@@ -423,11 +423,10 @@ class FCP(BaseTask):
 
         work = self.deq()
         self.reduce_items += 1
-        if work.cmd == 'copy':
+        if isinstance(work, FileChunk):
             self.do_copy(work)
         else:
-            logger.error("Unknown command %s" % work.cmd, extra=self.d)
-            self.abort()
+            logger.warn("Unknown work object: %s" % work)
 
     def reduce_init(self, buf):
         buf['cnt_filesize'] = self.cnt_filesize
@@ -575,6 +574,7 @@ def set_chunksize(pcp, tsz):
 def mem_start():
     global circle
     src = os.path.abspath(ARGS.src)
+    src = os.path.realpath(src)  # the starting point can't be a sym-linked path
     dest = os.path.abspath(ARGS.dest)
     dest = check_path(circle, src, dest)
 

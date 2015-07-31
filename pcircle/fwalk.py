@@ -116,7 +116,7 @@ class FWalk(BaseTask):
         try:
             entries = scandir(i_dir)
         except OSError as e:
-            logger.warn("%s, skipping %s." % (utils.emsg(e), i_dir))
+            logger.warn("%s, skipping %s." % (e, i_dir))
         else:
             for entry in entries:
                 # entry.path should be equivalent to:
@@ -161,32 +161,6 @@ class FWalk(BaseTask):
         os.unlink(dest_file)
         return False
 
-    def process_retired(self):
-        ''' process a work unit, spath, dpath refers to
-            source and destination respectively
-        '''
-        spath = self.deq()
-        logger.debug("process: %s" %  spath, extra=self.d)
-        if spath:
-            st = None
-            try:
-                st = os.stat(spath)
-            except OSError as e:
-                logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, spath),
-                             extra=self.d)
-                return False
-
-            self.flist_append(spath, st)
-            if stat.S_ISREG(st.st_mode) and self.dest:
-                dpath = destpath(self.src, self.dest, spath)
-                if not self.check_dest_exists(spath, dpath):
-                    self.do_metadata_preserve(spath, dpath)
-                else: # dest exist and same as source
-                    self.flist_pop(spath, st)
-            elif stat.S_ISDIR(st.st_mode):
-                self.cnt_dirs += 1
-                self.process_dir(spath)
-
     def append_fitem(self, fitem):
         if G.use_store:
             self.flist_buf.append(fitem)
@@ -201,6 +175,8 @@ class FWalk(BaseTask):
         ''' process a work unit, spath, dpath refers to
             source and destination respectively
         '''
+        logger.info("q length = %s" % self.circle.qsize())
+
         fitem = self.circle.deq()
         spath = fitem.path
 
@@ -209,8 +185,7 @@ class FWalk(BaseTask):
             try:
                 st = os.stat(spath)
             except OSError as e:
-                logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, spath),
-                             extra=self.d)
+                logger.warn(e, extra=self.d)
                 return False
 
             fitem = FileItem(spath, st_mode=st.st_mode,

@@ -12,6 +12,8 @@ from pcircle.globals import T, G
 from pcircle.dbstore import DbStore
 from pcircle.utils import getLogger
 
+# NOT IN USE
+logger = None
 
 DB_BUFSIZE = 10000
 
@@ -23,12 +25,15 @@ class Circle:
                 reduce_interval=10, k=2,
                 dbname=None, resume=False):
 
+        global logger
+
         random.seed()  # use system time to seed
 
         self.comm = MPI.COMM_WORLD.Dup()
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
+
         self.logger = getLogger("pcircle", G.loglevel)
 
         # debug
@@ -179,6 +184,9 @@ class Circle:
     def workq_info(self):
         s =  "has %s items in work queue\n" % len(self.workq)
         return s
+
+    def qsize(self):
+        return len(self.workq)
 
     def begin(self, task):
         """ entry point to work """

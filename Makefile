@@ -59,13 +59,21 @@ deploy:
 	virtualenv --no-site-packages $(VENV)
 	$(VENV)/bin/pip install $(SDIST)
 
-dev:	
+dev-deploy:	
 	rm -rf dist
 	rm -rf $(VDEV)
 	$(PYTHON) setup.py sdist
 	virtualenv --no-site-packages $(VDEV)
 	$(VDEV)/bin/pip install flake8
 	$(VDEV)/bin/pip install -e .
+
+dev-link:	
+	rm -rf dist
+	$(PYTHON) setup.py sdist
+	virtualenv --no-site-packages $(VDEV)
+	$(VDEV)/bin/pip install flake8
+	$(VDEV)/bin/pip install -e .
+
 
 clean:
 	$(PYTHON) setup.py clean

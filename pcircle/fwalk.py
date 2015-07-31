@@ -47,6 +47,9 @@ class FWalk(BaseTask):
         self.force = force
         self.sizeonly = sizeonly
 
+        self.sym_links = 0
+        self.follow_sym_links = False
+
         self.workdir = os.getcwd()
         self.tempdir = os.path.join(self.workdir, ".pcircle")
         if not os.path.exists(self.tempdir):
@@ -64,6 +67,7 @@ class FWalk(BaseTask):
         self.cnt_files = 0
         self.cnt_filesize = 0
         self.last_cnt = 0
+        self.skipped = 0
         self.last_reduce_time = MPI.Wtime()
 
         # reduce
@@ -202,7 +206,6 @@ class FWalk(BaseTask):
 
         logger.debug("process: %s" %  spath, extra=self.d)
         if spath:
-            st = None
             try:
                 st = os.stat(spath)
             except OSError as e:
@@ -235,6 +238,11 @@ class FWalk(BaseTask):
                 self.cnt_filesize += fitem.st_size
 
             elif stat.S_ISDIR(st.st_mode):
+                if os.path.islink(spath):
+                    self.append_fitem(fitem)
+                    self.sym_links += 1
+                    if not self.follow_sym_links:
+                        return
                 self.cnt_dirs += 1
                 self.process_dir(spath)
         # END OF if spath
@@ -281,24 +289,27 @@ class FWalk(BaseTask):
 
     def total_tally(self):
         global taskloads
-        # self.summarize()
         total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
         total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
         total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
+        total_symlinks = self.circle.comm.reduce(self.sym_links, op=MPI.SUM)
+        total_skipped = self.circle.comm.reduce(self.skipped, op=MPI.SUM)
         taskloads = self.circle.comm.gather(self.reduce_items)
-        return total_dirs, total_files, total_filesize
+        return total_dirs, total_files, total_filesize, total_symlinks, total_skipped
 
     def epilogue(self):
-        total_dirs, total_files, total_filesize = self.total_tally()
+        total_dirs, total_files, total_filesize, total_symlinks, total_skipped = self.total_tally()
         self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
 
             print("")
-            print("Directory count: %s" % total_dirs)
-            print("File count: %s" % total_files)
-            print("File size: %s" % bytes_fmt(total_filesize))
-            print("Tree talk time: %.2f seconds" % (self.time_ended - self.time_started))
+            print("{:<20}{:<20}".format("Directory count:", total_dirs))
+            print("{:<20}{:<20}".format("Sym Links count:", total_symlinks))
+            print("{:<20}{:<20}".format("File count:", total_files))
+            print("{:<20}{:<20}".format("Skipped count:", total_skipped))
+            print("{:<20}{:<20}".format("File size:", bytes_fmt(total_filesize)))
+            print("{:<20}{:<20}".format("Tree talk time:",  "%.2f seconds" % (self.time_ended - self.time_started)))
             print("FWALK Loads: %s" % taskloads)
             print("")
 

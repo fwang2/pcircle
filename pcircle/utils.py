@@ -173,15 +173,29 @@ def breakline(line, size=60, minsz=10):
     else:
         return ret + line[:]
 
+def breakline2(linearr, size=60, minsz=10):
+    ret = ''
+    curline = ''
+    for item in linearr[:-1]:
+        curline += ' ' + item
+        if len(curline) > size:
+            ret = ret + curline + "\ \n"
+            curline = ''
+    
+    if len(linearr[-1]) < minsz:
+        return " ".join([ret, linearr[-1]])
+    else:
+        return " ".join([ret, "\ \n", linearr[-1]])
+
 def print_cmdline():
     cmdline = " ".join(sys.argv[:])
     print("Command Line:\t", breakline(cmdline), "\n")
 
-def emsg(e):
+def emsg(ep):
     '''
     Exception string: filename, line no, error type, error message
     '''
 
     top = traceback.extract_stack()[-2]
     return ', '.join([os.path.basename(top[0]), 'Line ' + str(top[1]),
-        type(e).__name__ + ': ' + str(e)])
+                type(ep).__name__ + ': ' + str(ep)])

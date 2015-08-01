@@ -107,7 +107,7 @@ class FWalk(BaseTask):
             try:
                 os.mkdir(o_dir, stat.S_IRWXU)
             except OSError as e:
-                self.logger.warn("Skipping creation of %s" % o_dir, extra=self.d)
+                self.logger.warn("processing [%s], %s" % (i_dir, e), extra=self.d)
 
             if self.preserve:
                 self.copy_xattr(i_dir, o_dir)
@@ -160,7 +160,7 @@ class FWalk(BaseTask):
             return True
 
         # check failed
-        self.logger.warn("Retransfer: %s" % src_file)
+        self.logger.warn("Retransfer: %s" % src_file, extra=self.d)
         os.unlink(dest_file)
         return False
 

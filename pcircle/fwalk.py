@@ -152,7 +152,8 @@ class FWalk(BaseTask):
         # well, destination exists, now we have to check
         if self.sizeonly:
             if os.path.getsize(src_file) == os.path.getsize(dest_file):
-                self.logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file))
+                self.logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file),
+                        extra=self.d)
                 return True
         elif filecmp.cmp(src_file, dest_file):
             self.logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file), extra=self.d)
@@ -177,7 +178,6 @@ class FWalk(BaseTask):
         ''' process a work unit, spath, dpath refers to
             source and destination respectively
         '''
-        self.logger.info("q length = %s" % self.circle.qsize(), extra=self.d)
 
         fitem = self.circle.deq()
         spath = fitem.path

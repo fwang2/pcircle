@@ -109,7 +109,7 @@ class FCP(BaseTask):
         self.workq = workq
         self.resume = resume
         self.checkpoint_file = None
-
+        self.vvv = False
         self.src = os.path.abspath(src)
         self.srcbase = os.path.basename(src)
         self.dest = os.path.abspath(dest)
@@ -144,7 +144,7 @@ class FCP(BaseTask):
         self.wtime_ended = None
         self.workcnt = 0            # this is the cnt for the enqued items
         self.reduce_items = 0       # this is the cnt for processed items
-        if self.treewalk:
+        if self.treewalk and self.vvv:
             logger.debug("treewalk files = %s" % treewalk.flist, extra=self.d)
 
         # fini_check
@@ -386,7 +386,8 @@ class FCP(BaseTask):
         # update tally
         self.cnt_filesize += work.length
 
-        logger.debug("Transferred %s bytes from:\n\t [%s] to [%s]" %
+        if self.vvv:
+            logger.debug("Transferred %s bytes from:\n\t [%s] to [%s]" %
                      (self.cnt_filesize, src, dest), extra=self.d)
 
         return True
@@ -420,7 +421,7 @@ class FCP(BaseTask):
             curtime = MPI.Wtime()
             if curtime - self.checkpoint_last > self.checkpoint_interval:
                 self.do_no_interrupt_checkpoint()
-                logger.info("Checkpointing done ...")
+                logger.info("Checkpointing done ...", extra=self.d)
                 self.checkpoint_last = curtime
 
         work = self.deq()
@@ -428,7 +429,7 @@ class FCP(BaseTask):
         if isinstance(work, FileChunk):
             self.do_copy(work)
         else:
-            logger.warn("Unknown work object: %s" % work)
+            logger.warn("Unknown work object: %s" % work, extra=self.d)
 
     def reduce_init(self, buf):
         buf['cnt_filesize'] = self.cnt_filesize

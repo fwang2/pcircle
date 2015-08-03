@@ -5,7 +5,7 @@ from task import BaseTask
 from circle import Circle
 from globals import G
 from mpi4py import MPI
-from utils import timestamp,bytes_fmt,destpath
+from utils import timestamp, bytes_fmt, destpath
 from dbstore import DbStore
 from fdef import FileItem
 from scandir import scandir
@@ -26,6 +26,7 @@ __version__ = get_versions()['version']
 logger = None
 taskloads = []
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="fwalk")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
@@ -35,10 +36,10 @@ def parse_args():
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     return parser.parse_args()
 
+
 class FWalk(BaseTask):
     def __init__(self, circle, src, dest=None, preserve=False, force=False, sizeonly=True):
         BaseTask.__init__(self, circle)
-
 
         self.circle = circle
         self.src = src
@@ -60,7 +61,7 @@ class FWalk(BaseTask):
             self.flist = DbStore(self.dbname)
             self.flist_buf = []
         else:
-            self.flist = [] # element is (filepath, filemode, filesize, uid, gid)
+            self.flist = []  # element is (filepath, filemode, filesize, uid, gid)
         self.src_flist = self.flist
 
         self.cnt_dirs = 0
@@ -93,14 +94,11 @@ class FWalk(BaseTask):
             xattr.setxattr(dest, k, val)
 
     def flushdb(self):
-        if len(self.flist_buf) !=0:
+        if len(self.flist_buf) != 0:
             self.flist.mput(self.flist_buf)
 
-
     def process_dir(self, i_dir):
-        """
-            i_dir should be absolute path
-        """
+        """ i_dir should be absolute path """
         if self.dest:
             # we create destination directory
             o_dir = destpath(self.src, self.dest, i_dir)
@@ -125,7 +123,6 @@ class FWalk(BaseTask):
                 # self.circle.enq(FileItem(os.path.join(i_dir, entry.name)))
                 self.circle.enq(FileItem(entry.path))
 
-
     def do_metadata_preserve(self, src_file, dest_file):
         if self.preserve:
             try:
@@ -135,14 +132,10 @@ class FWalk(BaseTask):
             else:
                 self.copy_xattr(src_file, dest_file)
 
-
     def check_dest_exists(self, src_file, dest_file):
-        '''
-        :param src_file:
-        :param dest_file:
-        :return: True if dest exists and checksum verified correct
-                False if (1) no overwrite (2) destination doesn't exist
-        '''
+        """ return True if dest exists and checksum verified correct
+            return False if (1) no overwrite (2) destination doesn't exist
+        """
         if not self.force:
             return False
 
@@ -153,7 +146,7 @@ class FWalk(BaseTask):
         if self.sizeonly:
             if os.path.getsize(src_file) == os.path.getsize(dest_file):
                 self.logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file),
-                        extra=self.d)
+                                 extra=self.d)
                 return True
         elif filecmp.cmp(src_file, dest_file):
             self.logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file), extra=self.d)
@@ -182,7 +175,7 @@ class FWalk(BaseTask):
         fitem = self.circle.deq()
         spath = fitem.path
 
-        self.logger.debug("process: %s" %  spath, extra=self.d)
+        self.logger.info("process: %s" % spath, extra=self.d)
         if spath:
             try:
                 st = os.stat(spath)
@@ -192,13 +185,21 @@ class FWalk(BaseTask):
                 return False
 
             fitem = FileItem(spath, st_mode=st.st_mode,
-                             st_size = st.st_size, st_uid = st.st_uid, st_gid = st.st_gid)
+                             st_size=st.st_size, st_uid=st.st_uid, st_gid=st.st_gid)
 
             self.reduce_items += 1
+
+            if os.path.islink(spath):
+                self.append_fitem(fitem)
+                self.sym_links += 1
+                # if not self.follow_sym_links:
+                # NOT TO FOLLOW SYM LINKS SHOULD BE THE DEFAULT
+                return
 
             if stat.S_ISREG(st.st_mode):
 
                 if not self.dest:
+                    # fwalk without destination, simply add to process list
                     self.append_fitem(fitem)
                 else:
                     # self.dest specified, need to check if it is there
@@ -216,11 +217,6 @@ class FWalk(BaseTask):
                 self.cnt_filesize += fitem.st_size
 
             elif stat.S_ISDIR(st.st_mode):
-                if os.path.islink(spath):
-                    self.append_fitem(fitem)
-                    self.sym_links += 1
-                    if not self.follow_sym_links:
-                        return
                 self.cnt_dirs += 1
                 self.process_dir(spath)
         # END OF if spath
@@ -242,7 +238,6 @@ class FWalk(BaseTask):
         buf['cnt_filesize'] = self.cnt_filesize
         buf['reduce_items'] = self.reduce_items
 
-
     def reduce(self, buf1, buf2):
         buf1['cnt_dirs'] += buf2['cnt_dirs']
         buf1['cnt_files'] += buf2['cnt_files']
@@ -256,7 +251,7 @@ class FWalk(BaseTask):
         # print("Processed objects: %s, estimated processing rate: %d/s" % (buf['cnt_files'], rate))
         # self.last_cnt = buf['cnt_files']
 
-        rate = (buf['reduce_items'] - self.last_cnt)/(MPI.Wtime() - self.last_reduce_time)
+        rate = (buf['reduce_items'] - self.last_cnt) / (MPI.Wtime() - self.last_reduce_time)
         print("Processed objects: %s, estimated processing rate: %d/s" % (buf['reduce_items'], rate))
         self.last_cnt = buf['reduce_items']
         self.last_reduce_time = MPI.Wtime()
@@ -280,19 +275,17 @@ class FWalk(BaseTask):
         self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
-
             print("")
             print("{:<20}{:<20}".format("Directory count:", total_dirs))
             print("{:<20}{:<20}".format("Sym Links count:", total_symlinks))
             print("{:<20}{:<20}".format("File count:", total_files))
             print("{:<20}{:<20}".format("Skipped count:", total_skipped))
             print("{:<20}{:<20}".format("File size:", bytes_fmt(total_filesize)))
-            print("{:<20}{:<20}".format("Tree talk time:",  "%.2f seconds" % (self.time_ended - self.time_started)))
+            print("{:<20}{:<20}".format("Tree talk time:", "%.2f seconds" % (self.time_ended - self.time_started)))
             print("FWALK Loads: %s" % taskloads)
             print("")
 
         return total_filesize
-
 
     def cleanup(self):
         if G.use_store:
@@ -300,7 +293,6 @@ class FWalk(BaseTask):
 
 
 def main():
-
     global ARGS, logger
     ARGS = parse_args()
     G.use_store = ARGS.use_store
@@ -314,7 +306,7 @@ def main():
         MPI.Finalize()
         sys.exit(0)
 
-    circle = Circle(reduce_interval = ARGS.interval)
+    circle = Circle(reduce_interval=ARGS.interval)
     if circle.rank == 0:
         utils.print_cmdline()
 
@@ -330,4 +322,3 @@ def main():
 
 
 if __name__ == "__main__": main()
-

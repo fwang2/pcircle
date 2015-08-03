@@ -265,7 +265,7 @@ class FCP(BaseTask):
         # save work cnt
         self.workcnt += workcnt
 
-        logger.info("enq_file: %s, size = %s, workcnt = %s" %(fi.path, fi.st_size, workcnt),
+        logger.debug("enq_file: %s, size = %s, workcnt = %s" %(fi.path, fi.st_size, workcnt),
                     extra=self.d)
 
     def handle_fitem(self, fi):

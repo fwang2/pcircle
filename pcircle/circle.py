@@ -16,7 +16,7 @@ DB_BUFSIZE = 10000
 
 class Circle:
 
-    def __init__(self, name="Circle Work Comm", split="equal",
+    def __init__(self, name="Circle", split="equal",
                 reduce_interval=10, k=2,
                 dbname=None, resume=False):
 
@@ -24,7 +24,6 @@ class Circle:
 
         random.seed()  # use system time to seed
 
-        #self.comm = MPI.COMM_WORLD.Dup()
         self.comm = MPI.COMM_WORLD
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
@@ -60,9 +59,7 @@ class Circle:
     def finalize(self, cleanup=True, reduce_interval=10):
         self.var_init()
         self.token_init()
-
         self.reduce_interval=reduce_interval
-
         if cleanup and G.use_store:
             self.workq.cleanup()
 
@@ -218,12 +215,10 @@ class Circle:
                     break;
 
     def enq(self, work):
-        self.logger.debug("enq: %s" % work, extra=self.d)
         if work is None:
             self.logger.warn("enq work item is None")
             return
         self.workq.append(work)
-
 
     def setq(self, q):
         self.workq = q

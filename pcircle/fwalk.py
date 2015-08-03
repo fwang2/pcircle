@@ -175,7 +175,8 @@ class FWalk(BaseTask):
         fitem = self.circle.deq()
         spath = fitem.path
 
-        self.logger.info("process: %s" % spath, extra=self.d)
+        # self.logger.info("process: %s" % spath, extra=self.d)
+
         if spath:
             try:
                 st = os.stat(spath)

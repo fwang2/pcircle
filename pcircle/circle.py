@@ -404,6 +404,7 @@ class Circle:
         @return: spread it evenly among all requesters
 
         case 1: wcount == rcount:
+                    base = 0
                     extra = wcount
                     each requestor get 1
         case 2: wcount < rcount:
@@ -411,13 +412,15 @@ class Circle:
                     extra = wcount
                     first "wcount" requester get 1
         case 3: wcount > rcount:
-
+                    is it possible?
         """
+
+        if self.split != "equal":
+            raise NotImplementedError
 
         base = wcount / (rcount + 1)            # leave self a base number of works
         extra = wcount - base * (rcount + 1)
-        if extra > rcount:
-            extra = rcount       # take fewer, no big deal
+        assert extra <= rcount
         sizes = [base] * rcount
         for i in xrange(extra):
             sizes[i] += 1
@@ -435,11 +438,7 @@ class Circle:
     def send_work_to_many(self):
         rcount = len(self.requestors)
         wcount = len(self.workq)
-        sizes = None
-        if self.split == "equal":
-            sizes = self.spread_counts(rcount, wcount)
-        else:
-            raise NotImplementedError
+        sizes = self.spread_counts(rcount, wcount)
 
         self.logger.debug("requester count: %s, work count: %s, spread: %s" %
                      (rcount, wcount, sizes), extra=self.d)

@@ -487,9 +487,9 @@ class Circle:
                 self.work_receive(self.work_requested_rank)
                 # flip flag to indicate we no longer waiting for reply
                 self.workreq_outstanding = False
-            else:
-                self.logger.debug("has req outstanding, dest = %s, no reply" %
-                             self.work_requested_rank, extra = self.d)
+            # else:
+            #    self.logger.debug("has req outstanding, dest = %s, no reply" %
+            #                 self.work_requested_rank, extra = self.d)
 
         elif not cleanup:
             # send request

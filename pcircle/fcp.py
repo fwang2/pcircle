@@ -218,9 +218,9 @@ class FCP(BaseTask):
         return fchunk
 
     def enq_file(self, fi):
-        """
-        we enq all in one shot
-        """
+        """ Process a single file, represented by "fi" - file item
+        It involves chunking this file and equeue all chunks. """
+
         chunks = fi.st_size / self.chunksize
         remaining = fi.st_size % self.chunksize
 
@@ -231,7 +231,6 @@ class FCP(BaseTask):
             fchunk.offset = 0
             fchunk.length = 0
             self.enq(fchunk)
-            logger.debug("%s" % fchunk, extra=self.d)
             workcnt += 1
         else:
             for i in range(chunks):
@@ -239,7 +238,6 @@ class FCP(BaseTask):
                 fchunk.offset = i * self.chunksize
                 fchunk.length = self.chunksize
                 self.enq(fchunk)
-                logger.debug("%s" % fchunk, extra=self.d)
             workcnt += chunks
 
         if remaining > 0:
@@ -248,13 +246,12 @@ class FCP(BaseTask):
             fchunk.offset = chunks * self.chunksize
             fchunk.length = remaining
             self.enq(fchunk)
-            logger.debug("%s" % fchunk, extra=self.d)
             workcnt += 1
 
         # save work cnt
         self.workcnt += workcnt
 
-        logger.debug("enq_file: %s, size = %s, workcnt = %s" % (fi.path, fi.st_size, workcnt),
+        logger.debug("enq_file(): %s, size = %s, workcnt = %s" % (fi.path, fi.st_size, workcnt),
                      extra=self.d)
 
     def handle_fitem(self, fi):
@@ -264,11 +261,15 @@ class FCP(BaseTask):
             try:
                 os.symlink(linkto, dest)
             except Exception as e:
-                logger.warn("%s, skipping sym link %s." % e, fi.path))
+                logger.warn("%s, skipping sym link %s." % (e, fi.path))
         elif stat.S_ISREG(fi.st_mode):
             self.enq_file(fi)  # where chunking takes place
 
     def create(self):
+        """ Each task has one create(), which is invoked by circle ONCE.
+        For FCP, each task will handle_fitem() -> enq_file()
+        to process each file gathered during the treewalk stage. """
+
         if not G.use_store and self.workq:  # restart
             self.setq(self.workq)
             return
@@ -276,10 +277,9 @@ class FCP(BaseTask):
         if self.resume:
             return
 
-
         # construct and enable all copy operations
         # we batch operation hard-coded
-        logger.debug("creat() starts, flist.qsize=%s" % len(self.treewalk.flist),
+        logger.info("create() starts, flist length = %s" % len(self.treewalk.flist),
                      extra=self.d)
 
         if G.use_store:
@@ -324,8 +324,6 @@ class FCP(BaseTask):
                 os.close(old_v)
             except OSError as e:
                 logger.warn("FD for %s not valid when closing" % old_k, extra=self.d)
-            else:
-                logger.debug("Closing fd for %s" % old_k, extra=self.d)
 
         fd = -1
         try:

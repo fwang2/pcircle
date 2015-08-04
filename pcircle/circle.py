@@ -354,10 +354,19 @@ class Circle:
         return self.token_proc
 
     def workreq_check(self, cleanup=False):
+        """ for any process that sends work request message:
+                add the process to the requester list
+            if my work queue is not empty:
+                distribute the work evenly
+            else:
+                send "no work" message to each requester
+            reset the requester list to empty
+        """
         while True:
             st = MPI.Status()
             ret = self.comm.Iprobe(source = MPI.ANY_SOURCE, tag = T.WORK_REQUEST, status = st)
-            if not ret: break
+            if not ret: # no work request, break out the loop
+                break
             # we have work request message
             rank = st.Get_source()
             buf = self.comm.recv(source = rank, tag = T.WORK_REQUEST, status = st)
@@ -373,7 +382,7 @@ class Circle:
 
         # out of while loop
 
-        if len(self.requestors) == 0:
+        if not self.requestors:
             return
         else:
             self.logger.debug("have %s requesters, with %s work items in queue" %

@@ -8,6 +8,42 @@ import os
 import os.path
 from collections import deque
 
+"""
+
+Reduce Note:
+
+    The reduce logic is located in reduce_check().
+    There are three related functions that expects from a task: be it FCP or FWALK
+
+    (1) reduce_init(buf): this is invoked at the the starting point of a reduce operation.
+    The "buf" is self.reduce_buf
+
+    (2) reduce(buf1, buf2): buf1 is self.reduce_buf; buf2 is from one of the child input.
+    Usually, each child will report a number, which represent the amount of task it has performed
+    during this period. self.reduce_buf simply accumulate it - non-descreasing.
+
+    In that sense, the buffer (a free form dictionary) is not really needed. A simple return of
+    of integer number might make more sense. Each child will simply return a number each time reduce()
+    is called, and that number represent the amount of works it has done over this period. Once reduce()
+    is called, the number is reset to zero.
+
+    Inside the circle, self.reduce_buf -> let's name it as self.reduce_work is a number.
+
+        for each child:
+            self.reduce_work += self.task.reduce()
+
+        if I have parent:
+            send self.reduce_work upward
+            self.reduce_work = 0
+
+        if I am root:
+            self.reduce_report()
+
+
+    (3) reduce_finish(): I don't see this is in use today.
+
+"""
+
 from pcircle.globals import T, G
 from pcircle.dbstore import DbStore
 from pcircle.utils import getLogger
@@ -596,11 +632,9 @@ class Circle:
         # now we don't have the token
         self.token_is_local = False
 
-
     def reduce(self, buf):
         # copy data from user buffer
         self.reduce_buf = copy(buf)
-
 
     def reduce_check(self, cleanup=False):
         """
@@ -608,13 +642,12 @@ class Circle:
         ensure progress of reduction in background, stop reduction if cleanup flag is True
         """
 
-        # if we have outstanding reduce, check message from children
-        # otherwise, check whether we should start new reduce
-
         if self.reduce_outstanding:
+            # if we have outstanding reduce, check message from children
+            # otherwise, check whether we should start new reduce
+
             for child in self.child_ranks:
-                flag = self.comm.Iprobe(child, T.REDUCE)
-                if flag:
+                if self.comm.Iprobe(source=child, tag=T.REDUCE):
                     # receive message from child
                     # 'status' element is G.MSG_VALID or not
                     # the rest is opaque
@@ -645,7 +678,6 @@ class Circle:
                     if self.reduce_status and hasattr(self.task, "reduce_report"):
                         self.task.reduce_report(self.reduce_buf)
 
-
                     # invoke callback on root to deliver final results
                     if hasattr(self.task, "reduce_finish"):
                         self.task.reduce_finish(self.reduce_buf)
@@ -666,13 +698,11 @@ class Circle:
                 if self.parent_rank == MPI.PROC_NULL:
                     # we are root, kick it off
                     start_reduce = True
-                else:
+                elif self.comm.Iprobe(source=self.parent_rank, tag=T.REDUCE):
                     # we are not root, check if parent sent us a message
-                    flag = self.comm.Iprobe(self.parent_rank, T.REDUCE)
-                    if flag:
-                        # receive message from parent and set flag to start reduce
-                        self.comm.recv(source=self.parent_rank, tag = T.REDUCE)
-                        start_reduce = True
+                    # receive message from parent and set flag to start reduce
+                    self.comm.recv(source=self.parent_rank, tag = T.REDUCE)
+                    start_reduce = True
 
             # it is critical that we don't start a reduce if we are in cleanup
             # phase because we may have already started the non-blocking barrier

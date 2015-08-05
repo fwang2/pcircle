@@ -1,0 +1,18 @@
+#!/bin/bash
+#PBS -A STF008
+#PBS -l nodes=8,walltime=8:00:00
+#PBS -j oe
+#PBS -N output-fcp-migrate-home
+SRCDIR=/ccs/home/fwang2
+DSTDIR=/lustre/atlas1/stf008/scratch/fwang2/FCP_$PBS_JOBID
+ITER=10
+module load openmpi libffi/3.2.1 python
+source $HOME/dev-pcircle/bin/activate
+mkdir -p $DSTDIR
+for i in `seq 1 $ITER`; do
+    cd $PBS_WORKDIR
+    mpirun --mca mpi_warn_on_fork 0 -np 16 fcp $SRCDIR $DSTDIR/$i
+done
+
+deactivate
+

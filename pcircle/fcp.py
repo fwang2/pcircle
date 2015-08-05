@@ -841,7 +841,12 @@ def main():
         circle = Circle(dbname=dbname, reduce_interval=ARGS.reduce_interval)
 
     if circle.rank == 0:
-        utils.print_cmdline()
+        print("Running Parameters:")
+        print("\t{:<20}{:<20}".format("FCP version:", __version__))
+        print("\t{:<20}{:<20}".format("Num of Hosts:", NUM_OF_HOSTS))
+        print("\t{:<20}{:<20}".format("Num of Processes:", MPI.COMM_WORLD.Get_size()))
+        print("\t{:<20}{:<20}".format("Source:", ARGS.src))
+        print("\t{:<20}{:<20}".format("Destination:", ARGS.dest))
 
     #
     # TODO: there are some redundant code brought in by merging

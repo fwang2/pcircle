@@ -452,6 +452,7 @@ class Circle:
         """
         if witems <= 0:
             self.send_no_work(rank)
+            return
 
         # for termination detection
         if (rank < self.rank) or (rank == self.token_src):
@@ -463,12 +464,9 @@ class Circle:
         # we have different ways of constructing buf
         if self.useStore:
             objs, size = self.workq.mget(witems)
-            buf = {G.KEY: witems,
-                    G.VAL: objs}
+            buf = {G.KEY: witems, G.VAL: objs}
         else:
-
-            buf = { G.KEY: witems,
-                    G.VAL: self.workq[0:witems] }
+            buf = {G.KEY: witems, G.VAL: self.workq[0:witems]}
 
         self.comm.send(buf, dest = rank, tag = T.WORK_REPLY)
         self.logger.debug("%s work items sent to rank %s" % (witems, rank), extra=self.d)

@@ -2,7 +2,7 @@
 from __future__ import print_function
 
 from task import BaseTask
-from circle import Circle
+from circle import Circle, tally_hosts
 from globals import G
 from mpi4py import MPI
 from utils import timestamp, bytes_fmt, destpath
@@ -85,7 +85,7 @@ class FWalk(BaseTask):
     def create(self):
         if self.circle.rank == 0:
             self.circle.enq(FileItem(self.src))
-            print("Analyzing workload ...")
+            print("\nAnalyzing workload ...")
 
     def copy_xattr(self, src, dest):
         attrs = xattr.listxattr(src)
@@ -307,9 +307,16 @@ def main():
         MPI.Finalize()
         sys.exit(0)
 
+    hosts_cnt = tally_hosts()
     circle = Circle(reduce_interval=ARGS.interval)
+
+
     if circle.rank == 0:
-        utils.print_cmdline()
+        print("Running Parameters:\n")
+        print("\t{:<20}{:<20}".format("PWALK version:", __version__))
+        print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
+        print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
+        print("\t{:<20}{:<20}".format("Root path:", root))
 
     treewalk = FWalk(circle, root)
     circle.begin(treewalk)

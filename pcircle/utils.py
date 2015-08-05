@@ -173,10 +173,6 @@ def breakline2(linearr, size=60, minsz=10):
     else:
         return " ".join([ret, "\ \n", linearr[-1]])
 
-def print_cmdline():
-    cmdline = " ".join(sys.argv[:])
-    print("Command Line:\t", breakline(cmdline), "\n")
-
 def emsg(ep):
     '''
     Exception string: filename, line no, error type, error message

@@ -77,7 +77,7 @@ def parse_args():
     parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta, default: off")
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
 
-    parser.add_argument("--force", action="store_true", help="force overwrite")
+    parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("--sizeonly", action="store_true", help="compare file by size")
 
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
@@ -847,6 +847,8 @@ def main():
         print("\t{:<20}{:<20}".format("Num of Processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Source:", ARGS.src))
         print("\t{:<20}{:<20}".format("Destination:", ARGS.dest))
+        print("\t{:<20}{:<20}".format("Overwrite:", "%r" % ARGS.force))
+        print("\t{:<20}{:<20}".format("Checksumming:", "%r" % ARGS.checksum))
 
     #
     # TODO: there are some redundant code brought in by merging
@@ -876,7 +878,6 @@ def main():
     # third task
     if ARGS.checksum:
         pcheck = PVerify(circle, pcp, totalsize)
-        pcheck.setLevel(ARGS.loglevel)
         circle.begin(pcheck)
         tally = pcheck.fail_tally()
 

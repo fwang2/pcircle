@@ -7,7 +7,6 @@
 #
 from __future__ import print_function
 import os
-import logging
 import hashlib
 import argparse
 import stat
@@ -23,7 +22,7 @@ from _version import get_versions
 from task import BaseTask
 from utils import bytes_fmt, timestamp2, conv_unit
 from fwalk import FWalk
-from cio import readn, writen
+from cio import readn
 from fdef import ChunkSum
 from globals import G
 import utils
@@ -47,12 +46,11 @@ def parse_args():
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
-    parser.add_argument("--chunksize", default="4m", help="chunk size (K, M, G, T), default: 4m")
+    parser.add_argument("--chunksize", default="16m", help="chunk size (K, M, G, T), default: 16m")
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
     return parser.parse_args()
-
 
 class Checksum(BaseTask):
     def __init__(self, circle, treewalk, chunksize, totalsize=0):
@@ -209,8 +207,6 @@ def read_in_blocks(chunks, chunksize=26214):
             yield hashlib.sha1(buf.getvalue()).hexdigest()
             buf = StringIO()
 
-
-
 def do_checksum(chunks):
 
     buf = StringIO()
@@ -249,7 +245,6 @@ def parse_and_bcast():
 
     if MPI.COMM_WORLD.rank == 0 and ARGS.loglevel == "debug":
         print(ARGS)
-
 
 def main():
 

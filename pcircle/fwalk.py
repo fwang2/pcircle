@@ -313,7 +313,7 @@ def main():
 
     if circle.rank == 0:
         print("Running Parameters:\n")
-        print("\t{:<20}{:<20}".format("PWALK version:", __version__))
+        print("\t{:<20}{:<20}".format("FWALK version:", __version__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", root))

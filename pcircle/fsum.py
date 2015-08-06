@@ -21,16 +21,14 @@ from cStringIO import StringIO
 from circle import Circle
 from _version import get_versions
 from task import BaseTask
-from utils import logging_init, bytes_fmt, timestamp2, conv_unit
+from utils import bytes_fmt, timestamp2, conv_unit
 from fwalk import FWalk
 from cio import readn, writen
 from fdef import ChunkSum
 from globals import G
+import utils
+from pcircle.circle import tally_hosts
 
-
-logger = logging.getLogger("checksum")
-
-BLOCKSIZE = 4194304
 
 ARGS    = None
 __version__ = get_versions()['version']
@@ -43,13 +41,13 @@ def sig_handler(signal, frame):
     sys.exit(1)
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="fchecksum")
+    parser = argparse.ArgumentParser(description="fsum")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
-    parser.add_argument("--loglevel", default="ERROR", help="log level")
+    parser.add_argument("--loglevel", default="WARN", help="log level")
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
-    parser.add_argument("--chunksize", metavar="sz", default="512m", help="chunk size (KB, MB, GB, TB), default: 512MB")
+    parser.add_argument("--chunksize", default="4m", help="chunk size (K, M, G, T), default: 4m")
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
@@ -58,7 +56,6 @@ def parse_args():
 
 class Checksum(BaseTask):
     def __init__(self, circle, treewalk, chunksize, totalsize=0):
-        global logger
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
@@ -74,6 +71,8 @@ class Checksum(BaseTask):
 
         # reduce
         self.vsize = 0
+
+        self.logger = utils.getLogger(__name__)
 
         if self.circle.rank == 0:
             print("Start parallel checksumming ...")
@@ -113,7 +112,7 @@ class Checksum(BaseTask):
         if f.st_size == 0: # empty file
             ck = ChunkSum(f.path)
             self.enq(ck)
-            logger.debug("%s" % ck, extra=self.d)
+            self.logger.debug("%s" % ck, extra=self.d)
             workcnt += 1
         else:
             for i in range(chunks):
@@ -121,7 +120,7 @@ class Checksum(BaseTask):
                 ck.offset = i * self.chunksize
                 ck.length = self.chunksize
                 self.enq(ck)
-                logger.debug("%s" % ck, extra=self.d)
+                self.logger.debug("%s" % ck, extra=self.d)
             workcnt += chunks
 
         if remaining > 0:
@@ -130,7 +129,7 @@ class Checksum(BaseTask):
             ck.offset = chunks * self.chunksize
             ck.length = remaining
             self.enq(ck)
-            logger.debug("%s" % ck, extra=self.d)
+            self.logger.debug("%s" % ck, extra=self.d)
             workcnt += 1
 
         # tally work cnt
@@ -138,17 +137,21 @@ class Checksum(BaseTask):
 
     def process(self):
         ck = self.deq()
-        logger.debug("process: %s" % ck, extra = self.d)
-        blocks = ck.length / BLOCKSIZE
-        remaining = ck.length % BLOCKSIZE
+        self.logger.debug("process: %s" % ck, extra = self.d)
+        blocks = ck.length / self.chunksize
+        remaining = ck.length % self.chunksize
 
         chunk_digests = StringIO()
+        try:
+            fd = os.open(ck.filename, os.O_RDONLY)
+        except OSError as e:
+            self.logger.warn("%s, Skipping ... " % e, extra=self.d)
+            return
 
-        fd = os.open(ck.filename, os.O_RDONLY)
         os.lseek(fd, ck.offset, os.SEEK_SET)
 
         for i in range(blocks):
-            chunk_digests.write(hashlib.sha1(readn(fd, BLOCKSIZE)).hexdigest())
+            chunk_digests.write(hashlib.sha1(readn(fd, self.chunksize)).hexdigest())
 
         if remaining > 0:
             chunk_digests.write(hashlib.sha1(readn(fd, remaining)).hexdigest())
@@ -158,12 +161,10 @@ class Checksum(BaseTask):
         self.chunkq.append(ck)
 
         self.vsize += ck.length
-        os.close(fd)
-
-    def setLevel(self, level):
-        global logger
-        logging_init(logger, level)
-
+        try:
+            os.close(fd)
+        except Exception as e:
+            self.logger.warn(e, extra=self.d)
 
     def reduce_init(self, buf):
         buf['vsize'] = self.vsize
@@ -246,23 +247,34 @@ def parse_and_bcast():
     else:
         sys.exit(0)
 
-    if MPI.COMM_WORLD.rank == 0:
-        logger.debug(ARGS)
+    if MPI.COMM_WORLD.rank == 0 and ARGS.loglevel == "debug":
+        print(ARGS)
 
 
 def main():
 
-    global ARGS, logger
+    global ARGS
     signal.signal(signal.SIGINT, sig_handler)
 
     ARGS = parse_args()
     parse_and_bcast()
 
-    root = os.path.abspath(ARGS.path)
-    circle = Circle(reduce_interval = ARGS.interval)
-    logger = logging_init(logger, ARGS.loglevel)
-    chunksize = conv_unit(ARGS.chunksize)
+    G.loglevel = ARGS.loglevel
     G.use_store = ARGS.use_store
+
+    root = os.path.abspath(ARGS.path)
+    hosts_cnt = tally_hosts()
+    circle = Circle(reduce_interval = ARGS.interval)
+    chunksize = conv_unit(ARGS.chunksize)
+
+    if circle.rank == 0:
+        print("Running Parameters:\n")
+        print("\t{:<20}{:<20}".format("FSUM version:", __version__))
+        print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
+        print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
+        print("\t{:<20}{:<20}".format("Root path:", root))
+        print("\t{:<20}{} ({} bytes)".format("Chunk size:", ARGS.chunksize, chunksize))
+
 
     fwalk = FWalk(circle, root)
     circle.begin(fwalk)
@@ -272,7 +284,6 @@ def main():
     circle.finalize(reduce_interval = ARGS.interval)
 
     fcheck = Checksum(circle, fwalk, chunksize, totalsize)
-    fcheck.setLevel(ARGS.loglevel)
     circle.begin(fcheck)
     circle.finalize()
 

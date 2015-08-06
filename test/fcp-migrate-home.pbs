@@ -3,6 +3,8 @@
 #PBS -l nodes=8,walltime=8:00:00
 #PBS -j oe
 #PBS -N output-fcp-migrate-home
+[[ "$PBS_JOBID" ]] || PBS_JOBID=$(date +%s)
+
 SRCDIR=/ccs/home/fwang2
 DSTDIR=/lustre/atlas1/stf008/scratch/fwang2/FCP_$PBS_JOBID
 ITER=10

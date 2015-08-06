@@ -13,3 +13,5 @@ MANIFEST
 .DS_Store
 test/*.sh
 .*
+tmp.out
+tmp.ps

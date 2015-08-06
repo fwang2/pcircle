@@ -4,6 +4,7 @@ VERSION=`python setup.py --version`
 SDIST=dist/$(NAME)-$(VERSION).tar.gz
 VENV=$(HOME)/app-pcircle
 VDEV=$(HOME)/dev-pcircle
+.PHONY:	test check
 
 all: source
 dist: source
@@ -27,8 +28,6 @@ install:
 uninstall:
 	pip uninstall -y pcircle
 
-test:
-	unit2 discover -s tests -t .
 
 check:
 	find . -name \*.py | grep -v "^test_" | xargs pylint --errors-only --reports=n
@@ -74,6 +73,8 @@ dev-link:
 	$(VDEV)/bin/pip install flake8
 	$(VDEV)/bin/pip install -e .
 
+test:
+	$(PYTHON) -m unittest discover ./test -v
 
 clean:
 	$(PYTHON) setup.py clean

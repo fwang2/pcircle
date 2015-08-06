@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -e  # exit when error
+
+
+HOSTS=(dtn-sch04 dtn-sch05 dtn-sch06 dtn-sch07 \
+    dtn-sch08 dtn-sch09 dtn-sch09 dtn-sch10)
+
+src=/lustre/atlas1/stf008/scratch/fwang2
+dest=/lustre/atlas2/stf008/scratch/fwang2
+
+
+for i in 4 8 16 64 128 256; do
+    for j in `seq 1 8`; do
+        for k in 1 2 4 8; do
+            for l in 1 2 3; do
+                echo "stripe=$i, num_of_host=$j, np=$k, iter=$l"
+                tsrc="$src/stripe$i-100-1g"
+                tdest="$dest/stripe$i-100-1g"
+                rm -rf $tdest
+                hstr=$(printf "%s," "${HOSTS[@]:0:$j}")
+                mpirun -H $hstr -np $k fcp -p $tsrc $tdest
+            done
+        done
+    done
+done
+
+

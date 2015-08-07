@@ -75,7 +75,7 @@ def parse_args():
     parser.add_argument("--checkpoint-id", metavar="ID", default=None, help="default: timestamp")
     parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta, default: off")
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
-    parser.add_argument("-f", "--force", default=True, help="force overwrite")
+    parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
     parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
     parser.add_argument("src", help="copy from")

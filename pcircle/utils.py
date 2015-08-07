@@ -30,6 +30,7 @@ def getLogger(name, logfile=None):
 
     return logger
 
+
 def destpath(srcdir, destdir, srcfile):
     """
     srcdir -> source path
@@ -44,6 +45,7 @@ def destpath(srcdir, destdir, srcfile):
         return destdir
     else:
         return destdir + "/" + rpath
+
 
 def conv_unit(s):
     " convert a unit to number"
@@ -62,6 +64,37 @@ def conv_unit(s):
 
     raise ValueError("Can't convert %s" % s)
 
+
+def conv_time(s):
+    """ Convert seconds into readable format"""
+    one_min = 60
+    one_hr = 60 * 60
+    one_day = 24 * 60 * 60
+
+    try:
+        s = float(s)
+    except:
+        raise ValueError("Can't convert %s" % s)
+
+    if s < one_min:
+        return "%ss" % s
+    elif s < one_hr:
+        mins = int(s) / 60
+        secs = s % 60
+        return "%sm %ss" % (mins, secs)
+    elif s < one_day:
+        s = int(s)
+        hours = s / one_hr
+        mins = (s % one_hr) / 60
+        secs = s - (hours * 60 * 60) - (mins * 60)
+        return "%sh %sm %ss" % (hours, mins, secs)
+    else:
+        s = int(s)
+        days = s / one_day
+        hours = (s % one_day) / one_hr
+        mins = ((s % one_day) % one_hr) / one_min
+        return "%sd %sh %sm" % (days, hours, mins)
+
 def bytes_fmt(n):
     d = {'1mb': 1048576,
          '1gb': 1073741824,
@@ -78,17 +111,17 @@ def bytes_fmt(n):
     return "%.2f TiB" % (float(n)/d['1tb'])
 
 
-# SO: http://stackoverflow.com/questions/13520622/python-script-to-show-progress
 def spiner():
+    # SO: http://stackoverflow.com/questions/13520622/python-script-to-show-progress
     for c in itertools.cycle('|/-\\'):
         sys.stdout.write('\r' + c)
         sys.stdout.flush()
         time.sleep(0.2)
 
-# SO: http://stackoverflow.com/questions/3002085/python-to-print-out-status-bar-and-percentage
 
 def progress():
-    import sys
+    # SO: http://stackoverflow.com/questions/3002085/python-to-print-out-status-bar-and-percentage
+
     total = 10000000
     point = total / 100
     increment = total / 20
@@ -129,8 +162,10 @@ class bcolors:
 def hprint(msg):
     print(bcolors.INFO + msg + bcolors.ENDC)
 
+
 def eprint(msg):
     print(bcolors.FAIL + msg + bcolors.ENDC)
+
 
 def timestamp():
     import time
@@ -159,6 +194,7 @@ def breakline(line, size=60, minsz=10):
     else:
         return ret + line[:]
 
+
 def breakline2(linearr, size=60, minsz=10):
     ret = ''
     curline = ''
@@ -172,6 +208,7 @@ def breakline2(linearr, size=60, minsz=10):
         return " ".join([ret, linearr[-1]])
     else:
         return " ".join([ret, "\ \n", linearr[-1]])
+
 
 def emsg(ep):
     '''

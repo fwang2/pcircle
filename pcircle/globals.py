@@ -30,6 +30,6 @@ class G:
     VAL = "val"
     logger = None
     logfile = None
-    loglevel = "debug"
+    loglevel = "warn"
     use_store = False
     DB_BUFSIZE = 10000

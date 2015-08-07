@@ -733,8 +733,6 @@ class Circle:
                 for child in self.child_ranks:
                     self.comm.send(None, child, T.REDUCE)
 
-
-
     def debug_info(self):
         ret = "req outstanding = %s, " % self.workreq_outstanding
         if self.token_send_req == MPI.REQUEST_NULL:
@@ -751,6 +749,7 @@ class Circle:
     def exit(code):
         MPI.Finalize()
         sys.exit(code)
+
 
 def tally_hosts():
     """ How many physical hosts are there? """

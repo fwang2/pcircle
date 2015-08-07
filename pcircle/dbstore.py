@@ -11,6 +11,7 @@ from collections import deque
 from fdef import FileItem, FileChunk, ChunkSum
 from utils import getLogger
 from pcircle.globals import G
+from pcircle.utils import getLogger
 
 __author__ = 'Feiyi Wang'
 
@@ -50,12 +51,17 @@ class DbStore(object):
 
         self.dbname = dbname
         self.conn = None
-        self.logger = getLogger(__name__, G.loglevel)
+        self.logger = getLogger(__name__)
+
+        # debug, dbstore doesn't have to be tied with rank.
+        # so, it is set to be empty
+        # self.d = {"rank" : "rank %s" % self.rank}
+        self.d = {"rank": ''}
 
         try:
             self.conn = sqlite3.connect(dbname)
         except sqlite3.OperationalError as e:
-            logger.error("%s : %s" % (e.message, dbname))
+            self.logger.error(e, extra=self.d)
             sys.exit(1)
         self.cur = self.conn.cursor()
         self.resume = resume
@@ -80,8 +86,8 @@ class DbStore(object):
             self.conn.commit()
         else:
             self.recalibrate()
-        setlevel(logger, G.loglevel)
-        logger.debug("Connected to %s" % self.dbname)
+
+        self.logger.debug("Connected to %s" % self.dbname, extra=self.d)
 
     def _restore_from_backup(self):
         self.cur.execute("SELECT work FROM backup WHERE id=1")
@@ -134,7 +140,7 @@ class DbStore(object):
 
     def err_and_exit(self, msg):
         if self.circle.rank == 0:
-            logger.error(msg)
+            self.logger.error(msg)
             self.circle.exit(0)
 
     def mput(self, objs):
@@ -144,7 +150,7 @@ class DbStore(object):
                 self.conn.execute("INSERT INTO workq (work) VALUES (?)", (pdata,))
                 self.tracksize(self.conn, obj)
 
-        logger.debug("%s objs inserted to %s" % (len(objs), self.dbname))
+        self.logger.debug("%s objs inserted to %s" % (len(objs), self.dbname), extra=self.d)
 
     # alias extend to match list
     extend = mput

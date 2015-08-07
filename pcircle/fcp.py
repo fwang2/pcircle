@@ -761,8 +761,6 @@ def store_start():
     dest = check_path(circle, src, dest)
 
     treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve, force=ARGS.force)
-
-    treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)
     treewalk.flushdb()
 

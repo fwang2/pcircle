@@ -38,7 +38,7 @@ def parse_args():
 
 
 class FWalk(BaseTask):
-    def __init__(self, circle, src, dest=None, preserve=False, force=False, sizeonly=True):
+    def __init__(self, circle, src, dest=None, preserve=False, force=False):
         BaseTask.__init__(self, circle)
 
         self.circle = circle
@@ -46,7 +46,11 @@ class FWalk(BaseTask):
         self.dest = dest
         self.preserve = preserve
         self.force = force
-        self.sizeonly = sizeonly
+
+        # For now, I am setting the option
+        # TODO: should user allowed to meddle this?
+        self.sizeonly = False
+        self.checksum = False
 
         self.sym_links = 0
         self.follow_sym_links = False
@@ -148,13 +152,16 @@ class FWalk(BaseTask):
                 self.logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file),
                                  extra=self.d)
                 return True
-        elif filecmp.cmp(src_file, dest_file):
-            self.logger.warn("Check Okay: src: %s, dest=%s" % (src_file, dest_file), extra=self.d)
-            return True
+        elif self.checksum:
+            raise NotImplementedError("Checksum comparison")
 
-        # check failed
-        self.logger.warn("Retransfer: %s" % src_file, extra=self.d)
-        os.unlink(dest_file)
+        try:
+            os.unlink(dest_file)
+        except:
+            self.logger.warn("Can't unlink %s" % dest_file, extra=self.d)
+        else:
+            self.logger.info("Retransfer: %s" % src_file, extra=self.d)
+
         return False
 
     def append_fitem(self, fitem):
@@ -168,15 +175,11 @@ class FWalk(BaseTask):
             self.flist.append(fitem)
 
     def process(self):
-        ''' process a work unit, spath, dpath refers to
-            source and destination respectively
-        '''
+        """ process a work unit, spath, dpath refers to
+            source and destination respectively """
 
         fitem = self.circle.deq()
         spath = fitem.path
-
-        # self.logger.info("process: %s" % spath, extra=self.d)
-
         if spath:
             try:
                 st = os.stat(spath)

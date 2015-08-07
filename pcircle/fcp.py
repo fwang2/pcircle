@@ -72,17 +72,12 @@ def parse_args():
     parser.add_argument("--checkpoint-interval", metavar="seconds", type=int, default=360,
                         help="checkpoint interval, default: 360s")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
-
     parser.add_argument("--checkpoint-id", metavar="ID", default=None, help="default: timestamp")
     parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta, default: off")
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
-
-    parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
-    parser.add_argument("--sizeonly", action="store_true", help="compare file by size")
-
+    parser.add_argument("-f", "--force", default=True, help="force overwrite")
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
     parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
-
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -261,7 +256,7 @@ class FCP(BaseTask):
             try:
                 os.symlink(linkto, dest)
             except Exception as e:
-                logger.warn("%s, skipping sym link %s." % (e, fi.path))
+                logger.warn("%s, skipping sym link %s" % (e, fi.path), extra=self.d)
         elif stat.S_ISREG(fi.st_mode):
             self.enq_file(fi)  # where chunking takes place
 
@@ -566,8 +561,7 @@ def mem_start():
     dest = os.path.abspath(ARGS.dest)
     dest = check_path(circle, src, dest)
 
-    treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve,
-                     force=ARGS.force, sizeonly=ARGS.sizeonly)
+    treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve, force=ARGS.force)
 
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.reduce_interval)
@@ -766,8 +760,7 @@ def store_start():
     dest = os.path.abspath(ARGS.dest)
     dest = check_path(circle, src, dest)
 
-    treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve,
-                     force=ARGS.force, sizeonly=ARGS.sizeonly)
+    treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve, force=ARGS.force)
 
     treewalk.set_loglevel(ARGS.loglevel)
     circle.begin(treewalk)

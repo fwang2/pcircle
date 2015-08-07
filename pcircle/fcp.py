@@ -65,7 +65,7 @@ def parse_args():
                                      epilog="Please report issues to help@nccs.gov")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
-    parser.add_argument("--loglevel", default="error", help="log level for file, default ERROR")
+    parser.add_argument("--loglevel", default="warn", help="log level for file, default WARN")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
     parser.add_argument("--reduce-interval", metavar="seconds", type=int, default=10, help="interval, default 10s")

@@ -109,7 +109,7 @@ class FWalk(BaseTask):
             try:
                 os.mkdir(o_dir, stat.S_IRWXU)
             except OSError as e:
-                self.logger.warn("processing [%s], %s" % (i_dir, e), extra=self.d)
+                self.logger.warn(e, extra=self.d)
 
             if self.preserve:
                 self.copy_xattr(i_dir, o_dir)

@@ -131,7 +131,7 @@ class FWalk(BaseTask):
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : processing [%s] at %s" % (self.circle.rank, i_dir, count))
                     last_report = MPI.Wtime()
-                    
+
     def do_metadata_preserve(self, src_file, dest_file):
         if self.preserve:
             try:

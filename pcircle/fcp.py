@@ -304,9 +304,9 @@ class FCP(BaseTask):
 
     def do_open(self, k, d, flag, limit):
         """
-        :param k: the file path
-        :param d: dictionary of <path, file descriptor>
-        :return: file descriptor
+        @param k: the file path
+        @param d: dictionary of <path, file descriptor>
+        @return: file descriptor
         """
         if d.has_key(k):
             return d[k]
@@ -320,11 +320,16 @@ class FCP(BaseTask):
             except OSError as e:
                 logger.warn("FD for %s not valid when closing" % old_k, extra=self.d)
 
+
         fd = -1
         try:
             fd = os.open(k, flag)
         except OSError as e:
-            logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
+            if e.errno == 28: # no space left
+                logger.error("Critical error: %s, exit!" % e, extra=self.d)
+                self.circle.exit(0) # should abort
+            else:
+                logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
         else:
             if fd > 0:
                 d[k] = fd

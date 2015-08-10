@@ -46,6 +46,7 @@ class FWalk(BaseTask):
         self.dest = dest
         self.preserve = preserve
         self.force = force
+        self.interval = 10  # progress report
 
         # For now, I am setting the option
         # TODO: should user allowed to meddle this?
@@ -114,19 +115,23 @@ class FWalk(BaseTask):
             if self.preserve:
                 self.copy_xattr(i_dir, o_dir)
 
+        last_report = MPI.Wtime()
         count = 0
         try:
             entries = scandir(i_dir)
         except OSError as e:
             self.logger.warn(e)
             self.skipped += 1
-
         else:
             for entry in entries:
                 # entry.path should be equivalent to:
                 # self.circle.enq(FileItem(os.path.join(i_dir, entry.name)))
                 self.circle.enq(FileItem(entry.path))
-
+                count += 1
+                if (MPI.Wtime() - last_report) > self.interval:
+                    print("Rank %s : processing [%s] at %s" % (self.circle.rank, i_dir, count))
+                    last_report = MPI.Wtime()
+                    
     def do_metadata_preserve(self, src_file, dest_file):
         if self.preserve:
             try:

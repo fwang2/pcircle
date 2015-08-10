@@ -457,19 +457,29 @@ class FCP(BaseTask):
             print("FCP Loads: %s" % taskloads)
 
     def read_then_write(self, rfd, wfd, work, num_of_bytes, m):
+        """ core entry point for copy action: first read then write.
+
+        @param num_of_bytes: the exact amount of bytes we will copy
+        @return: False if unsuccessful.
+
+        """
         buf = None
         try:
             buf = readn(rfd, num_of_bytes)
         except IOError:
-            self.circle.Abort("Failed to read %s", work.src, extra=self.d)
+            self.logger.error("Failed to read %s", work.src, extra=self.d)
+            return False
 
         try:
             writen(wfd, buf)
         except IOError:
-            self.circle.Abort("Failed to write %s", work.dest, extra=self.d)
+            self.logger.error("Failed to write %s", work.dest, extra=self.d)
+            return False
 
         if m:
             m.update(buf)
+
+        return True
 
     def write_bytes(self, rfd, wfd, work):
         os.lseek(rfd, work.offset, os.SEEK_SET)

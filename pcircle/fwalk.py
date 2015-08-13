@@ -329,9 +329,6 @@ def main():
 
     circle = Circle(reduce_interval=ARGS.interval)
     treewalk = FWalk(circle, root)
-
-    if comm.rank == 0:
-        print("Both circle and fwalk init done, about to kick off")
     circle.begin(treewalk)
 
     if G.use_store:

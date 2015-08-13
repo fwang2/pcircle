@@ -749,14 +749,3 @@ class Circle:
     def exit(code):
         MPI.Finalize()
         sys.exit(code)
-
-
-def tally_hosts():
-    """ How many physical hosts are there? """
-    hostcnt = 0
-    localhost = MPI.Get_processor_name()
-    hosts = MPI.COMM_WORLD.gather(localhost)
-    if MPI.COMM_WORLD.rank == 0:
-        hostcnt = len(set(hosts))
-    hostcnt = MPI.COMM_WORLD.bcast(hostcnt)
-    return hostcnt

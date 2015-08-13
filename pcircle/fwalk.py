@@ -1,24 +1,24 @@
 #!/usr/bin/env python
 from __future__ import print_function
-
-from task import BaseTask
-from circle import Circle, tally_hosts
-from globals import G
 from mpi4py import MPI
-from utils import timestamp, bytes_fmt, destpath
-from dbstore import DbStore
-from fdef import FileItem
 from scandir import scandir
-import utils
-
 import stat
 import os
 import os.path
 import sys
 import argparse
-import filecmp
-
 import xattr
+
+from task import BaseTask
+from circle import Circle
+from globals import G
+from utils import timestamp, bytes_fmt, destpath
+from dbstore import DbStore
+from fdef import FileItem
+from mpihelper import tally_hosts
+
+import utils
+
 from _version import get_versions
 
 ARGS = None
@@ -129,7 +129,7 @@ class FWalk(BaseTask):
                 self.circle.enq(FileItem(entry.path))
                 count += 1
                 if (MPI.Wtime() - last_report) > self.interval:
-                    print("Rank %s : processing [%s] at %s" % (self.circle.rank, i_dir, count))
+                    print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, i_dir, count))
                     last_report = MPI.Wtime()
             self.logger.info("Finish scan of [%s], count=%s" % (i_dir, count), extra=self.d)
 
@@ -310,24 +310,28 @@ def main():
     logger = utils.getLogger(__name__)
     root = os.path.abspath(ARGS.path)
     root = os.path.realpath(root)
+    comm = MPI.COMM_WORLD
+
     if not os.path.exists(root):
-        if MPI.COMM_WORLD.Get_rank() == 0:
+        if comm.rank  == 0:
             print("Root path: %s doesn't exist!" % root)
         MPI.Finalize()
         sys.exit(0)
 
     hosts_cnt = tally_hosts()
-    circle = Circle(reduce_interval=ARGS.interval)
 
-
-    if circle.rank == 0:
+    if comm.rank == 0:
         print("Running Parameters:\n")
         print("\t{:<20}{:<20}".format("FWALK version:", __version__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", root))
 
+    circle = Circle(reduce_interval=ARGS.interval)
     treewalk = FWalk(circle, root)
+
+    if comm.rank == 0:
+        print("Both circle and fwalk init done, about to kick off")
     circle.begin(treewalk)
 
     if G.use_store:

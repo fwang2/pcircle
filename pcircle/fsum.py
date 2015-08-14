@@ -26,7 +26,7 @@ from cio import readn
 from fdef import ChunkSum
 from globals import G
 import utils
-from pcircle.circle import tally_hosts
+from pcircle.mpihelper import tally_hosts
 
 
 ARGS    = None

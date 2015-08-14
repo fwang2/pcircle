@@ -8,8 +8,9 @@ import signal
 import cPickle as pickle
 
 from _version import get_versions
-from utils import logging_init, bytes_fmt
-from chunksum import ChunkSum
+from utils import bytes_fmt, getLogger
+from fdef import ChunkSum
+from globals import G
 
 logger = logging.getLogger("fdiff")
 
@@ -45,7 +46,7 @@ def main():
     global ARGS, logger, xchunks, ychunks
     signal.signal(signal.SIGINT, sig_handler)
     ARGS = parse_args()
-    logger = logging_init(logger, ARGS.loglevel)
+    G.loglevel = ARGS.loglevel
 
     xchunks = load_chunks(ARGS.file1)
     ychunks = load_chunks(ARGS.file2)

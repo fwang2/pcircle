@@ -5,6 +5,7 @@ from fdef import ChunkSum
 import hashlib
 from mpi4py import MPI
 import utils
+from lru import LRU
 
 class PVerify(BaseTask):
     def __init__(self, circle, pcp, totalsize=0):
@@ -14,7 +15,7 @@ class PVerify(BaseTask):
         self.totalsize = totalsize
 
         # cache
-        self.fd_cache = {}
+        self.fd_cache = LRU(512)
 
         # failed
         self.failed = {}
@@ -42,20 +43,27 @@ class PVerify(BaseTask):
         chunk = self.deq()
         self.logger.debug("process: %s" % chunk, extra = self.d)
 
-        fd = None
-        if chunk.filename in self.fd_cache:
-            fd = self.fd_cache[chunk.filename]
+        # fd = None
+        # if chunk.filename in self.fd_cache:
+        #     fd = self.fd_cache[chunk.filename]
+        #
+        # if not fd:
+        #     # need to open for read
+        #     try:
+        #         fd = open(chunk.filename, "rb")
+        #     except IOError as e:
+        #         self.logger.error(e, extra=self.d)
+        #         self.failcnt += 1
+        #         return
+        #
+        #     self.fd_cache[chunk.filename] = fd
 
-        if not fd:
-            # need to open for read
-            try:
-                fd = open(chunk.filename, "rb")
-            except IOError as e:
-                self.logger.error(e, extra=self.d)
-                self.failcnt += 1
-                return
-
-            self.fd_cache[chunk.filename] = fd
+        try:
+            fd = open(chunk.filename, "rb")
+        except IOError as e:
+            self.logger.error(e, extra=self.d)
+            self.failcnt += 1
+            return
 
         fd.seek(chunk.offset)
         digest = hashlib.sha1(fd.read(chunk.length)).hexdigest()

@@ -704,8 +704,8 @@ def fix_opt(treewalk):
     flist = treewalk.flist
     for f in flist:
         dpath = destpath(treewalk.src, treewalk.dest, f.path)  # f[0]
-        os.chown(dpath, f.st_uid, f.st_gid)  # f[3] f[4]
-        os.chmod(dpath, f.st_mode)
+        os.lchown(dpath, f.st_uid, f.st_gid)  # f[3] f[4]
+        os.lchmod(dpath, f.st_mode)
 
 def parse_and_bcast():
     global ARGS

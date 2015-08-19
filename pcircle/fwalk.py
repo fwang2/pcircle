@@ -112,7 +112,7 @@ class FWalk(BaseTask):
             try:
                 os.mkdir(o_dir, st.st_mode)
                 if G.fix_opt:
-                    os.chown(o_dir, st.st_uid, st.st_gid)
+                    os.lchown(o_dir, st.st_uid, st.st_gid)
             except OSError as e:
                 self.logger.warn(e, extra=self.d)
 

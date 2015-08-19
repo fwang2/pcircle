@@ -102,13 +102,17 @@ class FWalk(BaseTask):
         if len(self.flist_buf) != 0:
             self.flist.mput(self.flist_buf)
 
-    def process_dir(self, i_dir):
-        """ i_dir should be absolute path """
+    def process_dir(self, i_dir, st):
+        """ i_dir should be absolute path
+        st is the stat object associated with the directory
+        """
         if self.dest:
             # we create destination directory
             o_dir = destpath(self.src, self.dest, i_dir)
             try:
                 os.mkdir(o_dir, stat.S_IRWXU)
+                if G.fix_opt:
+                    os.chown(o_dir, st.st_uid, st.st_gid)
             except OSError as e:
                 self.logger.warn(e, extra=self.d)
 
@@ -228,7 +232,7 @@ class FWalk(BaseTask):
 
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
-                self.process_dir(spath)
+                self.process_dir(spath, st)
         # END OF if spath
 
     def tally(self, t):

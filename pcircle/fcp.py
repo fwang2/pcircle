@@ -836,6 +836,9 @@ def main():
     tally_hosts()
     G.loglevel = ARGS.loglevel
     G.use_store = ARGS.use_store
+    if ARGS.fix_opt and os.geteuid() == 0:
+        G.fix_opt = True
+
     dbname = get_dbname()
 
     G.logfile = ".pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()

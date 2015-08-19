@@ -69,6 +69,10 @@ class FWalk(BaseTask):
             self.flist = []  # element is (filepath, filemode, filesize, uid, gid)
         self.src_flist = self.flist
 
+        # hold unlinkable dest directories
+        # we have to do the --fix-opt at the end
+        self.dest_dirs = []
+
         self.cnt_dirs = 0
         self.cnt_files = 0
         self.cnt_filesize = 0
@@ -111,10 +115,14 @@ class FWalk(BaseTask):
             o_dir = destpath(self.src, self.dest, i_dir)
             try:
                 os.mkdir(o_dir, st.st_mode)
-                if G.fix_opt:
-                    os.lchown(o_dir, st.st_uid, st.st_gid)
             except OSError as e:
                 self.logger.warn(e, extra=self.d)
+
+            if G.fix_opt:
+                try:
+                    os.lchown(o_dir, st.st_uid, st.st_gid)
+                except OSError as e:
+                    self.logger.warn(e, extra=self.d)
 
             if self.preserve:
                 self.copy_xattr(i_dir, o_dir)

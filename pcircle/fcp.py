@@ -359,7 +359,7 @@ class FCP(BaseTask):
                 try:
                     os.unlink(dest)
                 except:
-                    logger.error("Failed to unlink %s, skipping ... " % dest)
+                    logger.error("Failed to unlink %s, skipping ... " % dest, extra=self.d)
                     return False
                 else:
                     wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY)

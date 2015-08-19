@@ -506,7 +506,7 @@ class FCP(BaseTask):
 
 def err_and_exit(msg, code):
     if circle.rank == 0:
-        print(msg)
+        print("\n%s" % msg)
     MPI.Finalize()
     sys.exit(0)
 
@@ -541,6 +541,12 @@ def check_dbstore_resume_condition(rid):
 
 def check_path(circ, isrc, idest):
     """ verify and return target destination"""
+
+    if os.path.exists(isrc) and os.path.isfile(isrc):
+        err_and_exit("Error: source [%s] is a file, directory required" % isrc, 0)
+
+    if os.path.exists(idest) and os.path.isfile(idest):
+        err_and_exit("Error: destination [%s] is a file, directory required" % idest, 0)
 
     if not os.path.exists(isrc) or not os.access(isrc, os.R_OK):
         err_and_exit("source directory %s is not readable" % isrc, 0)

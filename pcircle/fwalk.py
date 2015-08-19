@@ -110,7 +110,7 @@ class FWalk(BaseTask):
             # we create destination directory
             o_dir = destpath(self.src, self.dest, i_dir)
             try:
-                os.mkdir(o_dir, stat.S_IRWXU)
+                os.mkdir(o_dir, st.st_mode)
                 if G.fix_opt:
                     os.chown(o_dir, st.st_uid, st.st_gid)
             except OSError as e:

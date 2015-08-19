@@ -137,14 +137,15 @@ class FWalk(BaseTask):
                     last_report = MPI.Wtime()
             self.logger.info("Finish scan of [%s], count=%s" % (i_dir, count), extra=self.d)
 
-    def do_metadata_preserve(self, src_file, dest_file):
+    def do_metadata_preserve(self, src_file, dest_file, st):
+        try:
+            os.mknod(dest_file, st.st_mode)
+        except OSError as e:
+            self.logger.warn("failed to mknod() for %s", dest_file, extra=self.d)
+            return
+        
         if self.preserve:
-            try:
-                os.mknod(dest_file, stat.S_IRWXU | stat.S_IFREG)
-            except OSError as e:
-                self.logger.warn("failed to mknod() for %s", dest_file, extra=self.d)
-            else:
-                self.copy_xattr(src_file, dest_file)
+            self.copy_xattr(src_file, dest_file)
 
     def check_dest_exists(self, src_file, dest_file):
         """ return True if dest exists and checksum verified correct
@@ -226,7 +227,7 @@ class FWalk(BaseTask):
                         # including the case dest is not there
                         # then we do the following
                         self.append_fitem(fitem)
-                        self.do_metadata_preserve(spath, dpath)
+                        self.do_metadata_preserve(spath, dpath, st)
                 self.cnt_files += 1
                 self.cnt_filesize += fitem.st_size
 

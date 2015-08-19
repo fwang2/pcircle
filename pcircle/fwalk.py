@@ -124,7 +124,7 @@ class FWalk(BaseTask):
         try:
             entries = scandir(i_dir)
         except OSError as e:
-            self.logger.warn(e)
+            self.logger.warn(e, extra=self.d)
             self.skipped += 1
         else:
             for entry in entries:

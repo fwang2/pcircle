@@ -252,7 +252,7 @@ class Circle:
 
     def enq(self, work):
         if work is None:
-            self.logger.warn("enq work item is None")
+            self.logger.warn("enq work item is None", extra=self.d)
             return
         self.workq.append(work)
 

@@ -1,4 +1,5 @@
 import setuptools
+
 import versioneer
 import sys
 
@@ -7,8 +8,7 @@ requires = [
         'mpi4py',
         'lru-dict',
         'xattr',
-        'scandir',
-        'nose']
+        'scandir']
 
 if (3, 0, 0) < sys.version_info[:3] < (2,7,0):
     raise RuntimeError("This application requires Python 2.7.x")
@@ -24,7 +24,7 @@ setuptools.setup(name='pcircle',
     author='Feiyi Wang',
     author_email='fwang2@ornl.gov',
     packages = ['pcircle'],
-    data_files=[],
+    data_files=['Makefile'],
     entry_points={
         'console_scripts': [
             'fcp=pcircle.fcp:main',

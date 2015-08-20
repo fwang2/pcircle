@@ -154,8 +154,8 @@ class FWalk(BaseTask):
         except OSError as e:
             self.logger.warn("mknod() for %s, %s" %(dest_file, e), extra=self.d)
             return
-        
-        if self.preserve:
+
+        if G.preserve:
             self.copy_xattr(src_file, dest_file)
 
     def check_dest_exists(self, src_file, dest_file):

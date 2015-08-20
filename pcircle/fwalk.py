@@ -307,7 +307,7 @@ class FWalk(BaseTask):
             print("{:<20}{:<20}".format("File count:", total_files))
             print("{:<20}{:<20}".format("Skipped count:", total_skipped))
             print("{:<20}{:<20}".format("File size:", bytes_fmt(total_filesize)))
-            print("{:<20}{:<20}".format("Tree talk time:", "%.2f seconds" % (self.time_ended - self.time_started)))
+            print("{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
             print("FWALK Loads: %s" % taskloads)
             print("")
 

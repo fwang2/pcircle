@@ -834,7 +834,7 @@ def main():
     global ARGS, logger, circle
 
     # This might be an overkill function
-    # signal.signal(signal.SIGINT, sig_handler)
+    signal.signal(signal.SIGINT, sig_handler)
 
     treewalk = None;
     pcp = None;
@@ -874,6 +874,7 @@ def main():
         print("\t{:<20}{:<20}".format("Destination:", os.path.abspath(ARGS.dest)))
         print("\t{:<20}{:<20}".format("Overwrite:", "%r" % ARGS.force))
         print("\t{:<20}{:<20}".format("Checksumming:", "%r" % ARGS.checksum))
+        print("\t{:<20}{:<20}".format("Stripe Preserve:", "%r" % G.preserve))
 
     #
     # TODO: there are some redundant code brought in by merging

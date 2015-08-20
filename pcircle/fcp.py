@@ -544,7 +544,7 @@ def check_path(isrc, idest):
     """ verify and return target destination"""
     isrc = os.path.abspath(isrc)
     idest = os.path.abspath(idest)
-    
+
     if os.path.exists(isrc) and os.path.isfile(isrc):
         err_and_exit("Error: source [%s] is a file, directory required" % isrc, 0)
 

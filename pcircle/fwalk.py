@@ -146,10 +146,14 @@ class FWalk(BaseTask):
             self.logger.info("Finish scan of [%s], count=%s" % (i_dir, count), extra=self.d)
 
     def do_metadata_preserve(self, src_file, dest_file, st):
+        """ create file node, copy attribute if needed."""
+        if sys.platform == "darwin": # Mac OS mknod() not permitted
+            return
+
         try:
             os.mknod(dest_file, st.st_mode)
         except OSError as e:
-            self.logger.warn("failed to mknod() for %s", dest_file, extra=self.d)
+            self.logger.warn("mknod() for %s, %s" %(dest_file, e), extra=self.d)
             return
         
         if self.preserve:

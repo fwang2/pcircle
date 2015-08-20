@@ -31,7 +31,7 @@ class PVerify(BaseTask):
         self.logger = utils.getLogger(__name__)
 
         if self.circle.rank == 0:
-            print("\nStart verification process ...")
+            print("\nStart checksum verification ...")
 
     def create(self):
         self.logger.debug("Chunk count: %s" % len(self.pcp.checksum), extra=self.d)

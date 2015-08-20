@@ -910,10 +910,9 @@ def main():
         if circle.rank == 0:
             print("")
             if tally == 0:
-                print("Verification passed!")
+                print("\t{:<20}{:<20}".format("Result:", "PASS"))
             else:
-                print("Verification failed")
-                print("Note that checksum errors can't be corrected by checkpoint/resume!")
+                print("\t{:<20}{:<20}".format("Result:", "FAILED"))
 
     # final task
     if ARGS.fix_opt and treewalk and os.geteuid() == 0:

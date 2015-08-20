@@ -559,7 +559,6 @@ def check_path(isrc, idest):
 
     # idest doesn't exits at this point
     # we check if its parent exists
-
     dest_parent = os.path.dirname(idest)
 
     if not (os.path.exists(dest_parent) and os.access(dest_parent, os.W_OK)):
@@ -866,8 +865,8 @@ def main():
         print("\t{:<20}{:<20}".format("FCP version:", __version__))
         print("\t{:<20}{:<20}".format("Num of Hosts:", NUM_OF_HOSTS))
         print("\t{:<20}{:<20}".format("Num of Processes:", MPI.COMM_WORLD.Get_size()))
-        print("\t{:<20}{:<20}".format("Source:", ARGS.src))
-        print("\t{:<20}{:<20}".format("Destination:", ARGS.dest))
+        print("\t{:<20}{:<20}".format("Source:", os.path.abspath(ARGS.src)))
+        print("\t{:<20}{:<20}".format("Destination:", os.path.abspath(ARGS.dest)))
         print("\t{:<20}{:<20}".format("Overwrite:", "%r" % ARGS.force))
         print("\t{:<20}{:<20}".format("Checksumming:", "%r" % ARGS.checksum))
 

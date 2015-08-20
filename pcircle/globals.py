@@ -33,5 +33,5 @@ class G:
     loglevel = "warn"
     use_store = False
     fix_opt = False
-
+    preserve = True
     DB_BUFSIZE = 10000

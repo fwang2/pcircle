@@ -44,7 +44,6 @@ class FWalk(BaseTask):
         self.circle = circle
         self.src = src
         self.dest = dest
-        self.preserve = preserve
         self.force = force
         self.interval = 10  # progress report
 
@@ -124,7 +123,7 @@ class FWalk(BaseTask):
                 except OSError as e:
                     self.logger.warn(e, extra=self.d)
 
-            if self.preserve:
+            if G.preserve:
                 self.copy_xattr(i_dir, o_dir)
 
         last_report = MPI.Wtime()

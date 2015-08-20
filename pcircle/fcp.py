@@ -73,7 +73,7 @@ def parse_args():
                         help="checkpoint interval, default: 360s")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
     parser.add_argument("--checkpoint-id", metavar="ID", default=None, help="default: timestamp")
-    parser.add_argument("-p", "--preserve", action="store_true", help="preserve meta, default: off")
+    parser.add_argument("--disable-preserve", action="store_true", help="no preserving meta, default: off")
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
     parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
@@ -579,7 +579,7 @@ def mem_start():
     dest = os.path.abspath(ARGS.dest)
     # dest = check_path(circle, src, dest)
 
-    treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve, force=ARGS.force)
+    treewalk = FWalk(circle, src, dest, force=ARGS.force)
 
     circle.begin(treewalk)
     circle.finalize(reduce_interval=ARGS.reduce_interval)
@@ -781,7 +781,7 @@ def store_start():
     dest = os.path.abspath(ARGS.dest)
     # dest = check_path(circle, src, dest)
 
-    treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve, force=ARGS.force)
+    treewalk = FWalk(circle, src, dest, force=ARGS.force)
     circle.begin(treewalk)
     treewalk.flushdb()
 
@@ -845,6 +845,9 @@ def main():
 
     if ARGS.fix_opt and os.geteuid() == 0:
         G.fix_opt = True
+
+    if ARGS.disable_preserve:
+        G.preserve = False
 
     if comm.rank == 0:
         check_path(ARGS.src, ARGS.dest)

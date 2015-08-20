@@ -20,25 +20,25 @@ Note on Logging:
 """
 from __future__ import print_function
 
-from mpi4py import MPI
 import time
 import stat
 import os
 import os.path
 import logging
 import argparse
-import utils
 import hashlib
 import sys
 import signal
 import resource
 import cPickle as pickle
-
-from collections import Counter, defaultdict
-from utils import bytes_fmt, destpath
+from collections import Counter
 from lru import LRU
 from threading import Thread
 
+from mpi4py import MPI
+
+import utils
+from utils import bytes_fmt, destpath
 from task import BaseTask
 from verify import PVerify
 from circle import Circle
@@ -58,7 +58,7 @@ logger = None
 circle = None
 NUM_OF_HOSTS = 0
 taskloads = []
-
+comm = MPI.COMM_WORLD
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Parallel Data Copy",
@@ -448,13 +448,14 @@ class FCP(BaseTask):
         self.wtime_ended = MPI.Wtime()
         taskloads = self.circle.comm.gather(self.reduce_items)
         if self.circle.rank == 0:
-            print("")
             if self.totalsize == 0: return
             time = self.wtime_ended - self.wtime_started
             rate = float(self.totalsize) / time
-            print("Copy Job Completed In: %.2f seconds" % (time))
-            print("Average Transfer Rate: %s/s\n" % bytes_fmt(rate))
-            print("FCP Loads: %s" % taskloads)
+            print("\nFCP Epilogue:\n")
+            print("\t{:<20}{:<20}".format("Ending at:", utils.current_time()))
+            print("\t{:<20}{:<20}".format("Completed in:", utils.conv_time(time)))
+            print("\t{:<20}{:<20}".format("Transfer Rate:", "%s/s" % bytes_fmt(rate)))
+            print("\t{:<20}{:<20}".format("FCP Loads:", "%s" % taskloads))
 
     def read_then_write(self, rfd, wfd, work, num_of_bytes, m):
         """ core entry point for copy action: first read then write.
@@ -505,7 +506,7 @@ class FCP(BaseTask):
 
 
 def err_and_exit(msg, code):
-    if circle.rank == 0:
+    if comm.rank == 0:
         print("\n%s" % msg)
     MPI.Finalize()
     sys.exit(0)
@@ -539,9 +540,11 @@ def check_dbstore_resume_condition(rid):
     return chk_full, db_full
 
 
-def check_path(circ, isrc, idest):
+def check_path(isrc, idest):
     """ verify and return target destination"""
-
+    isrc = os.path.abspath(isrc)
+    idest = os.path.abspath(idest)
+    
     if os.path.exists(isrc) and os.path.isfile(isrc):
         err_and_exit("Error: source [%s] is a file, directory required" % isrc, 0)
 
@@ -559,13 +562,8 @@ def check_path(circ, isrc, idest):
 
     dest_parent = os.path.dirname(idest)
 
-    if os.path.exists(dest_parent) and os.access(dest_parent, os.W_OK):
-        return idest
-    else:
+    if not (os.path.exists(dest_parent) and os.access(dest_parent, os.W_OK)):
         err_and_exit("Error: destination [%s] is not accessible" % dest_parent, 0)
-
-    # should not come to this point
-    raise
 
 
 def set_chunksize(pcp, tsz):
@@ -580,7 +578,7 @@ def mem_start():
     src = os.path.abspath(ARGS.src)
     src = os.path.realpath(src)  # the starting point can't be a sym-linked path
     dest = os.path.abspath(ARGS.dest)
-    dest = check_path(circle, src, dest)
+    # dest = check_path(circle, src, dest)
 
     treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve, force=ARGS.force)
 
@@ -782,7 +780,7 @@ def store_start():
     global circle
     src = os.path.abspath(ARGS.src)
     dest = os.path.abspath(ARGS.dest)
-    dest = check_path(circle, src, dest)
+    # dest = check_path(circle, src, dest)
 
     treewalk = FWalk(circle, src, dest, preserve=ARGS.preserve, force=ARGS.force)
     circle.begin(treewalk)
@@ -845,8 +843,12 @@ def main():
     tally_hosts()
     G.loglevel = ARGS.loglevel
     G.use_store = ARGS.use_store
+
     if ARGS.fix_opt and os.geteuid() == 0:
         G.fix_opt = True
+
+    if comm.rank == 0:
+        check_path(ARGS.src, ARGS.dest)
 
     dbname = get_dbname()
 
@@ -860,6 +862,7 @@ def main():
 
     if circle.rank == 0:
         print("Running Parameters:\n")
+        print("\t{:<20}{:<20}".format("Starting at:", utils.current_time()))
         print("\t{:<20}{:<20}".format("FCP version:", __version__))
         print("\t{:<20}{:<20}".format("Num of Hosts:", NUM_OF_HOSTS))
         print("\t{:<20}{:<20}".format("Num of Processes:", MPI.COMM_WORLD.Get_size()))

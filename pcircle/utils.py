@@ -6,6 +6,7 @@ import logging
 import re
 import os.path
 import traceback
+import datetime
 
 from pcircle.globals import G
 
@@ -29,6 +30,11 @@ def getLogger(name, logfile=None):
     logger.addHandler(ch)
 
     return logger
+
+
+def current_time():
+    ts = time.time()
+    return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def destpath(srcdir, destdir, srcfile):
@@ -77,7 +83,7 @@ def conv_time(s):
         raise ValueError("Can't convert %s" % s)
 
     if s < one_min:
-        return "%ss" % s
+        return "%.3f second" % s
     elif s < one_hr:
         mins = int(s) / 60
         secs = s % 60

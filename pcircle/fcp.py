@@ -909,6 +909,7 @@ def main():
 
     # final task
     if ARGS.fix_opt and treewalk and os.geteuid() == 0:
+        print("\nFixing ownership and permissions ...")
         fix_opt(treewalk)
 
     if treewalk:

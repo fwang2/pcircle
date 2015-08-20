@@ -1,5 +1,5 @@
 
-# Version: 0.14+dev
+# Version: 0.15
 
 """
 The Versioneer
@@ -57,7 +57,7 @@ unreleased software (between tags), the version identifier should provide
 enough information to help developers recreate the same tree, while also
 giving them an idea of roughly how old the tree is (after version 1.2, before
 version 1.3). Many VCS systems can report a description that captures this,
-for example 'git describe --tags --dirty --always' reports things like
+for example `git describe --tags --dirty --always` reports things like
 "0.7-1-g574ab98-dirty" to indicate that the checkout is one revision past the
 0.7 tag, has a unique revision id of "574ab98", and is "dirty" (it has
 uncommitted changes.
@@ -71,16 +71,19 @@ The version identifier is used for multiple purposes:
 
 Versioneer works by adding a special `_version.py` file into your source
 tree, where your `__init__.py` can import it. This `_version.py` knows how to
-dynamically ask the VCS tool for version information at import time. However,
-when you use "setup.py build" or "setup.py sdist", `_version.py` in the new
-copy is replaced by a small static file that contains just the generated
-version data.
+dynamically ask the VCS tool for version information at import time.
 
 `_version.py` also contains `$Revision$` markers, and the installation
 process marks `_version.py` to have this marker rewritten with a tag name
-during the "git archive" command. As a result, generated tarballs will
+during the `git archive` command. As a result, generated tarballs will
 contain enough information to get the proper version.
 
+To allow `setup.py` to compute a version too, a `versioneer.py` is added to
+the top level of your source tree, next to `setup.py` and the `setup.cfg`
+that configures it. This overrides several distutils/setuptools commands to
+compute the version when invoked, and changes `setup.py build` and `setup.py
+sdist` to replace `_version.py` with a small static file that contains just
+the generated version data.
 
 ## Installation
 
@@ -135,9 +138,10 @@ First, decide on values for the following configuration variables:
 
 * `parentdir_prefix`:
 
-  a string, frequently the same as tag_prefix, which appears at the start of
-  all unpacked tarball filenames. If your tarball unpacks into
-  'myproject-1.2.0', this should be 'myproject-'.
+  a optional string, frequently the same as tag_prefix, which appears at the
+  start of all unpacked tarball filenames. If your tarball unpacks into
+  'myproject-1.2.0', this should be 'myproject-'. To disable this feature,
+  just omit the field from your `setup.cfg`.
 
 This tool provides one script, named `versioneer`. That script has one mode,
 "install", which writes a copy of `versioneer.py` into the current directory
@@ -146,7 +150,8 @@ and runs `versioneer.py setup` to finish the installation.
 To versioneer-enable your project:
 
 * 1: Modify your `setup.cfg`, adding a section named `[versioneer]` and
-  populating it with the configuration values you decided earlier:
+  populating it with the configuration values you decided earlier (note that
+  the option names are not case-sensitive):
 
   ````
   [versioneer]
@@ -166,6 +171,10 @@ To versioneer-enable your project:
     `__version__` (by calling a function from `_version.py`)
   * modify your `MANIFEST.in` to include both `versioneer.py` and the
     generated `_version.py` in sdist tarballs
+
+  `versioneer install` will complain about any problems it finds with your
+  `setup.py` or `setup.cfg`. Run it multiple times until you have fixed all
+  the problems.
 
 * 3: add a `import versioneer` to your setup.py, and add the following
   arguments to the setup() call:
@@ -195,9 +204,8 @@ tarballs with `git archive`), the process is:
 * 1: git tag 1.0
 * 2: git push; git push --tags
 
-Currently, all version strings must be based upon a tag. Versioneer will
-report "unknown" until your tree has at least one tag in its history. This
-restriction will be fixed eventually (see issue #12).
+Versioneer will report "0+untagged.NUMCOMMITS.gHASH" until your tree has at
+least one tag in its history.
 
 ## Version-String Flavors
 
@@ -259,6 +267,13 @@ stripped tag, e.g. "0.11".
 Other styles are available. See details.md in the Versioneer source tree for
 descriptions.
 
+## Debugging
+
+Versioneer tries to avoid fatal errors: if something goes wrong, it will tend
+to return a version of "0+unknown". To investigate the problem, run `setup.py
+version`, which will run the version-lookup code in a verbose mode, and will
+display the full contents of `get_versions()` (including the `error` string,
+which may help identify what went wrong).
 
 ## Updating Versioneer
 
@@ -271,17 +286,20 @@ To upgrade your project to a new release of Versioneer, do the following:
   `SRC/_version.py`
 * commit any changed files
 
-### Upgrading from 0.10 to 0.11
+### Upgrading to 0.15
 
-You must add a `versioneer.VCS = "git"` to your `setup.py` before re-running
-`setup.py setup_versioneer`. This will enable the use of additional
-version-control systems (SVN, etc) in the future.
+Starting with this version, Versioneer is configured with a `[versioneer]`
+section in your `setup.cfg` file. Earlier versions required the `setup.py` to
+set attributes on the `versioneer` module immediately after import. The new
+version will refuse to run (raising an exception during import) until you
+have provided the necessary `setup.cfg` section.
 
-### Upgrading from 0.11 to 0.12
+In addition, the Versioneer package provides an executable named
+`versioneer`, and the installation process is driven by running `versioneer
+install`. In 0.14 and earlier, the executable was named
+`versioneer-installer` and was run without an argument.
 
-Nothing special.
-
-## Upgrading to 0.14
+### Upgrading to 0.14
 
 0.14 changes the format of the version string. 0.13 and earlier used
 hyphen-separated strings like "0.11-2-g1076c97-dirty". 0.14 and beyond use a
@@ -289,13 +307,15 @@ plus-separated "local version" section strings, with dot-separated
 components, like "0.11+2.g1076c97". PEP440-strict tools did not like the old
 format, but should be ok with the new one.
 
-## Upgrading to XXX
+### Upgrading from 0.11 to 0.12
 
-Starting with this version, Versioneer is configured with a `[versioneer]`
-section in your `setup.cfg` file. Earlier versions required the `setup.py` to
-set attributes on the `versioneer` module immediately after import. The new
-version will refuse to run (exception during import) until you have provided
-the necessary `setup.cfg` section.
+Nothing special.
+
+### Upgrading from 0.10 to 0.11
+
+You must add a `versioneer.VCS = "git"` to your `setup.py` before re-running
+`setup.py setup_versioneer`. This will enable the use of additional
+version-control systems (SVN, etc) in the future.
 
 ## Future Directions
 
@@ -330,31 +350,53 @@ import os
 import re
 import subprocess
 import sys
-from distutils.command.build import build as _build
-from distutils.command.sdist import sdist as _sdist
-from distutils.core import Command
 
 
 class VersioneerConfig:
     pass
 
 
-def find_setup_cfg():
+def get_root():
+    # we require that all commands are run from the project root, i.e. the
+    # directory that contains setup.py, setup.cfg, and versioneer.py .
+    root = os.path.realpath(os.path.abspath(os.getcwd()))
+    setup_py = os.path.join(root, "setup.py")
+    versioneer_py = os.path.join(root, "versioneer.py")
+    if not (os.path.exists(setup_py) or os.path.exists(versioneer_py)):
+        # allow 'python path/to/setup.py COMMAND'
+        root = os.path.dirname(os.path.realpath(os.path.abspath(sys.argv[0])))
+        setup_py = os.path.join(root, "setup.py")
+        versioneer_py = os.path.join(root, "versioneer.py")
+    if not (os.path.exists(setup_py) or os.path.exists(versioneer_py)):
+        err = ("Versioneer was unable to run the project root directory. "
+               "Versioneer requires setup.py to be executed from "
+               "its immediate directory (like 'python setup.py COMMAND'), "
+               "or in a way that lets it use sys.argv[0] to find the root "
+               "(like 'python path/to/setup.py COMMAND').")
+        raise VersioneerBadRootError(err)
     try:
-        setup_cfg = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                 "setup.cfg")
+        # Certain runtime workflows (setup.py install/develop in a setuptools
+        # tree) execute all dependencies in a single python process, so
+        # "versioneer" may be imported multiple times, and python's shared
+        # module-import table will cache the first one. So we can't use
+        # os.path.dirname(__file__), as that will find whichever
+        # versioneer.py was first imported, even in later projects.
+        me = os.path.realpath(os.path.abspath(__file__))
+        if os.path.splitext(me)[0] != os.path.splitext(versioneer_py)[0]:
+            print("Warning: build in %s is using versioneer.py from %s"
+                  % (os.path.dirname(me), versioneer_py))
     except NameError:
-        setup_cfg = "setup.cfg"
-    return setup_cfg
+        pass
+    return root
 
 
-def get_config():
+def get_config_from_root(root):
     # This might raise EnvironmentError (if setup.cfg is missing), or
     # configparser.NoSectionError (if it lacks a [versioneer] section), or
     # configparser.NoOptionError (if it lacks "VCS="). See the docstring at
     # the top of versioneer.py for instructions on writing your setup.cfg .
+    setup_cfg = os.path.join(root, "setup.cfg")
     parser = configparser.SafeConfigParser()
-    setup_cfg = find_setup_cfg()
     with open(setup_cfg, "r") as f:
         parser.readfp(f)
     VCS = parser.get("versioneer", "VCS")  # mandatory
@@ -379,6 +421,16 @@ class NotThisMethod(Exception):
 
 # these dictionaries contain VCS-specific tools
 LONG_VERSION_PY = {}
+HANDLERS = {}
+
+
+def register_vcs_handler(vcs, method):  # decorator
+    def decorate(f):
+        if vcs not in HANDLERS:
+            HANDLERS[vcs] = {}
+        HANDLERS[vcs][method] = f
+        return f
+    return decorate
 
 
 def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False):
@@ -386,6 +438,7 @@ def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False):
     p = None
     for c in commands:
         try:
+            dispcmd = str([c] + args)
             # remember shell=False, so use git.cmd on windows, not just git
             p = subprocess.Popen([c] + args, cwd=cwd, stdout=subprocess.PIPE,
                                  stderr=(subprocess.PIPE if hide_stderr
@@ -396,7 +449,7 @@ def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False):
             if e.errno == errno.ENOENT:
                 continue
             if verbose:
-                print("unable to run %s" % args[0])
+                print("unable to run %s" % dispcmd)
                 print(e)
             return None
     else:
@@ -408,7 +461,7 @@ def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False):
         stdout = stdout.decode()
     if p.returncode != 0:
         if verbose:
-            print("unable to run %s (error)" % args[0])
+            print("unable to run %s (error)" % dispcmd)
         return None
     return stdout
 LONG_VERSION_PY['git'] = '''
@@ -419,7 +472,7 @@ LONG_VERSION_PY['git'] = '''
 # that just contains the computed version number.
 
 # This file is released into the public domain. Generated by
-# versioneer-0.14+dev (https://github.com/warner/python-versioneer)
+# versioneer-0.15 (https://github.com/warner/python-versioneer)
 
 import errno
 import os
@@ -460,11 +513,25 @@ class NotThisMethod(Exception):
     pass
 
 
+LONG_VERSION_PY = {}
+HANDLERS = {}
+
+
+def register_vcs_handler(vcs, method):  # decorator
+    def decorate(f):
+        if vcs not in HANDLERS:
+            HANDLERS[vcs] = {}
+        HANDLERS[vcs][method] = f
+        return f
+    return decorate
+
+
 def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False):
     assert isinstance(commands, list)
     p = None
     for c in commands:
         try:
+            dispcmd = str([c] + args)
             # remember shell=False, so use git.cmd on windows, not just git
             p = subprocess.Popen([c] + args, cwd=cwd, stdout=subprocess.PIPE,
                                  stderr=(subprocess.PIPE if hide_stderr
@@ -475,7 +542,7 @@ def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False):
             if e.errno == errno.ENOENT:
                 continue
             if verbose:
-                print("unable to run %%s" %% args[0])
+                print("unable to run %%s" %% dispcmd)
                 print(e)
             return None
     else:
@@ -487,7 +554,7 @@ def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False):
         stdout = stdout.decode()
     if p.returncode != 0:
         if verbose:
-            print("unable to run %%s (error)" %% args[0])
+            print("unable to run %%s (error)" %% dispcmd)
         return None
     return stdout
 
@@ -506,6 +573,7 @@ def versions_from_parentdir(parentdir_prefix, root, verbose):
             "dirty": False, "error": None}
 
 
+@register_vcs_handler("git", "get_keywords")
 def git_get_keywords(versionfile_abs):
     # the code embedded in _version.py can just fetch the value of these
     # keywords. When used from setup.py, we don't want to import _version.py,
@@ -529,6 +597,7 @@ def git_get_keywords(versionfile_abs):
     return keywords
 
 
+@register_vcs_handler("git", "keywords")
 def git_versions_from_keywords(keywords, tag_prefix, verbose):
     if not keywords:
         raise NotThisMethod("no keywords at all, weird")
@@ -573,6 +642,7 @@ def git_versions_from_keywords(keywords, tag_prefix, verbose):
             "dirty": False, "error": "no suitable tags"}
 
 
+@register_vcs_handler("git", "pieces_from_vcs")
 def git_pieces_from_vcs(tag_prefix, root, verbose, run_command=run_command):
     # this runs 'git' from the root of the source tree. This only gets called
     # if the git-archive 'subst' keywords were *not* expanded, and
@@ -846,7 +916,8 @@ def get_versions():
         pass
 
     try:
-        return versions_from_parentdir(cfg.parentdir_prefix, root, verbose)
+        if cfg.parentdir_prefix:
+            return versions_from_parentdir(cfg.parentdir_prefix, root, verbose)
     except NotThisMethod:
         pass
 
@@ -856,6 +927,7 @@ def get_versions():
 '''
 
 
+@register_vcs_handler("git", "get_keywords")
 def git_get_keywords(versionfile_abs):
     # the code embedded in _version.py can just fetch the value of these
     # keywords. When used from setup.py, we don't want to import _version.py,
@@ -879,6 +951,7 @@ def git_get_keywords(versionfile_abs):
     return keywords
 
 
+@register_vcs_handler("git", "keywords")
 def git_versions_from_keywords(keywords, tag_prefix, verbose):
     if not keywords:
         raise NotThisMethod("no keywords at all, weird")
@@ -923,6 +996,7 @@ def git_versions_from_keywords(keywords, tag_prefix, verbose):
             "dirty": False, "error": "no suitable tags"}
 
 
+@register_vcs_handler("git", "pieces_from_vcs")
 def git_pieces_from_vcs(tag_prefix, root, verbose, run_command=run_command):
     # this runs 'git' from the root of the source tree. This only gets called
     # if the git-archive 'subst' keywords were *not* expanded, and
@@ -1051,7 +1125,7 @@ def versions_from_parentdir(parentdir_prefix, root, verbose):
             "dirty": False, "error": None}
 
 SHORT_VERSION_PY = """
-# This file was generated by 'versioneer.py' (0.14+dev) from
+# This file was generated by 'versioneer.py' (0.15) from
 # revision-control system data, or from the parent directory name of an
 # unpacked source archive. Distribution tarballs contain a pre-generated copy
 # of this file.
@@ -1250,39 +1324,29 @@ def render(pieces, style):
             "dirty": pieces["dirty"], "error": None}
 
 
-def get_root():
-    try:
-        return os.path.dirname(os.path.abspath(__file__))
-    except NameError:
-        return os.path.dirname(os.path.abspath(sys.argv[0]))
+class VersioneerBadRootError(Exception):
+    pass
 
 
-def vcs_function(vcs, suffix):
-    return getattr(sys.modules[__name__], '%s_%s' % (vcs, suffix), None)
-
-
-def get_versions():
+def get_versions(verbose=False):
     # returns dict with two keys: 'version' and 'full'
-    cfg = get_config()
-    verbose = cfg.verbose
+
+    if "versioneer" in sys.modules:
+        # see the discussion in cmdclass.py:get_cmdclass()
+        del sys.modules["versioneer"]
+
+    root = get_root()
+    cfg = get_config_from_root(root)
+
+    assert cfg.VCS is not None, "please set [versioneer]VCS= in setup.cfg"
+    handlers = HANDLERS.get(cfg.VCS)
+    assert handlers, "unrecognized VCS '%s'" % cfg.VCS
+    verbose = verbose or cfg.verbose
     assert cfg.versionfile_source is not None, \
         "please set versioneer.versionfile_source"
     assert cfg.tag_prefix is not None, "please set versioneer.tag_prefix"
-    assert cfg.parentdir_prefix is not None, \
-        "please set versioneer.parentdir_prefix"
-    assert cfg.VCS is not None, "please set versioneer.VCS"
 
-    # I am in versioneer.py, which must live at the top of the source tree,
-    # which we use to compute the root directory. py2exe/bbfreeze/non-CPython
-    # don't have __file__, in which case we fall back to sys.argv[0] (which
-    # ought to be the setup.py script). We prefer __file__ since that's more
-    # robust in cases where setup.py was invoked in some weird way (e.g. pip)
-    root = get_root()
     versionfile_abs = os.path.join(root, cfg.versionfile_source)
-
-    get_keywords_f = vcs_function(cfg.VCS, "get_keywords")
-    versions_from_keywords_f = vcs_function(cfg.VCS, "versions_from_keywords")
-    pieces_from_vcs_f = vcs_function(cfg.VCS, "pieces_from_vcs")
 
     # extract version from first of: _version.py, VCS command (e.g. 'git
     # describe'), parentdir. This is meant to work for developers using a
@@ -1290,11 +1354,12 @@ def get_versions():
     # and for users of a tarball/zipball created by 'git archive' or github's
     # download-from-tag feature or the equivalent in other VCSes.
 
-    if get_keywords_f and versions_from_keywords_f:
+    get_keywords_f = handlers.get("get_keywords")
+    from_keywords_f = handlers.get("keywords")
+    if get_keywords_f and from_keywords_f:
         try:
-            vcs_keywords = get_keywords_f(versionfile_abs)
-            ver = versions_from_keywords_f(vcs_keywords, cfg.tag_prefix,
-                                           verbose)
+            keywords = get_keywords_f(versionfile_abs)
+            ver = from_keywords_f(keywords, cfg.tag_prefix, verbose)
             if verbose:
                 print("got version from expanded keyword %s" % ver)
             return ver
@@ -1309,9 +1374,10 @@ def get_versions():
     except NotThisMethod:
         pass
 
-    if pieces_from_vcs_f:
+    from_vcs_f = handlers.get("pieces_from_vcs")
+    if from_vcs_f:
         try:
-            pieces = pieces_from_vcs_f(cfg.tag_prefix, root, verbose)
+            pieces = from_vcs_f(cfg.tag_prefix, root, verbose)
             ver = render(pieces, cfg.style)
             if verbose:
                 print("got version from VCS %s" % ver)
@@ -1320,10 +1386,11 @@ def get_versions():
             pass
 
     try:
-        ver = versions_from_parentdir(cfg.parentdir_prefix, root, verbose)
-        if verbose:
-            print("got version from parentdir %s" % ver)
-        return ver
+        if cfg.parentdir_prefix:
+            ver = versions_from_parentdir(cfg.parentdir_prefix, root, verbose)
+            if verbose:
+                print("got version from parentdir %s" % ver)
+            return ver
     except NotThisMethod:
         pass
 
@@ -1338,86 +1405,127 @@ def get_version():
     return get_versions()["version"]
 
 
-class cmd_version(Command):
-    description = "report generated version string"
-    user_options = []
-    boolean_options = []
-
-    def initialize_options(self):
-        pass
-
-    def finalize_options(self):
-        pass
-
-    def run(self):
-        ver = get_version()
-        print("Version is currently: %s" % ver)
-
-
-class cmd_build(_build):
-    def run(self):
-        cfg = get_config()
-        versions = get_versions()
-        _build.run(self)
-        # now locate _version.py in the new build/ directory and replace it
-        # with an updated value
-        if cfg.versionfile_build:
-            target_versionfile = os.path.join(self.build_lib,
-                                              cfg.versionfile_build)
-            print("UPDATING %s" % target_versionfile)
-            write_to_version_file(target_versionfile, versions)
-
-if 'cx_Freeze' in sys.modules:  # cx_freeze enabled?
-    from cx_Freeze.dist import build_exe as _build_exe
-
-    class cmd_build_exe(_build_exe):
-        def run(self):
-            cfg = get_config()
-            versions = get_versions()
-            target_versionfile = cfg.versionfile_source
-            print("UPDATING %s" % target_versionfile)
-            write_to_version_file(target_versionfile, versions)
-
-            _build_exe.run(self)
-            os.unlink(target_versionfile)
-            with open(cfg.versionfile_source, "w") as f:
-                assert cfg.VCS is not None, "please set versioneer.VCS"
-                LONG = LONG_VERSION_PY[cfg.VCS]
-                f.write(LONG % {"DOLLAR": "$",
-                                "STYLE": cfg.style,
-                                "TAG_PREFIX": cfg.tag_prefix,
-                                "PARENTDIR_PREFIX": cfg.parentdir_prefix,
-                                "VERSIONFILE_SOURCE": cfg.versionfile_source,
-                                })
-
-
-class cmd_sdist(_sdist):
-    def run(self):
-        versions = get_versions()
-        self._versioneer_generated_versions = versions
-        # unless we update this, the command will keep using the old version
-        self.distribution.metadata.version = versions["version"]
-        return _sdist.run(self)
-
-    def make_release_tree(self, base_dir, files):
-        cfg = get_config()
-        _sdist.make_release_tree(self, base_dir, files)
-        # now locate _version.py in the new base_dir directory (remembering
-        # that it may be a hardlink) and replace it with an updated value
-        target_versionfile = os.path.join(base_dir, cfg.versionfile_source)
-        print("UPDATING %s" % target_versionfile)
-        write_to_version_file(target_versionfile,
-                              self._versioneer_generated_versions)
-
-
 def get_cmdclass():
-    cmds = {'version': cmd_version,
-            'build': cmd_build,
-            'sdist': cmd_sdist,
-            }
-    if 'cx_Freeze' in sys.modules:  # cx_freeze enabled?
-        cmds['build_exe'] = cmd_build_exe
-        del cmds['build']
+    if "versioneer" in sys.modules:
+        del sys.modules["versioneer"]
+        # this fixes the "python setup.py develop" case (also 'install' and
+        # 'easy_install .'), in which subdependencies of the main project are
+        # built (using setup.py bdist_egg) in the same python process. Assume
+        # a main project A and a dependency B, which use different versions
+        # of Versioneer. A's setup.py imports A's Versioneer, leaving it in
+        # sys.modules by the time B's setup.py is executed, causing B to run
+        # with the wrong versioneer. Setuptools wraps the sub-dep builds in a
+        # sandbox that restores sys.modules to it's pre-build state, so the
+        # parent is protected against the child's "import versioneer". By
+        # removing ourselves from sys.modules here, before the child build
+        # happens, we protect the child from the parent's versioneer too.
+        # Also see https://github.com/warner/python-versioneer/issues/52
+
+    cmds = {}
+
+    # we add "version" to both distutils and setuptools
+    from distutils.core import Command
+
+    class cmd_version(Command):
+        description = "report generated version string"
+        user_options = []
+        boolean_options = []
+
+        def initialize_options(self):
+            pass
+
+        def finalize_options(self):
+            pass
+
+        def run(self):
+            vers = get_versions(verbose=True)
+            print("Version: %s" % vers["version"])
+            print(" full-revisionid: %s" % vers.get("full-revisionid"))
+            print(" dirty: %s" % vers.get("dirty"))
+            if vers["error"]:
+                print(" error: %s" % vers["error"])
+    cmds["version"] = cmd_version
+
+    # we override "build_py" in both distutils and setuptools
+    #
+    # most invocation pathways end up running build_py:
+    #  distutils/build -> build_py
+    #  distutils/install -> distutils/build ->..
+    #  setuptools/bdist_wheel -> distutils/install ->..
+    #  setuptools/bdist_egg -> distutils/install_lib -> build_py
+    #  setuptools/install -> bdist_egg ->..
+    #  setuptools/develop -> ?
+
+    from distutils.command.build_py import build_py as _build_py
+
+    class cmd_build_py(_build_py):
+        def run(self):
+            root = get_root()
+            cfg = get_config_from_root(root)
+            versions = get_versions()
+            _build_py.run(self)
+            # now locate _version.py in the new build/ directory and replace
+            # it with an updated value
+            if cfg.versionfile_build:
+                target_versionfile = os.path.join(self.build_lib,
+                                                  cfg.versionfile_build)
+                print("UPDATING %s" % target_versionfile)
+                write_to_version_file(target_versionfile, versions)
+    cmds["build_py"] = cmd_build_py
+
+    if "cx_Freeze" in sys.modules:  # cx_freeze enabled?
+        from cx_Freeze.dist import build_exe as _build_exe
+
+        class cmd_build_exe(_build_exe):
+            def run(self):
+                root = get_root()
+                cfg = get_config_from_root(root)
+                versions = get_versions()
+                target_versionfile = cfg.versionfile_source
+                print("UPDATING %s" % target_versionfile)
+                write_to_version_file(target_versionfile, versions)
+
+                _build_exe.run(self)
+                os.unlink(target_versionfile)
+                with open(cfg.versionfile_source, "w") as f:
+                    LONG = LONG_VERSION_PY[cfg.VCS]
+                    f.write(LONG %
+                            {"DOLLAR": "$",
+                             "STYLE": cfg.style,
+                             "TAG_PREFIX": cfg.tag_prefix,
+                             "PARENTDIR_PREFIX": cfg.parentdir_prefix,
+                             "VERSIONFILE_SOURCE": cfg.versionfile_source,
+                             })
+        cmds["build_exe"] = cmd_build_exe
+        del cmds["build_py"]
+
+    # we override different "sdist" commands for both environments
+    if "setuptools" in sys.modules:
+        from setuptools.command.sdist import sdist as _sdist
+    else:
+        from distutils.command.sdist import sdist as _sdist
+
+    class cmd_sdist(_sdist):
+        def run(self):
+            versions = get_versions()
+            self._versioneer_generated_versions = versions
+            # unless we update this, the command will keep using the old
+            # version
+            self.distribution.metadata.version = versions["version"]
+            return _sdist.run(self)
+
+        def make_release_tree(self, base_dir, files):
+            root = get_root()
+            cfg = get_config_from_root(root)
+            _sdist.make_release_tree(self, base_dir, files)
+            # now locate _version.py in the new base_dir directory
+            # (remembering that it may be a hardlink) and replace it with an
+            # updated value
+            target_versionfile = os.path.join(base_dir, cfg.versionfile_source)
+            print("UPDATING %s" % target_versionfile)
+            write_to_version_file(target_versionfile,
+                                  self._versioneer_generated_versions)
+    cmds["sdist"] = cmd_sdist
 
     return cmds
 
@@ -1467,21 +1575,21 @@ del get_versions
 
 
 def do_setup():
+    root = get_root()
     try:
-        cfg = get_config()
+        cfg = get_config_from_root(root)
     except (EnvironmentError, configparser.NoSectionError,
             configparser.NoOptionError) as e:
         if isinstance(e, (EnvironmentError, configparser.NoSectionError)):
             print("Adding sample versioneer config to setup.cfg",
                   file=sys.stderr)
-            with open(find_setup_cfg(), "a") as f:
+            with open(os.path.join(root, "setup.cfg"), "a") as f:
                 f.write(SAMPLE_CONFIG)
         print(CONFIG_ERROR, file=sys.stderr)
         return 1
 
     print(" creating %s" % cfg.versionfile_source)
     with open(cfg.versionfile_source, "w") as f:
-        assert cfg.VCS is not None, "please set versioneer.VCS"
         LONG = LONG_VERSION_PY[cfg.VCS]
         f.write(LONG % {"DOLLAR": "$",
                         "STYLE": cfg.style,
@@ -1512,7 +1620,7 @@ def do_setup():
     # (PKG/_version.py, used by runtime code) are in MANIFEST.in, so
     # they'll be copied into source distributions. Pip won't be able to
     # install the package without this.
-    manifest_in = os.path.join(get_root(), "MANIFEST.in")
+    manifest_in = os.path.join(root, "MANIFEST.in")
     simple_includes = set()
     try:
         with open(manifest_in, "r") as f:
@@ -1575,7 +1683,7 @@ def scan_setup_py():
         print("")
         errors += 1
     if setters:
-        print("You should remove lines like 'versioneer.vcs = ' and")
+        print("You should remove lines like 'versioneer.VCS = ' and")
         print("'versioneer.versionfile_source = ' . This configuration")
         print("now lives in setup.cfg, and should be removed from setup.py")
         print("")

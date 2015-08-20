@@ -1,5 +1,19 @@
-import setuptools
+"""
+    To update versionner:
 
+    pip install versioneer
+
+    cd pcircle-repo
+    versioneer install
+
+    This will bring versioneer.py etc to the latest in YOUR source tree.
+
+    Now commit everything.
+
+    make # generate tar ball, and try "make deploy" to verify
+    
+"""
+import setuptools
 import versioneer
 import sys
 
@@ -24,7 +38,7 @@ setuptools.setup(name='pcircle',
     author='Feiyi Wang',
     author_email='fwang2@ornl.gov',
     packages = ['pcircle'],
-    data_files=['Makefile'],
+    data_files=[],
     entry_points={
         'console_scripts': [
             'fcp=pcircle.fcp:main',

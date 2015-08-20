@@ -832,7 +832,9 @@ def tally_hosts():
 
 def main():
     global ARGS, logger, circle
-    signal.signal(signal.SIGINT, sig_handler)
+
+    # This might be an overkill function
+    # signal.signal(signal.SIGINT, sig_handler)
 
     treewalk = None;
     pcp = None;

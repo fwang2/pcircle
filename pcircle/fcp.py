@@ -64,7 +64,7 @@ comm = MPI.COMM_WORLD
 def parse_args():
     parser = argparse.ArgumentParser(description="Parallel Data Copy",
                                      epilog="Please report issues to help@nccs.gov")
-    parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
+    parser.add_argument("--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     parser.add_argument("--loglevel", default="warn", help="log level for file, default WARN")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
@@ -81,6 +81,7 @@ def parse_args():
     parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
+    parser.add_argument("-o", "--output", default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
 
     return parser.parse_args()
 
@@ -947,10 +948,23 @@ def main():
 
         comm.Barrier()
 
+        if circle.rank == 0:
+            print("\nAggregating checksums for a dataset signature ...\n")
+
         size, sig = aggregate_checksums(pcp.chunksums)
         if circle.rank == 0:
             print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
             print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
+            with open(ARGS.output, "w") as f:
+                f.write("sha1: %s\n" % sig)
+                f.write("chunksize: %s\n" % pcp.chunksize)
+                f.write("fcp version: %s\n" % __version__)
+                f.write("src: %s\n" % pcp.src)
+                f.write("destination: %s\n" % pcp.dest)
+                f.write("date: %s\n" % utils.current_time())
+                f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
+
+            print("\t{:<20}{:<20}".format("Signature File:", ARGS.output))
 
     # final task
     if ARGS.fix_opt and treewalk and os.geteuid() == 0:

@@ -193,7 +193,9 @@ class Checksum(BaseTask):
             print("Checksumming Completed In: %.2f seconds" % (time))
             print("Average Rate: %s/s\n" % bytes_fmt(rate))
 
-def read_in_blocks(chunks, chunksize=26214):
+
+def _read_in_blocks(chunks, chunksize=26214):
+    """ deprecated, do_checksum() return signature directly"""
     idx = 0
     total = len(chunks)
     buf = StringIO()
@@ -207,13 +209,18 @@ def read_in_blocks(chunks, chunksize=26214):
             yield hashlib.sha1(buf.getvalue()).hexdigest()
             buf = StringIO()
 
-def do_checksum(chunks):
 
+def do_checksum(chunks, blocks=26214):
+    idx = 0
     buf = StringIO()
-    for block in read_in_blocks(chunks):
-        buf.write(block)
+    h = hashlib.sha1()
+    for chunk in chunks:
+        buf.write(chunk.digest)
+        if idx % blocks == 0 or idx == len(chunks):
+            h.update(buf.getvalue())
+            buf = StringIO()
 
-    return hashlib.sha1(buf.getvalue()).hexdigest()
+    return h.hexdigest()
 
 def export_checksum(chunks):
     fullpath = os.path.abspath(ARGS.output)

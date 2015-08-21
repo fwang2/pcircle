@@ -14,7 +14,7 @@ class DbSum(object):
         self.dbname = dbname
         self.conn = None
         self.logger = getLogger(__name__)
-        self.blocks = 26214
+        self.blocks = 30000
         self._size = 0
 
         # debug, dbstore doesn't have to be tied with rank.
@@ -40,31 +40,25 @@ class DbSum(object):
 
     def fsum(self):
         """  Checksum algorithm:
-        layout # of block signatures sequentially in a "tmp",
-        26214 in this case. we calculate a SHA1 signature on this many
-        of blocks; this SHA1 signature is written to "buf" another buf.
-        then tmp buffer is reinitialized.
-
-        The reason we use two buffers is to keep the overall memory down.
-        This number (26214) is consistent with fsum.py: read_in_blocks()
-        nothing magic about this number, however if you change one, you have to
-        change another as well to keep the final checksum consistent.
+        layout # of block signatures sequentially in a buf,
+        calculate a SHA1 signature on this many
+        of blocks; move on to next # of blocks or whatever the rest of it.
 
         The fsum.py should be faster, but its memory requirement is also bigger
         and depending on the dataset. This version, however, is bounded.
         """
         idx = 0
+        h = hashlib.sha1()
         buf = StringIO()
-        tmp = StringIO()
         cursor = self.conn.execute("SELECT sha1, path FROM chksums ORDER BY path")
         for row in cursor:
-            tmp.write(row[0])
+            buf.write(row[0])
             idx += 1
             if idx % self.blocks == 0 or idx == self._size:
-                buf.write(hashlib.sha1(tmp.getvalue()).hexdigest())
-                tmp = StringIO()
+                h.update(buf.getvalue())
+                buf = StringIO()        # create new one is faster than clear
             # self.logger.info("%s - %s" %(row[1], row[0]), extra=self.d)
-        return hashlib.sha1(buf.getvalue()).hexdigest()
+        return h.hexdigest()
 
     def size(self):
         return self._size

@@ -88,7 +88,7 @@ class Checksum(BaseTask):
 
         else:
             for fi in self.treewalk.flist:
-                if stat.S_ISREG(fi.st_mode):
+                if not os.path.islink(fi.path) and stat.S_ISREG(fi.st_mode):
                     self.enq_file(fi)
 
         # right after this, we do first checkpoint

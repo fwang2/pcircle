@@ -34,8 +34,8 @@ class PVerify(BaseTask):
             print("\nStart checksum verification ...")
 
     def create(self):
-        self.logger.debug("Chunk count: %s" % len(self.pcp.checksum), extra=self.d)
-        for ck in self.pcp.checksum:
+        self.logger.info("Chunk count: %s" % len(self.pcp.chunksums), extra=self.d)
+        for ck in self.pcp.chunksums:
             self.enq(ck)
 
 

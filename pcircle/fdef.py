@@ -27,8 +27,8 @@ class FileItem(CommonEqualityMixin):
         return self.path
 
 
-
 class FileChunk(CommonEqualityMixin):
+
     def __init__(self, cmd="copy",
                  src="", dest="", offset=0, length=0):
         self.cmd = cmd
@@ -48,23 +48,28 @@ class FileChunk(CommonEqualityMixin):
 
 
 class ChunkSum:
-    def __init__(self, filename, offset=0, length=0, digest=0):
+    """ make __cmp__ part of the mixin so it can be reused
+    """
+
+    def __init__(self, filename, offset=0, length=0, digest=""):
         self.filename = filename
         self.offset = offset
         self.length = length
         self.digest = digest
 
-    # FIXME: this is not Python 3 compatible
     def __cmp__(self, other):
         assert isinstance(other, ChunkSum)
         return cmp((self.filename, self.offset, self.length, self.digest),
                    (other.filename, other.offset, self.length, self.digest))
 
     def __repr__(self):
-        return "-".join([str(x) for x in [self.filename, self.offset, self.length, self.digest]])
+        return "-".join([str(x) for x in [self.filename, self.offset, self.length]])
 
     def __hash__(self):
         return hash(repr(self))
 
     def __str__(self):
+        return self.__repr__()
+
+    def path(self):
         return self.__repr__()

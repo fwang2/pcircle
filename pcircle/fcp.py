@@ -48,6 +48,7 @@ from checkpoint import Checkpoint
 from fdef import FileChunk, ChunkSum
 from globals import G
 from dbstore import DbStore
+from dbsum import DbSum
 from _version import get_versions
 
 __version__ = get_versions()['version']
@@ -148,7 +149,7 @@ class FCP(BaseTask):
 
         # checksum
         self.do_checksum = do_checksum
-        self.checksum = []
+        self.chunksums = []
 
         # checkpointing
         self.checkpoint_interval = sys.maxsize
@@ -502,7 +503,7 @@ class FCP(BaseTask):
         if self.do_checksum:
             ck = ChunkSum(work.dest, offset=work.offset, length=work.length,
                           digest=m.hexdigest())
-            self.checksum.append(ck)
+            self.chunksums.append(ck)
 
 
 def err_and_exit(msg, code):
@@ -830,6 +831,36 @@ def tally_hosts():
     NUM_OF_HOSTS = MPI.COMM_WORLD.bcast(NUM_OF_HOSTS)
 
 
+def aggregate_checksums(localChunkSums, dbname="checksums.db"):
+    signature, size = None, None
+
+    if comm.rank == 0:
+        if os.path.exists(dbname):
+            os.remove(dbname)
+
+        # init database
+        db = DbSum(dbname)
+
+        # add self
+        for chksum in localChunkSums:
+            db.put(chksum)
+
+        # ask from the others
+        for p in xrange(1, comm.size):
+            chunksums = comm.recv(source=p)
+            for chksum in chunksums:
+                db.put(chksum)
+    else:
+        comm.send(localChunkSums, dest=0)
+
+    comm.Barrier()
+
+    if comm.rank == 0:
+        signature = db.fsum()
+        size = db.size()
+
+    return size, signature
+
 def main():
     global ARGS, logger, circle
 
@@ -913,6 +944,13 @@ def main():
                 print("\t{:<20}{:<20}".format("Result:", "PASS"))
             else:
                 print("\t{:<20}{:<20}".format("Result:", "FAILED"))
+
+        comm.Barrier()
+
+        size, sig = aggregate_checksums(pcp.chunksums)
+        if circle.rank == 0:
+            print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
+            print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
 
     # final task
     if ARGS.fix_opt and treewalk and os.geteuid() == 0:

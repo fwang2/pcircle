@@ -4,13 +4,8 @@ import sys
 import os.path
 import sqlite3
 import cPickle as pickle
-import shutil
-import logging
 from collections import deque
-
 from fdef import FileItem, FileChunk, ChunkSum
-from utils import getLogger
-from pcircle.globals import G
 from pcircle.utils import getLogger
 
 __author__ = 'Feiyi Wang'
@@ -221,35 +216,5 @@ class DbStore(object):
 
     def __len__(self):
         return self.qsize
-
-def test_basics():
-    import shutil
-    import os.path
-
-    dbname = "/tmp/test.db"
-    if os.path.exists(dbname):
-        os.remove(dbname)
-    db = DbStore(dbname)
-
-    db.put(FileItem("/tmp"))
-    db.put(FileItem("/tmp/1"))
-    assert db.size() == 2
-    db.pop()
-    assert db.size() == 1
-    db.pop()
-    db.pop()
-    assert db.size() == 0
-
-    objs = [FileItem("/1/2"), FileItem("/3/4")]
-    db.mput(objs)
-    assert db.size() == 2
-
-    db.mdel(2)
-    assert db.size() == 0
-
-    print("Unit tests passed")
-
-    db.cleanup()
-
 
 

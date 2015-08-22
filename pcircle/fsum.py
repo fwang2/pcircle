@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
-    parser.add_argument("--chunksize", default="16m", help="chunk size (K, M, G, T), default: 16m")
+    parser.add_argument("--chunksize", help="chunk size (K, M, G, T)")
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
@@ -134,13 +134,41 @@ class Checksum(BaseTask):
         # tally work cnt
         self.workcnt += workcnt
 
+    # def process(self):
+    #     ck = self.deq()
+    #     self.logger.debug("process: %s" % ck, extra=self.d)
+    #     blocks = ck.length / self.chunksize
+    #     remaining = ck.length % self.chunksize
+    #
+    #     chunk_digests = StringIO()
+    #     try:
+    #         fd = os.open(ck.filename, os.O_RDONLY)
+    #     except OSError as e:
+    #         self.logger.warn("%s, Skipping ... " % e, extra=self.d)
+    #         return
+    #
+    #     os.lseek(fd, ck.offset, os.SEEK_SET)
+    #
+    #     for i in range(blocks):
+    #         chunk_digests.write(hashlib.sha1(readn(fd, self.chunksize)).hexdigest())
+    #
+    #     if remaining > 0:
+    #         chunk_digests.write(hashlib.sha1(readn(fd, remaining)).hexdigest())
+    #
+    #     ck.digest = chunk_digests.getvalue()
+    #
+    #     self.chunkq.append(ck)
+    #
+    #     self.vsize += ck.length
+    #     try:
+    #         os.close(fd)
+    #     except Exception as e:
+    #         self.logger.warn(e, extra=self.d)
+
     def process(self):
         ck = self.deq()
-        self.logger.debug("process: %s" % ck, extra=self.d)
-        blocks = ck.length / self.chunksize
-        remaining = ck.length % self.chunksize
 
-        chunk_digests = StringIO()
+        buf = StringIO()
         try:
             fd = os.open(ck.filename, os.O_RDONLY)
         except OSError as e:
@@ -149,22 +177,15 @@ class Checksum(BaseTask):
 
         os.lseek(fd, ck.offset, os.SEEK_SET)
 
-        for i in range(blocks):
-            chunk_digests.write(hashlib.sha1(readn(fd, self.chunksize)).hexdigest())
-
-        if remaining > 0:
-            chunk_digests.write(hashlib.sha1(readn(fd, remaining)).hexdigest())
-
-        ck.digest = chunk_digests.getvalue()
-
-        self.chunkq.append(ck)
-
-        self.vsize += ck.length
+        ck.digest = hashlib.sha1(readn(fd, ck.length)).hexdigest()
         try:
             os.close(fd)
         except Exception as e:
             self.logger.warn(e, extra=self.d)
 
+        self.chunkq.append(ck)
+        self.vsize += ck.length
+        
     def reduce_init(self, buf):
         buf['vsize'] = self.vsize
 
@@ -284,7 +305,6 @@ def main():
     root = os.path.abspath(ARGS.path)
     hosts_cnt = tally_hosts()
     circle = Circle(reduce_interval=ARGS.interval)
-    chunksize = conv_unit(ARGS.chunksize)
 
     if circle.rank == 0:
         print("Running Parameters:\n")
@@ -292,7 +312,6 @@ def main():
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", root))
-        print("\t{:<20}{} ({} bytes)".format("Chunk size:", ARGS.chunksize, chunksize))
 
     fwalk = FWalk(circle, root)
     circle.begin(fwalk)
@@ -301,7 +320,16 @@ def main():
     totalsize = fwalk.epilogue()
     circle.finalize(reduce_interval=ARGS.interval)
 
+    # by default, we use adaptive chunksize
+    chunksize = utils.calc_chunksize(totalsize)
+    if ARGS.chunksize:
+        chunksize = conv_unit(ARGS.chunksize)
+
+    if circle.rank == 0:
+        print("Chunksize = ", chunksize)
+
     fcheck = Checksum(circle, fwalk, chunksize, totalsize)
+
     circle.begin(fcheck)
     circle.finalize()
 

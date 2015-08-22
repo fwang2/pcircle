@@ -863,6 +863,8 @@ def aggregate_checksums(localChunkSums, dbname="checksums.db"):
 
 
 def gen_signature(pcp, totalsize):
+    """ Generate a signature for dataset, it assumes the checksum
+       option is set and done """
     if comm.rank == 0:
         print("\nAggregating checksums for a dataset signature ...\n")
     tbegin = MPI.Wtime()
@@ -882,6 +884,7 @@ def gen_signature(pcp, totalsize):
             f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
 
         print("\t{:<20}{:<20}".format("Signature File:", ARGS.output))
+
 
 def main():
     global ARGS, logger, circle

@@ -49,6 +49,7 @@ from fdef import FileChunk, ChunkSum
 from globals import G
 from dbstore import DbStore
 from dbsum import MemSum
+from fsum import export_checksum2
 from _version import get_versions
 
 __version__ = get_versions()['version']
@@ -504,7 +505,8 @@ class FCP(BaseTask):
                 remaining = 0
 
         if self.do_checksum:
-            ck = ChunkSum(work.dest, offset=work.offset, length=work.length,
+            # use src path here
+            ck = ChunkSum(work.src, offset=work.offset, length=work.length,
                           digest=m.hexdigest())
             self.chunksums.append(ck)
 
@@ -832,7 +834,7 @@ def tally_hosts():
 
 
 def aggregate_checksums(localChunkSums, dbname="checksums.db"):
-    signature, size = None, None
+    signature, size, chunksums = None, None, None
 
     if comm.rank == 0:
         db = MemSum()
@@ -852,8 +854,9 @@ def aggregate_checksums(localChunkSums, dbname="checksums.db"):
     if comm.rank == 0:
         signature = db.fsum()
         size = db.size()
+        chunksums = db.chunksums
 
-    return size, signature
+    return size, signature, chunksums
 
 
 def gen_signature(pcp, totalsize):
@@ -862,12 +865,13 @@ def gen_signature(pcp, totalsize):
     if comm.rank == 0:
         print("\nAggregating dataset signature ...\n")
     tbegin = MPI.Wtime()
-    size, sig = aggregate_checksums(pcp.chunksums)
+    size, sig, chunksums = aggregate_checksums(pcp.chunksums)
     tend = MPI.Wtime()
     if comm.rank == 0:
         print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
         print("\t{:<20}{:<20}".format("Running time:", utils.conv_time(tend - tbegin)))
         print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
+        print("\t{:<20}{:<20}".format("Block checksums:", export_checksum2(chunksums, ARGS.output)))
         with open(ARGS.output, "w") as f:
             f.write("sha1: %s\n" % sig)
             f.write("chunksize: %s\n" % pcp.chunksize)

@@ -240,6 +240,19 @@ def export_checksum(chunks):
     return os.path.basename(ex_path)
 
 
+def export_checksum2(chunks, ofile):
+    fullpath = os.path.abspath(ofile)
+    ex_base = os.path.basename(fullpath).split(".")[0] + ".checksums"
+    ex_dir = os.path.dirname(fullpath)
+    ex_path = os.path.join(ex_dir, ex_base)
+
+    with open(ex_path, "w") as f:
+        for c in chunks:
+            f.write("%s, %s\n" % (c, c.digest))
+
+    return os.path.basename(ex_path)
+
+
 def parse_and_bcast():
     global ARGS
     parse_flags = True
@@ -309,7 +322,7 @@ def main():
         print("\nSHA1: %s" % sha1val)
         print("Exporting singular signature to [%s]" % ARGS.output)
         if ARGS.export_block_signatures:
-            print("Exporting block signatures to [%s] \n" % export_checksum(chunks))
+            print("Exporting block signatures to [%s] \n" % export_checksum2(chunks, ARGS.output))
 
     fcheck.epilogue()
 

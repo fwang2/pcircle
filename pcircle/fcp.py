@@ -48,7 +48,7 @@ from checkpoint import Checkpoint
 from fdef import FileChunk, ChunkSum
 from globals import G
 from dbstore import DbStore
-from dbsum import DbSum
+from dbsum import MemSum
 from _version import get_versions
 
 __version__ = get_versions()['version']
@@ -835,13 +835,7 @@ def aggregate_checksums(localChunkSums, dbname="checksums.db"):
     signature, size = None, None
 
     if comm.rank == 0:
-        if os.path.exists(dbname):
-            os.remove(dbname)
-
-        # init database
-        db = DbSum(dbname)
-
-        # add self
+        db = MemSum()
         for chksum in localChunkSums:
             db.put(chksum)
 
@@ -866,7 +860,7 @@ def gen_signature(pcp, totalsize):
     """ Generate a signature for dataset, it assumes the checksum
        option is set and done """
     if comm.rank == 0:
-        print("\nAggregating checksums for a dataset signature ...\n")
+        print("\nAggregating dataset signature ...\n")
     tbegin = MPI.Wtime()
     size, sig = aggregate_checksums(pcp.chunksums)
     tend = MPI.Wtime()

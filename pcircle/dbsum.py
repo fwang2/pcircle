@@ -1,3 +1,11 @@
+"""  Checksum algorithm:
+layout # of block signatures sequentially in a buf,
+calculate a SHA1 signature on this many
+of blocks; move on to next # of blocks or whatever the rest of it.
+
+The fsum.py should be faster, but its memory requirement is also bigger
+and depending on the dataset. This version, however, is bounded.
+"""
 __author__ = 'f7b'
 
 import sys
@@ -6,6 +14,32 @@ import hashlib
 from cStringIO import StringIO
 from pcircle.utils import getLogger
 
+
+class MemSum(object):
+    def __init__(self):
+        self.blocks = 30000
+        self.chunksums = []
+
+    def put(self, chksum):
+        self.chunksums.append(chksum)
+
+    def size(self):
+        return len(self.chunksums)
+
+    def fsum(self):
+        self.chunksums.sort()
+        h = hashlib.sha1()
+        buf = StringIO()
+        for idx, chunksum in enumerate(self.chunksums):
+            buf.write(chunksum.digest)
+            if (idx + 1) % self.blocks == 0:
+                h.update(buf.getvalue())
+                buf = StringIO()  # create new one is faster than clear
+
+        if buf.getvalue():
+            h.update(buf.getvalue())
+
+        return h.hexdigest()
 
 class DbSum(object):
     def __init__(self, dbname):
@@ -38,14 +72,6 @@ class DbSum(object):
             self._size += 1
 
     def fsum(self):
-        """  Checksum algorithm:
-        layout # of block signatures sequentially in a buf,
-        calculate a SHA1 signature on this many
-        of blocks; move on to next # of blocks or whatever the rest of it.
-
-        The fsum.py should be faster, but its memory requirement is also bigger
-        and depending on the dataset. This version, however, is bounded.
-        """
         idx = 0
         h = hashlib.sha1()
         buf = StringIO()
@@ -53,10 +79,12 @@ class DbSum(object):
         for row in cursor:
             buf.write(row[0])
             idx += 1
-            if idx % self.blocks == 0 or idx == self._size:
+            if idx % self.blocks == 0:
                 h.update(buf.getvalue())
                 buf = StringIO()  # create new one is faster than clear
                 # self.logger.info("%s - %s" %(row[1], row[0]), extra=self.d)
+        if buf.getvalue():
+            h.update(buf.getvalue())
         return h.hexdigest()
 
     def size(self):

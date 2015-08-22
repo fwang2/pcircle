@@ -212,16 +212,16 @@ def _read_in_blocks(chunks, chunksize=26214):
             buf = StringIO()
 
 
-def do_checksum(chunks, blocks=26214):
-    idx = 0
+def do_checksum(chunks):
     buf = StringIO()
     h = hashlib.sha1()
     for chunk in chunks:
         buf.write(chunk.digest)
-        if idx % blocks == 0 or idx == len(chunks):
-            h.update(buf.getvalue())
-            buf = StringIO()
-
+        # idx += 1
+        # if idx % blocks == 0 or idx == len(chunks):
+        #     h.update(buf.getvalue())
+        #     buf = StringIO()
+    h.update(buf.getvalue())
     return h.hexdigest()
 
 

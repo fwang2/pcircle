@@ -167,8 +167,6 @@ class Checksum(BaseTask):
 
     def process(self):
         ck = self.deq()
-
-        buf = StringIO()
         try:
             fd = os.open(ck.filename, os.O_RDONLY)
         except OSError as e:
@@ -176,16 +174,22 @@ class Checksum(BaseTask):
             return
 
         os.lseek(fd, ck.offset, os.SEEK_SET)
-
-        ck.digest = hashlib.sha1(readn(fd, ck.length)).hexdigest()
+        digest = hashlib.sha1()
+        blocksize = 4*1024*1024 # 4MiB block
+        blockcount = ck.length / blocksize
+        remaining = ck.length % blocksize
+        for _ in xrange(blockcount):
+            digest.update(readn(fd, ck.length))
+        if remaining > 0:
+            digest.update(readn(fd, remaining))
         try:
             os.close(fd)
         except Exception as e:
             self.logger.warn(e, extra=self.d)
-
+        ck.digest = digest.hexdigest()
         self.chunkq.append(ck)
         self.vsize += ck.length
-        
+
     def reduce_init(self, buf):
         buf['vsize'] = self.vsize
 

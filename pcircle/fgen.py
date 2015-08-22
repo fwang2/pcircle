@@ -10,14 +10,15 @@ import shlex
 import subprocess
 
 args = None
-MAGIC='8888'
-PREFIX='f.'
-def rand_str(size=1024*1024, chars=string.ascii_uppercase + string.digits):
+MAGIC = '8888'
+PREFIX = 'f.'
+
+
+def rand_str(size=1024 * 1024, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 
 def parse_args():
-
     parser = argparse.ArgumentParser(description="Generate fake files")
     parser.add_argument('-s', '--fsize', default="1g", help="total file size")
     parser.add_argument('-c', '--fcount', type=int, default=1, help="total # of files")
@@ -27,6 +28,7 @@ def parse_args():
 
     myargs = parser.parse_args()
     return myargs
+
 
 def conv_mb(size):
     # need pattern of xxx [g,t,m]
@@ -38,27 +40,27 @@ def conv_mb(size):
     if string.upper(unit[0]) == 'M':
         return int(num)
     elif string.upper(unit[0]) == 'G':
-        return int(num)*1024
+        return int(num) * 1024
     elif string.upper(unit[0]) == 'T':
-        return int(num)*1024*1024
+        return int(num) * 1024 * 1024
     else:
         print("Unknown size: %s" % size)
         sys.exit(1)
 
-def setstripe(dir):
 
+def setstripe(dir):
     cmd = "lfs setstripe -c %s %s" % (args.stripe_count, dir)
     if args.verbose:
         print(cmd)
     p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
+                         stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
     if stderr:
         print(stderr)
         sys.exit(1)
 
-def main():
 
+def main():
     global args
     args = parse_args()
 
@@ -87,8 +89,8 @@ def main():
             for _ in range(chunks):
                 f.write(buf)
 
-
     print("Okay.")
 
-if __name__ == "__main__": main()
 
+if __name__ == "__main__":
+    main()

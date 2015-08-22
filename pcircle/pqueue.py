@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
+
 class BaseQueue:
     __metaclass__ = ABCMeta
 
@@ -29,4 +30,3 @@ class BaseQueue:
     @abstractmethod
     def cleanup(self):
         pass
-

@@ -1,11 +1,10 @@
 from task import BaseTask
-import logging
 from utils import bytes_fmt
-from fdef import ChunkSum
 import hashlib
 from mpi4py import MPI
 import utils
 from lru import LRU
+
 
 class PVerify(BaseTask):
     def __init__(self, circle, pcp, totalsize=0):
@@ -38,10 +37,9 @@ class PVerify(BaseTask):
         for ck in self.pcp.chunksums:
             self.enq(ck)
 
-
     def process(self):
         chunk = self.deq()
-        self.logger.debug("process: %s" % chunk, extra = self.d)
+        self.logger.debug("process: %s" % chunk, extra=self.d)
 
         # fd = None
         # if chunk.filename in self.fd_cache:
@@ -69,7 +67,7 @@ class PVerify(BaseTask):
         digest = hashlib.sha1(fd.read(chunk.length)).hexdigest()
         if digest != chunk.digest:
             self.logger.error("Verification failed for %s \n src-digest: %s\n dst-digest: %s \n"
-                         % (chunk.filename, chunk.digest, digest), extra=self.d)
+                              % (chunk.filename, chunk.digest, digest), extra=self.d)
             if chunk.filename not in self.failed:
                 self.failed[chunk.filename] = chunk.digest
                 self.failcnt += 1
@@ -80,24 +78,21 @@ class PVerify(BaseTask):
         total_fails = self.circle.comm.reduce(self.failcnt, op=MPI.SUM)
         return total_fails
 
-
     def reduce_init(self, buf):
         buf['vsize'] = self.vsize
 
     def reduce_report(self, buf):
         out = ""
         if self.totalsize != 0:
-            out += "%.2f %% verified, " % (100 * float(buf['vsize'])/self.totalsize)
+            out += "%.2f %% verified, " % (100 * float(buf['vsize']) / self.totalsize)
 
         out += "%s bytes done" % bytes_fmt(buf['vsize'])
         print(out)
 
     def reduce_finish(self, buf):
-        #self.reduce_report(buf)
+        # self.reduce_report(buf)
         pass
 
     def reduce(self, buf1, buf2):
         buf1['vsize'] += buf2['vsize']
         return buf1
-
-

@@ -2,6 +2,7 @@ __author__ = 'f7b'
 
 from mpi4py import MPI
 
+
 def tally_hosts():
     """ How many physical hosts are there? """
     localhost = MPI.Get_processor_name()

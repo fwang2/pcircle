@@ -6,6 +6,7 @@ import os
 MAX_TRIES = 5
 SLEEP = 0.1
 
+
 def readn(fd, size):
     tries = 0
     ret = ''
@@ -27,6 +28,7 @@ def readn(fd, size):
             time.sleep(SLEEP)
 
     return ret
+
 
 def writen(fd, buf):
     size = len(buf)

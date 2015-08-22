@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
+
 class BaseTask:
     __metaclass__ = ABCMeta
 
@@ -15,18 +16,16 @@ class BaseTask:
     def process(self):
         pass
 
-
     @abstractmethod
-    def reduce_init(self):
+    def reduce_init(self, buf):
         pass
 
     @abstractmethod
-    def reduce(self):
+    def reduce(self, buf):
         pass
 
-
     @abstractmethod
-    def reduce_finish(self):
+    def reduce_finish(self, buf):
         pass
 
     def enq(self, work):
@@ -37,7 +36,6 @@ class BaseTask:
 
     def setq(self, q):
         self.circle.setq(q)
-
 
     def get_workq(self):
         return self.circle.workq

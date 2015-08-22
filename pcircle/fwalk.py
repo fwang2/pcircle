@@ -95,7 +95,8 @@ class FWalk(BaseTask):
             self.circle.enq(FileItem(self.src))
             print("\nAnalyzing workload ...")
 
-    def copy_xattr(self, src, dest):
+    @staticmethod
+    def copy_xattr(src, dest):
         attrs = xattr.listxattr(src)
         for k in attrs:
             val = xattr.getxattr(src, k)
@@ -146,13 +147,13 @@ class FWalk(BaseTask):
 
     def do_metadata_preserve(self, src_file, dest_file, st):
         """ create file node, copy attribute if needed."""
-        if sys.platform == "darwin": # Mac OS mknod() not permitted
+        if sys.platform == "darwin":  # Mac OS mknod() not permitted
             return
 
         try:
             os.mknod(dest_file, st.st_mode)
         except OSError as e:
-            self.logger.warn("mknod() for %s, %s" %(dest_file, e), extra=self.d)
+            self.logger.warn("mknod() for %s, %s" % (dest_file, e), extra=self.d)
             return
 
         if G.preserve:
@@ -179,7 +180,7 @@ class FWalk(BaseTask):
 
         try:
             os.unlink(dest_file)
-        except:
+        except OSError as e:
             self.logger.warn("Can't unlink %s" % dest_file, extra=self.d)
         else:
             self.logger.info("Retransfer: %s" % src_file, extra=self.d)
@@ -245,7 +246,7 @@ class FWalk(BaseTask):
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
                 self.process_dir(spath, st)
-        # END OF if spath
+                # END OF if spath
 
     def tally(self, t):
         """ t is a tuple element of flist """
@@ -329,7 +330,7 @@ def main():
     comm = MPI.COMM_WORLD
 
     if not os.path.exists(root):
-        if comm.rank  == 0:
+        if comm.rank == 0:
             print("Root path: %s doesn't exist!" % root)
         MPI.Finalize()
         sys.exit(0)
@@ -355,4 +356,5 @@ def main():
     circle.finalize()
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()

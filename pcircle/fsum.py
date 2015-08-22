@@ -28,16 +28,17 @@ from globals import G
 import utils
 from pcircle.mpihelper import tally_hosts
 
-
-ARGS    = None
+ARGS = None
 __version__ = get_versions()['version']
 
 del get_versions
 
-def sig_handler(signal, frame):
+
+def sig_handler():
     # catch keyboard, do nothing
     # eprint("\tUser cancelled ... cleaning up")
     sys.exit(1)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fsum")
@@ -51,6 +52,7 @@ def parse_args():
     parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
     return parser.parse_args()
+
 
 class Checksum(BaseTask):
     def __init__(self, circle, treewalk, chunksize, totalsize=0):
@@ -75,7 +77,6 @@ class Checksum(BaseTask):
         if self.circle.rank == 0:
             print("Start parallel checksumming ...")
 
-
     def create(self):
 
         if G.use_store:
@@ -91,23 +92,23 @@ class Checksum(BaseTask):
                 if not os.path.islink(fi.path) and stat.S_ISREG(fi.st_mode):
                     self.enq_file(fi)
 
-        # right after this, we do first checkpoint
+                    # right after this, we do first checkpoint
 
-        #if self.checkpoint_file:
-        #    self.do_no_interrupt_checkpoint()
-        #    self.checkpoint_last = MPI.Wtime()
+                    # if self.checkpoint_file:
+                    #    self.do_no_interrupt_checkpoint()
+                    #    self.checkpoint_last = MPI.Wtime()
 
     def enq_file(self, f):
-        '''
+        """
         f[0] path f[1] mode f[2] size - we enq all in one shot
         CMD = copy src  dest  off_start  last_chunk
-        '''
+        """
         chunks = f.st_size / self.chunksize
         remaining = f.st_size % self.chunksize
 
         workcnt = 0
 
-        if f.st_size == 0: # empty file
+        if f.st_size == 0:  # empty file
             ck = ChunkSum(f.path)
             self.enq(ck)
             self.logger.debug("%s" % ck, extra=self.d)
@@ -135,7 +136,7 @@ class Checksum(BaseTask):
 
     def process(self):
         ck = self.deq()
-        self.logger.debug("process: %s" % ck, extra = self.d)
+        self.logger.debug("process: %s" % ck, extra=self.d)
         blocks = ck.length / self.chunksize
         remaining = ck.length % self.chunksize
 
@@ -170,13 +171,13 @@ class Checksum(BaseTask):
     def reduce_report(self, buf):
         out = ""
         if self.totalsize != 0:
-            out += "%.2f %% block checksummed, " % (100 * float(buf['vsize'])/self.totalsize)
+            out += "%.2f %% block checksummed, " % (100 * float(buf['vsize']) / self.totalsize)
 
         out += "%s bytes done" % bytes_fmt(buf['vsize'])
         print(out)
 
     def reduce_finish(self, buf):
-        #self.reduce_report(buf)
+        # self.reduce_report(buf)
         pass
 
     def reduce(self, buf1, buf2):
@@ -187,10 +188,11 @@ class Checksum(BaseTask):
         self.wtime_ended = MPI.Wtime()
         if self.circle.rank == 0:
             print("")
-            if self.totalsize == 0: return
+            if self.totalsize == 0:
+                return
             time = self.wtime_ended - self.wtime_started
-            rate = float(self.totalsize)/time
-            print("Checksumming Completed In: %.2f seconds" % (time))
+            rate = float(self.totalsize) / time
+            print("Checksumming Completed In: %.2f seconds" % time)
             print("Average Rate: %s/s\n" % bytes_fmt(rate))
 
 
@@ -222,6 +224,7 @@ def do_checksum(chunks, blocks=26214):
 
     return h.hexdigest()
 
+
 def export_checksum(chunks):
     fullpath = os.path.abspath(ARGS.output)
     ex_base = os.path.basename(fullpath).split(".")[0] + ".checksums"
@@ -236,13 +239,14 @@ def export_checksum(chunks):
 
     return os.path.basename(ex_path)
 
+
 def parse_and_bcast():
     global ARGS
     parse_flags = True
     if MPI.COMM_WORLD.rank == 0:
         try:
             ARGS = parse_args()
-        except:
+        except Exception:
             parse_flags = False
     parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
     if parse_flags:
@@ -253,8 +257,8 @@ def parse_and_bcast():
     if MPI.COMM_WORLD.rank == 0 and ARGS.loglevel == "debug":
         print(ARGS)
 
-def main():
 
+def main():
     global ARGS
     signal.signal(signal.SIGINT, sig_handler)
 
@@ -266,7 +270,7 @@ def main():
 
     root = os.path.abspath(ARGS.path)
     hosts_cnt = tally_hosts()
-    circle = Circle(reduce_interval = ARGS.interval)
+    circle = Circle(reduce_interval=ARGS.interval)
     chunksize = conv_unit(ARGS.chunksize)
 
     if circle.rank == 0:
@@ -277,13 +281,12 @@ def main():
         print("\t{:<20}{:<20}".format("Root path:", root))
         print("\t{:<20}{} ({} bytes)".format("Chunk size:", ARGS.chunksize, chunksize))
 
-
     fwalk = FWalk(circle, root)
     circle.begin(fwalk)
     if G.use_store:
         fwalk.flushdb()
     totalsize = fwalk.epilogue()
-    circle.finalize(reduce_interval = ARGS.interval)
+    circle.finalize(reduce_interval=ARGS.interval)
 
     fcheck = Checksum(circle, fwalk, chunksize, totalsize)
     circle.begin(fcheck)
@@ -295,7 +298,7 @@ def main():
     chunkl = circle.comm.gather(fcheck.chunkq)
 
     if circle.rank == 0:
-        chunks = [ item for sublist in chunkl for item in sublist]
+        chunks = [item for sublist in chunkl for item in sublist]
         chunks.sort()
         sys.stdout.write("%s chunks\n" % len(chunks))
         sha1val = do_checksum(chunks)
@@ -310,4 +313,6 @@ def main():
 
     fcheck.epilogue()
 
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    main()

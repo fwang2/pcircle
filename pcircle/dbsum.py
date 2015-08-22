@@ -8,7 +8,6 @@ from pcircle.utils import getLogger
 
 
 class DbSum(object):
-
     def __init__(self, dbname):
 
         self.dbname = dbname
@@ -56,8 +55,8 @@ class DbSum(object):
             idx += 1
             if idx % self.blocks == 0 or idx == self._size:
                 h.update(buf.getvalue())
-                buf = StringIO()        # create new one is faster than clear
-            # self.logger.info("%s - %s" %(row[1], row[0]), extra=self.d)
+                buf = StringIO()  # create new one is faster than clear
+                # self.logger.info("%s - %s" %(row[1], row[0]), extra=self.d)
         return h.hexdigest()
 
     def size(self):

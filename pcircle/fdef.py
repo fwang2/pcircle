@@ -1,12 +1,14 @@
 __author__ = 'f7b'
 
+
 class CommonEqualityMixin(object):
     def __eq__(self, other):
         return (isinstance(other, self.__class__)
-            and self.__dict__ == other.__dict__)
+                and self.__dict__ == other.__dict__)
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
 
 class FileItem(CommonEqualityMixin):
     def __init__(self, path, st_mode=0, st_size=0, st_uid=0, st_gid=0):
@@ -15,7 +17,6 @@ class FileItem(CommonEqualityMixin):
         self.st_size = st_size
         self.st_uid = st_uid
         self.st_gid = st_gid
-
 
     def __str__(self):
         return ",".join([self.path, str(self.st_mode), str(self.st_size)])
@@ -28,7 +29,6 @@ class FileItem(CommonEqualityMixin):
 
 
 class FileChunk(CommonEqualityMixin):
-
     def __init__(self, cmd="copy",
                  src="", dest="", offset=0, length=0):
         self.cmd = cmd

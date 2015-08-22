@@ -12,15 +12,15 @@ from pcircle.globals import G
 
 __author__ = 'Feiyi Wang'
 
-def numeric_level(loglevel):
 
+def numeric_level(loglevel):
     level = getattr(logging, loglevel.upper(), None)
     if not isinstance(level, int):
         raise ValueError("Invalid log level: %s" % loglevel)
     return level
 
 
-def getLogger(name, logfile=None):
+def getLogger(name):
     logger = logging.getLogger(name)
     ll = numeric_level(G.loglevel)
     logger.setLevel(ll)
@@ -54,12 +54,12 @@ def destpath(srcdir, destdir, srcfile):
 
 
 def conv_unit(s):
-    " convert a unit to number"
-    d = { "B": 1,
+    """ convert a unit to number """
+    d = {"B": 1,
          "K": 1024,
-         "M": 1024*1024,
-         "G": 1024*1024*1024,
-         "T": 1024*1024*1024*1024}
+         "M": 1024 * 1024,
+         "G": 1024 * 1024 * 1024,
+         "T": 1024 * 1024 * 1024 * 1024}
     s = s.upper()
     match = re.match(r"(\d+)(\w+)", s, re.I)
     if match:
@@ -101,20 +101,21 @@ def conv_time(s):
         mins = ((s % one_day) % one_hr) / one_min
         return "%sd %sh %sm" % (days, hours, mins)
 
+
 def bytes_fmt(n):
     d = {'1mb': 1048576,
          '1gb': 1073741824,
          '1tb': 1099511627776}
     if n < d['1mb']:
-        return "%.2f KiB" % (float(n)/1024)
+        return "%.2f KiB" % (float(n) / 1024)
 
     if n < d['1gb']:
-        return "%.2f MiB" % (float(n)/d['1mb'])
+        return "%.2f MiB" % (float(n) / d['1mb'])
 
     if n < d['1tb']:
-        return "%.2f GiB" % (float(n)/d['1gb'])
+        return "%.2f GiB" % (float(n) / d['1gb'])
 
-    return "%.2f TiB" % (float(n)/d['1tb'])
+    return "%.2f TiB" % (float(n) / d['1tb'])
 
 
 def spiner():
@@ -132,8 +133,9 @@ def progress():
     point = total / 100
     increment = total / 20
     for i in xrange(total):
-        if(i % (5 * point) == 0):
-            sys.stdout.write("\r[" + "=" * (i / increment) +  " " * ((total - i)/ increment) + "]" +  str(i / point) + "%")
+        if (i % (5 * point) == 0):
+            sys.stdout.write(
+                "\r[" + "=" * (i / increment) + " " * ((total - i) / increment) + "]" + str(i / point) + "%")
             sys.stdout.flush()
 
 
@@ -164,6 +166,7 @@ class bcolors:
         self.WARNING = ''
         self.FAIL = ''
         self.ENDC = ''
+
 
 def hprint(msg):
     print(bcolors.INFO + msg + bcolors.ENDC)
@@ -217,10 +220,8 @@ def breakline2(linearr, size=60, minsz=10):
 
 
 def emsg(ep):
-    '''
-    Exception string: filename, line no, error type, error message
-    '''
+    """  Exception string: filename, line no, error type, error message """
 
     top = traceback.extract_stack()[-2]
     return ', '.join([os.path.basename(top[0]), 'Line ' + str(top[1]),
-                type(ep).__name__ + ': ' + str(ep)])
+                      type(ep).__name__ + ': ' + str(ep)])

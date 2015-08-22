@@ -1,11 +1,10 @@
-
-
 import unittest
 import shutil
 import os.path
 
 from pcircle.dbstore import DbStore
 from pcircle.fdef import FileItem
+
 
 class Test(unittest.TestCase):
     """ Unit test for Circle """
@@ -37,7 +36,6 @@ class Test(unittest.TestCase):
         self.db.pop()
         self.assertEquals(self.db.size(), 0)
 
-
     def test_dbstore_mput(self):
         objs = [FileItem("/1/2"), FileItem("/3/4")]
         self.db.mput(objs)
@@ -45,11 +43,9 @@ class Test(unittest.TestCase):
         self.assertEquals(self.db.size(), 5)
 
     def test_dbstore_mdel(self):
-
         self.db.mdel(3)
         self.assertEquals(self.db.size(), 0)
 
 
 if __name__ == "__main__":
     unittest.main()
-

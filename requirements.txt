@@ -2,4 +2,3 @@ mpi4py
 lru-dict
 xattr
 scandir
-nose

@@ -1,7 +1,6 @@
 from __future__ import print_function
 from mpi4py import MPI
 from copy import copy
-import logging
 import random
 import sys
 import os
@@ -50,11 +49,11 @@ from pcircle.utils import getLogger
 
 DB_BUFSIZE = 10000
 
-class Circle:
 
+class Circle:
     def __init__(self, name="Circle", split="equal",
-                reduce_interval=10, k=2,
-                dbname=None, resume=False):
+                 reduce_interval=10, k=2,
+                 dbname=None, resume=False):
 
         self.logger = getLogger(__name__)
 
@@ -66,7 +65,7 @@ class Circle:
         self.rank = self.comm.Get_rank()
 
         # debug
-        self.d = {"rank" : "rank %s" % self.rank}
+        self.d = {"rank": "rank %s" % self.rank}
 
         self.useStore = G.use_store
         self.split = split
@@ -95,7 +94,7 @@ class Circle:
     def finalize(self, cleanup=True, reduce_interval=10):
         self.var_init()
         self.token_init()
-        self.reduce_interval=reduce_interval
+        self.reduce_interval = reduce_interval
         if cleanup and G.use_store:
             self.workq.cleanup()
 
@@ -127,7 +126,7 @@ class Circle:
 
         # barriers
         self.barrier_started = False
-        self.barrier_up = False    # flag to indicate barrier sent to parent
+        self.barrier_up = False  # flag to indicate barrier sent to parent
         self.barrier_replies = 0
 
         self.workdir = os.getcwd()
@@ -135,7 +134,7 @@ class Circle:
         if not os.path.exists(self.tempdir):
             try:
                 os.mkdir(self.tempdir)
-            except:
+            except OSError:
                 pass
 
     def workq_init(self, dbname=None, resume=False):
@@ -152,7 +151,6 @@ class Circle:
 
         self.workq = DbStore(self.dbname, resume=resume)
 
-
     def set_reduce_interval(self, interval):
         self.reduce_time_interval = interval
 
@@ -166,7 +164,7 @@ class Circle:
         if self.rank == 0:
             self.token_is_local = True
             self.token_color = G.WHITE
-            self.token_proc  = G.WHITE
+            self.token_proc = G.WHITE
         self.token_send_req = MPI.REQUEST_NULL
 
     def tree_init(self, k):
@@ -187,29 +185,29 @@ class Circle:
         if left < self.size:
             # adjust right child in case we don't have a full set of k
             if right >= self.size:
-                right = self.size - 1;
+                right = self.size - 1
             # compute number of children and the list
             self.children = right - left + 1
 
             for i in range(self.children):
-                self.child_ranks.append( left + i)
+                self.child_ranks.append(left + i)
 
         self.logger.debug("parent: %s, children: %s" % (self.parent_rank, self.child_ranks),
-                        extra=self.d)
+                          extra=self.d)
 
     def next_proc(self):
         """ Note next proc could return rank of itself """
         if self.size == 1:
             return MPI.PROC_NULL
         else:
-            return random.randint(0, self.size-1)
+            return random.randint(0, self.size - 1)
 
     def token_status(self):
         return "rank: %s, token_src: %s, token_dest: %s, token_color: %s, token_proc: %s" % \
-            (self.rank, self.token_src, self.token_dest, G.str[self.token_color], G.str[self.token_proc])
+               (self.rank, self.token_src, self.token_dest, G.str[self.token_color], G.str[self.token_proc])
 
     def workq_info(self):
-        s =  "has %s items in work queue\n" % len(self.workq)
+        s = "has %s items in work queue\n" % len(self.workq)
         return s
 
     def qsize(self):
@@ -246,9 +244,9 @@ class Circle:
                 self.task.process()
                 self.work_processed += 1
             else:
-                status = self.check_for_term();
+                status = self.check_for_term()
                 if status == G.TERMINATE:
-                    break;
+                    break
 
     def enq(self, work):
         if work is None:
@@ -279,7 +277,7 @@ class Circle:
             flag = self.comm.Iprobe(MPI.ANY_SOURCE, T.BARRIER, st)
             if flag:
                 child = st.Get_source()
-                self.comm.recv(source = child, tag = T.BARRIER)
+                self.comm.recv(source=child, tag=T.BARRIER)
                 self.barrier_replies += 1
 
         # if we have not sent a message to our parent, and we
@@ -300,7 +298,7 @@ class Circle:
                 # check for message from parent
                 flag = self.comm.Iprobe(self.parent_rank, T.BARRIER)
                 if flag:
-                    self.comm.recv(source = self.parent_rank, tag = T.BARRIER)
+                    self.comm.recv(source=self.parent_rank, tag=T.BARRIER)
                     # mark barrier as complete
                     complete = True
             else:
@@ -311,7 +309,7 @@ class Circle:
         # barrier is complete, send messages to children if any and return true
         if complete:
             for child in self.child_ranks:
-                self.comm.send(None, dest=child, tag = T.BARRIER)
+                self.comm.send(None, dest=child, tag=T.BARRIER)
 
             # reset state for another barrier
             self.barrier_started = False
@@ -327,14 +325,14 @@ class Circle:
         buf = G.ABORT
         for i in range(self.size):
             if (i != self.rank):
-                self.comm.send(buf, dest = i, tag = T.WORK_REQUEST)
+                self.comm.send(buf, dest=i, tag=T.WORK_REQUEST)
                 self.logger.warn("abort message sent to %s" % i, extra=self.d)
 
     def cleanup(self):
         while True:
             # start non-block barrier if we have no outstanding items
             if not self.reduce_outstanding and not self.workreq_outstanding and \
-                self.token_send_req == MPI.REQUEST_NULL:
+                    self.token_send_req == MPI.REQUEST_NULL:
                 self.barrier_start()
 
             # break the loop when non-blocking barrier completes
@@ -342,14 +340,14 @@ class Circle:
                 break
 
             # send no work message for any work request that comes in
-            self.workreq_check(cleanup = True)
+            self.workreq_check(cleanup=True)
 
             # clean up any outstanding reduction
             if self.reduce_enabled:
-                self.reduce_check(cleanup = True)
+                self.reduce_check(cleanup=True)
 
             # recv any incoming work reply messages
-            self.request_work(cleanup = True)
+            self.request_work(cleanup=True)
 
             # check and recv any incoming token
             self.token_check()
@@ -400,19 +398,19 @@ class Circle:
         """
         while True:
             st = MPI.Status()
-            ret = self.comm.Iprobe(source = MPI.ANY_SOURCE, tag = T.WORK_REQUEST, status = st)
-            if not ret: # no work request, break out the loop
+            ret = self.comm.Iprobe(source=MPI.ANY_SOURCE, tag=T.WORK_REQUEST, status=st)
+            if not ret:  # no work request, break out the loop
                 break
             # we have work request message
             rank = st.Get_source()
-            buf = self.comm.recv(source = rank, tag = T.WORK_REQUEST, status = st)
+            buf = self.comm.recv(source=rank, tag=T.WORK_REQUEST, status=st)
             if buf == G.ABORT:
                 self.logger.warn("Abort request from rank %s" % rank, extra=self.d)
                 self.abort = True
                 self.send_no_work(rank)
                 return
             else:
-                self.logger.debug("receive work request from requestor [%s]"  % rank, extra=self.d)
+                self.logger.debug("receive work request from requestor [%s]" % rank, extra=self.d)
                 # add rank to requesters
                 self.requestors.append(rank)
 
@@ -422,7 +420,7 @@ class Circle:
             return
         else:
             self.logger.debug("have %s requesters, with %s work items in queue" %
-                         (len(self.requestors), len(self.workq)), extra=self.d)
+                              (len(self.requestors), len(self.workq)), extra=self.d)
             # have work requesters
             if len(self.workq) == 0 or cleanup:
                 for rank in self.requestors:
@@ -454,7 +452,7 @@ class Circle:
         if self.split != "equal":
             raise NotImplementedError
 
-        base = wcount / (rcount + 1)            # leave self a base number of works
+        base = wcount / (rcount + 1)  # leave self a base number of works
         extra = wcount - base * (rcount + 1)
         assert extra <= rcount
         sizes = [base] * rcount
@@ -462,12 +460,11 @@ class Circle:
             sizes[i] += 1
         return sizes
 
-
     def send_no_work(self, rank):
         """ send no work reply to someone requesting work"""
 
-        buf = { G.KEY: G.ABORT } if self.abort else { G.KEY: G.ZERO }
-        r = self.comm.isend(buf, dest = rank, tag = T.WORK_REPLY)
+        buf = {G.KEY: G.ABORT} if self.abort else {G.KEY: G.ZERO}
+        r = self.comm.isend(buf, dest=rank, tag=T.WORK_REPLY)
         r.wait()
         self.logger.debug("Send no work reply to %s" % rank, extra=self.d)
 
@@ -477,7 +474,7 @@ class Circle:
         sizes = self.spread_counts(rcount, wcount)
 
         self.logger.debug("requester count: %s, work count: %s, spread: %s" %
-                     (rcount, wcount, sizes), extra=self.d)
+                          (rcount, wcount, sizes), extra=self.d)
         for idx, dest in enumerate(self.requestors):
             self.send_work(dest, sizes[idx])
 
@@ -504,7 +501,7 @@ class Circle:
         else:
             buf = {G.KEY: witems, G.VAL: self.workq[0:witems]}
 
-        self.comm.send(buf, dest = rank, tag = T.WORK_REPLY)
+        self.comm.send(buf, dest=rank, tag=T.WORK_REPLY)
         self.logger.debug("%s work items sent to rank %s" % (witems, rank), extra=self.d)
 
         # remove (witems) of work items
@@ -520,18 +517,18 @@ class Circle:
         else:
             del self.workq[0:witems]
 
-    def request_work(self, cleanup = False):
+    def request_work(self, cleanup=False):
         if self.workreq_outstanding:
             st = MPI.Status()
-            reply = self.comm.Iprobe(source = self.work_requested_rank,
-                                     tag = T.WORK_REPLY, status = st)
+            reply = self.comm.Iprobe(source=self.work_requested_rank,
+                                     tag=T.WORK_REPLY, status=st)
             if reply:
                 self.work_receive(self.work_requested_rank)
                 # flip flag to indicate we no longer waiting for reply
                 self.workreq_outstanding = False
-            # else:
-            #    self.logger.debug("has req outstanding, dest = %s, no reply" %
-            #                 self.work_requested_rank, extra = self.d)
+                # else:
+                #    self.logger.debug("has req outstanding, dest = %s, no reply" %
+                #                 self.work_requested_rank, extra = self.d)
 
         elif not cleanup:
             # send request
@@ -542,7 +539,7 @@ class Circle:
             buf = G.ABORT if self.abort else G.MSG
             # blocking send
             self.logger.debug("send work request to rank %s : %s" % (dest, G.str[buf]),
-                         extra = self.d)
+                              extra=self.d)
             self.comm.send(buf, dest, T.WORK_REQUEST)
             self.workreq_outstanding = True
             self.work_requested_rank = dest
@@ -550,7 +547,7 @@ class Circle:
     def work_receive(self, rank):
         """ when incoming work reply detected """
 
-        buf = self.comm.recv(source = rank, tag = T.WORK_REPLY)
+        buf = self.comm.recv(source=rank, tag=T.WORK_REPLY)
 
         if buf[G.KEY] == G.ABORT:
             self.logger.debug("receive abort signal", extra=self.d)
@@ -563,14 +560,13 @@ class Circle:
             assert type(buf[G.VAL]) == list
             self.workq.extend(buf[G.VAL])
 
-
     def token_recv(self):
         # verify we don't have a local token
         if self.token_is_local:
             raise RuntimeError("token_is_local True")
 
         # this won't block as token is waiting
-        buf = self.comm.recv(source = self.token_src, tag = T.TOKEN)
+        buf = self.comm.recv(source=self.token_src, tag=T.TOKEN)
 
         # record token is local
         self.token_is_local = True
@@ -606,7 +602,7 @@ class Circle:
             # send terminate token, don't bother
             # if we the last rank
             self.token_color = G.TERMINATE
-            if self.rank < self.size -1:
+            if self.rank < self.size - 1:
                 self.token_issend()
 
             # set our state to terminate
@@ -624,11 +620,13 @@ class Circle:
 
     def token_issend(self):
 
-        if self.abort: return
+        if self.abort:
+            return
+
         self.logger.debug("token send to rank %s: token_color = %s" %
-                     (self.token_dest, G.str[self.token_color]), extra=self.d)
+                          (self.token_dest, G.str[self.token_color]), extra=self.d)
         self.token_send_req = self.comm.issend(self.token_color,
-            self.token_dest, tag = T.TOKEN)
+                                               self.token_dest, tag=T.TOKEN)
         # now we don't have the token
         self.token_is_local = False
 
@@ -651,11 +649,11 @@ class Circle:
                     # receive message from child
                     # 'status' element is G.MSG_VALID or not
                     # the rest is opaque
-                    inbuf = self.comm.recv(source = child, tag = T.REDUCE)
+                    inbuf = self.comm.recv(source=child, tag=T.REDUCE)
                     self.reduce_replies += 1
 
                     self.logger.debug("client data from %s: %s" %
-                                 (child, inbuf), extra=self.d)
+                                      (child, inbuf), extra=self.d)
 
                     if inbuf['status'] == G.MSG_INVALID:
                         self.reduce_status = False
@@ -701,7 +699,7 @@ class Circle:
                 elif self.comm.Iprobe(source=self.parent_rank, tag=T.REDUCE):
                     # we are not root, check if parent sent us a message
                     # receive message from parent and set flag to start reduce
-                    self.comm.recv(source=self.parent_rank, tag = T.REDUCE)
+                    self.comm.recv(source=self.parent_rank, tag=T.REDUCE)
                     start_reduce = True
 
             # it is critical that we don't start a reduce if we are in cleanup

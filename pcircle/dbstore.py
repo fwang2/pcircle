@@ -37,8 +37,8 @@ These are the two sizes we track:
     fsize - the total file size in the queue/db
 """
 
-
 DB_BUFSIZE = 10000
+
 
 class DbStore(object):
     def __init__(self, dbname,
@@ -150,7 +150,8 @@ class DbStore(object):
     # alias extend to match list
     extend = mput
 
-    def _obj_size(self, obj):
+    @staticmethod
+    def _obj_size(obj):
         if isinstance(obj, FileItem):
             return 0
         elif isinstance(obj, FileChunk) or isinstance(obj, ChunkSum):
@@ -158,13 +159,11 @@ class DbStore(object):
         else:
             raise ValueError("Can't recognize %s" % obj)
 
-
     def _objs_size(self, objs):
         size = 0
         for obj in objs:
             size += self._obj_size(obj)
         return size
-
 
     def first(self):
         return self.mget(1)
@@ -172,9 +171,10 @@ class DbStore(object):
     get = first
 
     def mget(self, n):
-        objs = []; size = 0
+        objs = []
+        size = 0
         with self.conn:
-            for row in self.conn.execute("SELECT work FROM workq LIMIT (?) OFFSET 0", (n, )):
+            for row in self.conn.execute("SELECT work FROM workq LIMIT (?) OFFSET 0", (n,)):
                 obj = pickle.loads(str(row[0]))
                 objs.append(obj)
                 size += self._obj_size(obj)
@@ -185,7 +185,7 @@ class DbStore(object):
         with self.conn:
             cur = self.conn.cursor()
             cur.execute("DELETE FROM workq WHERE id in (SELECT id FROM workq LIMIT (?) OFFSET 0)",
-                (n, ))
+                        (n,))
             self.qsize -= cur.rowcount
             self.fsize -= size
 
@@ -202,7 +202,8 @@ class DbStore(object):
             os.remove(self.dbname)
 
     def pop(self):
-        obj = None; rawobj = None
+        obj = None
+        rawobj = None
         if self.qsize == 0:
             return None
         with self.conn:
@@ -216,5 +217,3 @@ class DbStore(object):
 
     def __len__(self):
         return self.qsize
-
-

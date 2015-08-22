@@ -61,6 +61,7 @@ NUM_OF_HOSTS = 0
 taskloads = []
 comm = MPI.COMM_WORLD
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Parallel Data Copy",
                                      epilog="Please report issues to help@nccs.gov")
@@ -186,19 +187,18 @@ class FCP(BaseTask):
         for f in self.rfd_cache.values():
             try:
                 os.close(f)
-            except:
+            except OSError as e:
                 pass
 
         for f in self.wfd_cache.values():
             try:
                 os.close(f)
-            except:
+            except OSError as e:
                 pass
 
         # remove checkpoint file
         if self.checkpoint_file and os.path.exists(self.checkpoint_file):
             os.remove(self.checkpoint_file)
-
 
         # we need to do this because if last job didn't finish cleanly
         # the fwalk files can be found as leftovers
@@ -277,7 +277,7 @@ class FCP(BaseTask):
         # construct and enable all copy operations
         # we batch operation hard-coded
         logger.info("create() starts, flist length = %s" % len(self.treewalk.flist),
-                     extra=self.d)
+                    extra=self.d)
 
         if G.use_store:
             while self.treewalk.flist.qsize > 0:
@@ -322,14 +322,13 @@ class FCP(BaseTask):
             except OSError as e:
                 logger.warn("FD for %s not valid when closing" % old_k, extra=self.d)
 
-
         fd = -1
         try:
             fd = os.open(k, flag)
         except OSError as e:
-            if e.errno == 28: # no space left
+            if e.errno == 28:  # no space left
                 logger.error("Critical error: %s, exit!" % e, extra=self.d)
-                self.circle.exit(0) # should abort
+                self.circle.exit(0)  # should abort
             else:
                 logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
         else:
@@ -338,7 +337,8 @@ class FCP(BaseTask):
         finally:
             return fd
 
-    def do_mkdir(self, work):
+    @staticmethod
+    def do_mkdir(work):
         src = work.src
         dest = work.dest
         if not os.path.exists(dest):
@@ -360,11 +360,11 @@ class FCP(BaseTask):
             if ARGS.force:
                 try:
                     os.unlink(dest)
-                except:
-                    logger.error("Failed to unlink %s, skipping ... " % dest, extra=self.d)
+                except OSError as e:
+                    logger.error("Failed to unlink %s, %s " % (dest, e), extra=self.d)
                     return False
                 else:
-                    wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY)
+                    wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY, self._write_cache_limit)
             else:
                 logger.error("Failed to create output file %s" % dest, extra=self.d)
                 return False
@@ -450,7 +450,8 @@ class FCP(BaseTask):
         self.wtime_ended = MPI.Wtime()
         taskloads = self.circle.comm.gather(self.reduce_items)
         if self.circle.rank == 0:
-            if self.totalsize == 0: return
+            if self.totalsize == 0:
+                return
             time = self.wtime_ended - self.wtime_started
             rate = float(self.totalsize) / time
             print("\nFCP Epilogue:\n")
@@ -512,6 +513,7 @@ def err_and_exit(msg, code):
         print("\n%s" % msg)
     MPI.Finalize()
     sys.exit(0)
+
 
 def check_dbstore_resume_condition(rid):
     global circle
@@ -609,7 +611,8 @@ def mem_start():
 
 
 def get_workq_size(workq):
-    if workq is None: return 0
+    if workq is None:
+        return 0
     sz = 0
     for w in workq:
         sz += w['length']
@@ -629,9 +632,7 @@ def verify_checkpoint(chk_file, total_checkpoint_cnt):
 def mem_resume(rid):
     global circle
     dmsg = {"rank": "rank %s" % circle.rank}
-    oldsz = 0;
-    tsz = 0;
-    sz = 0
+    oldsz, tsz, sz = 0, 0, 0
     cobj = None
     timestamp = None
     workq = None
@@ -649,8 +650,7 @@ def mem_resume(rid):
                 src = cobj.src
                 dest = cobj.dest
                 oldsz = cobj.totalsize
-
-            except:
+            except Exception as e:
                 logger.error("error reading %s" % chk_file, extra=dmsg)
                 circle.comm.Abort()
 
@@ -663,7 +663,6 @@ def mem_resume(rid):
     logger.debug("total_checkpoint_cnt = %s" % total_checkpoint_cnt, extra=dmsg)
     verify_checkpoint(chk_file, total_checkpoint_cnt)
 
-
     # acquire total size
     tsz = circle.comm.allreduce(sz)
     if tsz == 0:
@@ -675,11 +674,9 @@ def mem_resume(rid):
         print("Original size: %s" % bytes_fmt(oldsz))
         print("Recovery size: %s" % bytes_fmt(tsz))
 
-
     # second task
     pcp = FCP(circle, src, dest,
-              totalsize=tsz, checksum=ARGS.checksum,
-              workq=cobj.workq,
+              totalsize=tsz, workq=cobj.workq,
               hostcnt=NUM_OF_HOSTS)
 
     set_chunksize(pcp, tsz)
@@ -714,6 +711,7 @@ def fix_opt(treewalk):
             os.chmod(dpath, f.st_mode)
         except OSError as e:
             logging.warn(e)
+
 
 def parse_and_bcast():
     global ARGS
@@ -862,15 +860,14 @@ def aggregate_checksums(localChunkSums, dbname="checksums.db"):
 
     return size, signature
 
+
 def main():
     global ARGS, logger, circle
 
     # This might be an overkill function
     signal.signal(signal.SIGINT, sig_handler)
 
-    treewalk = None;
-    pcp = None;
-    totalsize = None
+    treewalk, pcp, totalsize = None, None, None
 
     parse_and_bcast()
     tally_hosts()
@@ -908,12 +905,8 @@ def main():
         print("\t{:<20}{:<20}".format("Checksumming:", "%r" % ARGS.checksum))
         print("\t{:<20}{:<20}".format("Stripe Preserve:", "%r" % G.preserve))
 
-    #
     # TODO: there are some redundant code brought in by merging
-    #   memory/store-based checkpoint/restart, need to be refactored
-    #
-
-
+    # memory/store-based checkpoint/restart, need to be refactored
     if ARGS.rid:
         if G.use_store:
             pcp, totalsize = store_resume(ARGS.rid[0])
@@ -986,4 +979,5 @@ def main():
         circle.workq.cleanup()
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()

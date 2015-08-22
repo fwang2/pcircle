@@ -20,10 +20,12 @@ ARGS = None
 __version__ = get_versions()['version']
 del get_versions
 
-def sig_handler(signal, frame):
+
+def sig_handler(signal):
     # catch keyboard, do nothing
     # eprint("\tUser cancelled ... cleaning up")
     sys.exit(1)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fdiff")
@@ -34,6 +36,7 @@ def parse_args():
 
     return parser.parse_args()
 
+
 def load_chunks(f):
     try:
         return set(pickle.load(f))
@@ -41,8 +44,8 @@ def load_chunks(f):
         logger.error(e)
         sys.exit(1)
 
-def main():
 
+def main():
     global ARGS, logger, xchunks, ychunks
     signal.signal(signal.SIGINT, sig_handler)
     ARGS = parse_args()
@@ -66,4 +69,6 @@ def main():
 
         print("\n")
 
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    main()

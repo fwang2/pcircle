@@ -166,19 +166,7 @@ class FCP(BaseTask):
         self.chunksize = sz
 
     def set_adaptive_chunksize(self, totalsz):
-        MB = 1024 * 1024
-        TB = 1024 * 1024 * 1024 * 1024
-        if totalsz < 10 * TB:
-            self.chunksize = 16 * MB
-        elif totalsz < 100 * TB:
-            self.chunksize = 64 * MB
-        elif totalsz < 512 * TB:
-            self.chunksize = 128 * MB
-        elif totalsz < 1024 * TB:
-            self.chunksize = 256 * MB
-        else:
-            self.chunksize = 512 * MB
-
+        self.chunksize = utils.calc_chunksize(totalsz)
         if self.circle.rank == 0:
             print("Adaptive chunksize: %s" % bytes_fmt(self.chunksize))
 

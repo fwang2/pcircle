@@ -225,3 +225,22 @@ def emsg(ep):
     top = traceback.extract_stack()[-2]
     return ', '.join([os.path.basename(top[0]), 'Line ' + str(top[1]),
                       type(ep).__name__ + ': ' + str(ep)])
+
+
+def calc_chunksize(totalsz):
+
+    chunksize = 0
+    MB = 1024 * 1024
+    TB = 1024 * 1024 * 1024 * 1024
+    if totalsz < 10 * TB:
+        chunksize = 16 * MB
+    elif totalsz < 100 * TB:
+        chunksize = 64 * MB
+    elif totalsz < 512 * TB:
+        chunksize = 128 * MB
+    elif totalsz < 1024 * TB:
+        chunksize = 256 * MB
+    else:
+        chunksize = 512 * MB
+
+    return chunksize

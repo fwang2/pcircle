@@ -74,6 +74,7 @@ def parse_args():
     parser.add_argument("--checkpoint-interval", metavar="seconds", type=int, default=360,
                         help="checkpoint interval, default: 360s")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
+    parser.add_argument("-s", "--signature", action="store_true", help="aggregate checksum for signature, default: off")
     parser.add_argument("--checkpoint-id", metavar="ID", default=None, help="default: timestamp")
     parser.add_argument("--disable-preserve", action="store_true", help="no preserving meta, default: off")
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
@@ -452,11 +453,11 @@ class FCP(BaseTask):
         if self.circle.rank == 0:
             if self.totalsize == 0:
                 return
-            time = self.wtime_ended - self.wtime_started
-            rate = float(self.totalsize) / time
+            tlapse = self.wtime_ended - self.wtime_started
+            rate = float(self.totalsize) / tlapse
             print("\nFCP Epilogue:\n")
             print("\t{:<20}{:<20}".format("Ending at:", utils.current_time()))
-            print("\t{:<20}{:<20}".format("Completed in:", utils.conv_time(time)))
+            print("\t{:<20}{:<20}".format("Completed in:", utils.conv_time(tlapse)))
             print("\t{:<20}{:<20}".format("Transfer Rate:", "%s/s" % bytes_fmt(rate)))
             print("\t{:<20}{:<20}".format("FCP Loads:", "%s" % taskloads))
 
@@ -719,7 +720,7 @@ def parse_and_bcast():
     if MPI.COMM_WORLD.rank == 0:
         try:
             ARGS = parse_args()
-        except:
+        except argparse.ArgumentError as e:
             parse_flags = False
     parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
     if parse_flags:
@@ -861,6 +862,27 @@ def aggregate_checksums(localChunkSums, dbname="checksums.db"):
     return size, signature
 
 
+def gen_signature(pcp, totalsize):
+    if comm.rank == 0:
+        print("\nAggregating checksums for a dataset signature ...\n")
+    tbegin = MPI.Wtime()
+    size, sig = aggregate_checksums(pcp.chunksums)
+    tend = MPI.Wtime()
+    if comm.rank == 0:
+        print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
+        print("\t{:<20}{:<20}".format("Running time:", utils.conv_time(tend - tbegin)))
+        print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
+        with open(ARGS.output, "w") as f:
+            f.write("sha1: %s\n" % sig)
+            f.write("chunksize: %s\n" % pcp.chunksize)
+            f.write("fcp version: %s\n" % __version__)
+            f.write("src: %s\n" % pcp.src)
+            f.write("destination: %s\n" % pcp.dest)
+            f.write("date: %s\n" % utils.current_time())
+            f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
+
+        print("\t{:<20}{:<20}".format("Signature File:", ARGS.output))
+
 def main():
     global ARGS, logger, circle
 
@@ -879,6 +901,9 @@ def main():
 
     if ARGS.disable_preserve:
         G.preserve = False
+
+    if ARGS.signature:
+        ARGS.checksum = True
 
     if comm.rank == 0:
         check_path(ARGS.src, ARGS.dest)
@@ -902,7 +927,8 @@ def main():
         print("\t{:<20}{:<20}".format("Source:", os.path.abspath(ARGS.src)))
         print("\t{:<20}{:<20}".format("Destination:", os.path.abspath(ARGS.dest)))
         print("\t{:<20}{:<20}".format("Overwrite:", "%r" % ARGS.force))
-        print("\t{:<20}{:<20}".format("Checksumming:", "%r" % ARGS.checksum))
+        print("\t{:<20}{:<20}".format("Checksum verify:", "%r" % ARGS.checksum))
+        print("\t{:<20}{:<20}".format("Dataset signature:", "%r" % ARGS.signature))
         print("\t{:<20}{:<20}".format("Stripe Preserve:", "%r" % G.preserve))
 
     # TODO: there are some redundant code brought in by merging
@@ -941,25 +967,9 @@ def main():
 
         comm.Barrier()
 
-        if circle.rank == 0:
-            print("\nAggregating checksums for a dataset signature ...\n")
+        if ARGS.signature:
+            gen_signature(pcp, totalsize)
 
-        size, sig = aggregate_checksums(pcp.chunksums)
-        if circle.rank == 0:
-            print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
-            print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
-            with open(ARGS.output, "w") as f:
-                f.write("sha1: %s\n" % sig)
-                f.write("chunksize: %s\n" % pcp.chunksize)
-                f.write("fcp version: %s\n" % __version__)
-                f.write("src: %s\n" % pcp.src)
-                f.write("destination: %s\n" % pcp.dest)
-                f.write("date: %s\n" % utils.current_time())
-                f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
-
-            print("\t{:<20}{:<20}".format("Signature File:", ARGS.output))
-
-    # final task
     if ARGS.fix_opt and treewalk and os.geteuid() == 0:
         print("\nFixing ownership and permissions ...")
         fix_opt(treewalk)
@@ -977,6 +987,7 @@ def main():
     #
     if isinstance(circle.workq, DbStore):
         circle.workq.cleanup()
+
 
 
 if __name__ == "__main__":

@@ -93,7 +93,7 @@ def gen_parser():
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
     parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
-    parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
+    parser.add_argument("--fix-opt", action="store_true", default=True, help="fix ownership, permssion, timestamp")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
@@ -711,7 +711,8 @@ def fix_opt(treewalk):
         dpath = destpath(treewalk.src, treewalk.dest, f.path)  # f[0]
         try:
             os.lchown(dpath, f.st_uid, f.st_gid)
-            os.chmod(dpath, f.st_mode)
+            if not stat.S_ISLNK(f.st_mode):
+                os.chmod(dpath, f.st_mode)
         except OSError as e:
             logging.warn(e)
 
@@ -901,7 +902,7 @@ def main():
     G.loglevel = ARGS.loglevel
     G.use_store = ARGS.use_store
 
-    if ARGS.fix_opt and os.geteuid() == 0:
+    if ARGS.fix_opt:  # os.geteuid() == 0 (not required anymore)
         G.fix_opt = True
 
     if ARGS.disable_preserve:
@@ -975,7 +976,7 @@ def main():
         if ARGS.signature:
             gen_signature(pcp, totalsize)
 
-    if ARGS.fix_opt and treewalk and os.geteuid() == 0:
+    if ARGS.fix_opt and treewalk:
         print("\nFixing ownership and permissions ...")
         fix_opt(treewalk)
 

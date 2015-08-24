@@ -38,8 +38,13 @@ def parse_args():
 
 
 class FWalk(BaseTask):
+
+
     def __init__(self, circle, src, dest=None, preserve=False, force=False):
         BaseTask.__init__(self, circle)
+
+        self.logger = utils.getLogger(__name__)
+        self.d = {"rank": "rank %s" % circle.rank}
 
         self.circle = circle
         self.src = src
@@ -82,25 +87,23 @@ class FWalk(BaseTask):
         # reduce
         self.reduce_items = 0
 
-        # debug
-        self.d = {"rank": "rank %s" % circle.rank}
-
         self.time_started = MPI.Wtime()
         self.time_ended = None
 
-        self.logger = utils.getLogger(__name__)
 
     def create(self):
         if self.circle.rank == 0:
             self.circle.enq(FileItem(self.src))
             print("\nAnalyzing workload ...")
 
-    @staticmethod
-    def copy_xattr(src, dest):
+    def copy_xattr(self, src, dest):
         attrs = xattr.listxattr(src)
         for k in attrs:
-            val = xattr.getxattr(src, k)
-            xattr.setxattr(dest, k, val)
+            try:
+                val = xattr.getxattr(src, k)
+                xattr.setxattr(dest, k, val)
+            except IOError as e:
+                self.logger.warn(e, extra=self.d)
 
     def flushdb(self):
         if len(self.flist_buf) != 0:
@@ -151,7 +154,7 @@ class FWalk(BaseTask):
             return
 
         try:
-            os.mknod(dest_file, st.st_mode)
+            os.mknod(dest_file, st.st_mode | stat.S_IWUSR)  # -r-r-r special
         except OSError as e:
             self.logger.warn("mknod() for %s, %s" % (dest_file, e), extra=self.d)
             return
@@ -205,7 +208,7 @@ class FWalk(BaseTask):
         spath = fitem.path
         if spath:
             try:
-                st = os.stat(spath)
+                st = os.lstat(spath)
             except OSError as e:
                 self.logger.warn(e, extra=self.d)
                 self.skipped += 1

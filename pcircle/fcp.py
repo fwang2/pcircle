@@ -976,6 +976,10 @@ def main():
         if ARGS.signature:
             gen_signature(pcp, totalsize)
 
+    # fix permission
+
+    comm.Barrier()
+
     if ARGS.fix_opt and treewalk:
         print("\nFixing ownership and permissions ...")
         fix_opt(treewalk)

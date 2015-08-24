@@ -63,8 +63,20 @@ taskloads = []
 comm = MPI.COMM_WORLD
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Parallel Data Copy",
+class ArgumentParserError(Exception):
+    """ change default error handling behavior of argparse
+    we need to catch the error so MPI can gracefully exit
+    """
+    pass
+
+
+class ThrowingArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ArgumentParserError(message)
+
+
+def gen_parser():
+    parser = ThrowingArgumentParser(description="Parallel Data Copy",
                                      epilog="Please report issues to help@nccs.gov")
     parser.add_argument("--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
@@ -86,7 +98,7 @@ def parse_args():
     parser.add_argument("dest", help="copy to")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
 
-    return parser.parse_args()
+    return parser
 
 
 def sig_handler(signal, frame):
@@ -708,10 +720,14 @@ def parse_and_bcast():
     global ARGS
     parse_flags = True
     if MPI.COMM_WORLD.rank == 0:
+        parser = gen_parser()
         try:
-            ARGS = parse_args()
-        except argparse.ArgumentError as e:
+            ARGS = parser.parse_args()
+        except ArgumentParserError as e:
             parse_flags = False
+            parser.print_usage()
+            print(e)
+
     parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
     if parse_flags:
         ARGS = MPI.COMM_WORLD.bcast(ARGS)

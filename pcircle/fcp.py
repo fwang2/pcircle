@@ -981,7 +981,8 @@ def main():
     comm.Barrier()
 
     if ARGS.fix_opt and treewalk:
-        print("\nFixing ownership and permissions ...")
+        if comm.rank == 0:
+            print("\nFixing ownership and permissions ...")
         fix_opt(treewalk)
 
     if treewalk:

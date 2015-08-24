@@ -63,7 +63,7 @@ class ChunkSum:
                    (other.filename, other.offset, self.length, self.digest))
 
     def __repr__(self):
-        return "-".join([str(x) for x in [self.filename, self.offset, self.length]])
+        return "!@".join([str(x) for x in [self.filename, self.offset, self.length]])
 
     def __hash__(self):
         return hash(repr(self))

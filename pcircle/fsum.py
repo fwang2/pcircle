@@ -266,17 +266,17 @@ def export_checksum(chunks):
 
 
 def export_checksum2(chunks, ofile):
-    fullpath = os.path.abspath(ofile)
-    ex_base = os.path.basename(fullpath).split(".")[0] + ".checksums"
-    ex_dir = os.path.dirname(fullpath)
-    ex_path = os.path.join(ex_dir, ex_base)
+    # fullpath = os.path.abspath(ofile)
+    # ex_base = os.path.basename(fullpath).split(".")[0] + ".checksums"
+    # ex_dir = os.path.dirname(fullpath)
+    # ex_path = os.path.join(ex_dir, ex_base)
 
-    with open(ex_path, "w") as f:
+    with open(ofile, "a") as f:
+        f.write("----block checksums----\n")
         for c in chunks:
             f.write("%s, %s\n" % (c, c.digest))
 
-    return os.path.basename(ex_path)
-
+    return ofile
 
 def parse_and_bcast():
     global ARGS
@@ -348,13 +348,18 @@ def main():
         sys.stdout.write("%s chunks\n" % len(chunks))
         sha1val = do_checksum(chunks)
         with open(ARGS.output, "w") as f:
-            f.write("chunksize: %s\n" % chunksize)
             f.write("sha1: %s\n" % sha1val)
+            f.write("chunksize: %s\n" % chunksize)
+            f.write("fwalk version: %s\n" % __version__)
+            f.write("src: %s\n" % root)
+            f.write("date: %s\n" % utils.current_time())
+            f.write("totalsize: %s\n" % totalsize)
 
         print("\nSHA1: %s" % sha1val)
-        print("Exporting singular signature to [%s]" % ARGS.output)
+        print("Signature file: [%s]" % ARGS.output)
         if ARGS.export_block_signatures:
-            print("Exporting block signatures to [%s] \n" % export_checksum2(chunks, ARGS.output))
+            export_checksum2(chunks, ARGS.output)
+            print("Exporting block signatures ... \n")
 
     fcheck.epilogue()
 

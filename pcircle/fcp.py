@@ -876,7 +876,6 @@ def gen_signature(pcp, totalsize):
         print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
         print("\t{:<20}{:<20}".format("Running time:", utils.conv_time(tend - tbegin)))
         print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
-        print("\t{:<20}{:<20}".format("Block checksums:", export_checksum2(chunksums, ARGS.output)))
         with open(ARGS.output, "w") as f:
             f.write("sha1: %s\n" % sig)
             f.write("chunksize: %s\n" % pcp.chunksize)
@@ -885,8 +884,7 @@ def gen_signature(pcp, totalsize):
             f.write("destination: %s\n" % pcp.dest)
             f.write("date: %s\n" % utils.current_time())
             f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
-
-        print("\t{:<20}{:<20}".format("Signature File:", ARGS.output))
+        print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, ARGS.output)))
 
 
 def main():

@@ -77,7 +77,12 @@ def print_src_dest():
 
 def gen_chunksum(b, sig):
     b = os.path.relpath(b, sig.prefix)
-    fn, offset, length, digest = b.split("!@")
+    try:
+        fn, offset, length, digest = b.split("!@")
+    except ValueError as e:
+        print("Parsing error: %s" % b)
+        sys.exit(1)
+        
     c = ChunkSum(fn)
     c.offset = int(offset)
     c.length = int(length)
@@ -115,7 +120,8 @@ def main():
         c2 = gen_chunksum(b2, sig2)
         if c1 != c2:
             print("block differ: [%r] -> [%r]" % (c1, c2))
-
+            if ARGS.break_on_first:
+                sys.exit(1)
 
 if __name__ == "__main__":
     main()

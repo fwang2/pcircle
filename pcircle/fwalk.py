@@ -313,7 +313,8 @@ class FWalk(BaseTask):
             print("{:<20}{:<20}".format("Sym Links count:", total_symlinks))
             print("{:<20}{:<20}".format("File count:", total_files))
             print("{:<20}{:<20}".format("Skipped count:", total_skipped))
-            print("{:<20}{:<20}".format("File size:", bytes_fmt(total_filesize)))
+            print("{:<20}{:<20}".format("Total file size:", bytes_fmt(total_filesize)))
+            print("{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
             print("{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
             print("FWALK Loads: %s" % taskloads)
             print("")
@@ -364,6 +365,8 @@ def main():
     if ARGS.stats and comm.rank == 0:
         globaltops = [item for sublist in globaltops for item in sublist]
         globaltops.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
+        if len(globaltops) < ARGS.top:
+            ARGS.top = len(globaltops)
         print("\nStats, top %s files\n" % ARGS.top)
         for i in xrange(ARGS.top):
             print("\t{:15}{:<30}".format(utils.bytes_fmt(globaltops[i].st_size),

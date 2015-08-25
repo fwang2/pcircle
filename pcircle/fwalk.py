@@ -34,6 +34,9 @@ def parse_args():
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
+    parser.add_argument("-s", "--stats", action="store_true", help="collects stats")
+    parser.add_argument("-t", "--top", type=int, default=10, help="Top files (10)")
+
     return parser.parse_args()
 
 
@@ -354,6 +357,18 @@ def main():
     if G.use_store:
         treewalk.flushdb()
 
+    if ARGS.stats:
+        treewalk.flist.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
+        globaltops = comm.gather(treewalk.flist[:ARGS.top])
+
+    if ARGS.stats and comm.rank == 0:
+        globaltops = [item for sublist in globaltops for item in sublist]
+        globaltops.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
+        print("\nStats, top %s files\n" % ARGS.top)
+        for i in xrange(ARGS.top):
+            print("\t{:15}{:<30}".format(utils.bytes_fmt(globaltops[i].st_size),
+                  globaltops[i].path)
+                                         )
     treewalk.epilogue()
     treewalk.cleanup()
     circle.finalize()

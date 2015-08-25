@@ -274,7 +274,7 @@ def export_checksum2(chunks, ofile):
     with open(ofile, "a") as f:
         f.write("----block checksums----\n")
         for c in chunks:
-            f.write("%s, %s\n" % (c, c.digest))
+            f.write("%s!@%s\n" % (c, c.digest))
 
     return ofile
 

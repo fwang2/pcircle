@@ -9,15 +9,13 @@ import os
 from _version import get_versions
 from globals import G
 from itertools import izip_longest
-
-xchunks = None
-ychunks = None
-ARGS = None
+from fdef import ChunkSum
 __version__ = get_versions()['version']
+
+ARGS = None
 del get_versions
 
-SRC = set()
-DEST = set()
+MISSING = []
 
 
 class Signature(object):
@@ -43,13 +41,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def next_block(f, sig):
-    block_start = False
+def next_block(f):
     for line in f:
-        if block_start:
-            yield line
-        elif line.startswith("----block"):
-            block_start = True
+        yield line
+
+    # block_start = False
+    # for line in f:
+    #     if block_start:
+    #         yield line
+    #     elif line.startswith("----block"):
+    #         block_start = True
 
 def check_signature_file(f):
     sig = Signature()
@@ -74,6 +75,16 @@ def print_src_dest():
     print("Present in src, not in destination")
 
 
+def gen_chunksum(b, sig):
+    b = os.path.relpath(b, sig.prefix)
+    fn, offset, length, digest = b.split("!@")
+    c = ChunkSum(fn)
+    c.offset = int(offset)
+    c.length = int(length)
+    c.digest = digest.strip()
+    return c
+
+
 def main():
     global ARGS, SRC, DEST
     signal.signal(signal.SIGINT, sig_handler)
@@ -91,20 +102,19 @@ def main():
 
     f1 = next_block(ARGS.src)
     f2 = next_block(ARGS.dest)
+    for b1, b2 in izip_longest(f1, f2, fillvalue=None):
+        if not b1:
+            break
+        if not b2:
+            # b1 still got blocks, we list them as diff
+            c1 = gen_chunksum(b1, sig1)
+            print("missing blocks: [%r]" % c1)
+            continue
 
-    for b1, b2 in izip_longest(f1, f2, None):
-        if b1:
-            b1rel = os.path.relpath(b1, sig1.prefix)
-            # SRC.add(b1rel)
-        if b2:
-            b2rel = os.path.relpath(b2, sig2.prefix)
-            # DEST.add(b2rel)
-
-        if b1rel != b2rel and ARGS.break_on_first:
-                print("First miss match:")
-                print("\t src: %s" % b1)
-                print("\t dest: %s" % b2)
-                sys.exit(1)
+        c1 = gen_chunksum(b1, sig1)
+        c2 = gen_chunksum(b2, sig2)
+        if c1 != c2:
+            print("block differ: [%r] -> [%r]" % (c1, c2))
 
 
 if __name__ == "__main__":

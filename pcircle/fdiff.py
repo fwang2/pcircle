@@ -82,7 +82,7 @@ def gen_chunksum(b, sig):
     except ValueError as e:
         print("Parsing error: %s" % b)
         sys.exit(1)
-        
+
     c = ChunkSum(fn)
     c.offset = int(offset)
     c.length = int(length)

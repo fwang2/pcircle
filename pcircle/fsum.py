@@ -179,7 +179,7 @@ class Checksum(BaseTask):
         blockcount = ck.length / blocksize
         remaining = ck.length % blocksize
         for _ in xrange(blockcount):
-            digest.update(readn(fd, ck.length))
+            digest.update(readn(fd, blocksize))
         if remaining > 0:
             digest.update(readn(fd, remaining))
         try:

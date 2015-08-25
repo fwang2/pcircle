@@ -93,7 +93,7 @@ def gen_parser():
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
     parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
-    parser.add_argument("--fix-opt", action="store_true", default=True, help="fix ownership, permssion, timestamp")
+    parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
@@ -714,7 +714,16 @@ def fix_opt(treewalk):
             if not stat.S_ISLNK(f.st_mode):
                 os.chmod(dpath, f.st_mode)
         except OSError as e:
-            logging.warn(e)
+            print("fix-opt warning: ", e)
+
+    # fix top-level
+    try:
+        st = os.lstat(ARGS.src)
+        os.lchown(ARGS.dest, st.st_uid, st.st_gid)
+        if not stat.S_ISLNK(st.st_mode):
+            os.chmod(ARGS.dest, st.st_mode)
+    except OSError as e:
+        print("fix-opt warning: ", e)
 
 
 def parse_and_bcast():

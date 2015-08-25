@@ -89,7 +89,7 @@ def gen_parser():
     parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
     parser.add_argument("-s", "--signature", action="store_true", help="aggregate checksum for signature, default: off")
     parser.add_argument("--checkpoint-id", metavar="ID", default=None, help="default: timestamp")
-    parser.add_argument("--disable-preserve", action="store_true", help="no preserving meta, default: off")
+    parser.add_argument("-p", "-preserve", action="store_true", help="Preserving meta, default: off")
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
     parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
@@ -912,8 +912,8 @@ def main():
     if ARGS.fix_opt:  # os.geteuid() == 0 (not required anymore)
         G.fix_opt = True
 
-    if ARGS.disable_preserve:
-        G.preserve = False
+    if ARGS.preserve:
+        G.preserve = True
 
     if ARGS.signature:
         ARGS.checksum = True

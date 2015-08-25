@@ -541,8 +541,7 @@ def check_dbstore_resume_condition(rid):
         if circle.rank == 0:
             print("Resume condition ... OK\n")
     else:
-        if circle.rank == 0:
-            err_and_exit("Resume conditon not be met: mismatch db and check file", 0)
+        err_and_exit("Resume conditon not be met: mismatch db and check file", 0)
 
     return chk_full, db_full
 
@@ -918,8 +917,7 @@ def main():
     if ARGS.signature:
         ARGS.checksum = True
 
-    if comm.rank == 0:
-        check_path(ARGS.src, ARGS.dest)
+    check_path(ARGS.src, ARGS.dest)
 
     dbname = get_dbname()
 

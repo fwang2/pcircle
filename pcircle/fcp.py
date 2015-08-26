@@ -56,11 +56,12 @@ __version__ = get_versions()['version']
 del get_versions
 
 args = None
-logger = None
 circle = None
 num_of_hosts = 0
 taskloads = []
 comm = MPI.COMM_WORLD
+dmsg = {"rank": "rank %s" % comm.rank}
+logger = utils.getLogger(__name__)
 
 
 class ArgumentParserError(Exception):
@@ -75,16 +76,24 @@ class ThrowingArgumentParser(argparse.ArgumentParser):
         raise ArgumentParserError(message)
 
 
+def err_and_exit(msg, code):
+    if comm.rank == 0:
+        print("\n%s" % msg)
+    MPI.Finalize()
+    sys.exit(0)
+
+
 def gen_parser():
     parser = ThrowingArgumentParser(description="Parallel Data Copy",
-                                     epilog="Please report issues to help@nccs.gov")
+                                     epilog="Please report issues to fwang2@ornl.gov")
     parser.add_argument("--version", action="version", version="{version}".format(version=__version__))
+    parser.add_argument("-v", "--verbosity", action="count", help="increase verbosity")
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     parser.add_argument("--loglevel", default="warn", help="log level for file, default WARN")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
-    parser.add_argument("--reduce-interval", metavar="seconds", type=int, default=10, help="interval, default 10s")
-    parser.add_argument("--checkpoint-interval", metavar="seconds", type=int, default=360,
+    parser.add_argument("--reduce-interval", metavar="s", type=int, default=10, help="interval, default 10s")
+    parser.add_argument("--checkpoint-interval", metavar="s", type=int, default=360,
                         help="checkpoint interval, default: 360s")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
     parser.add_argument("-s", "--signature", action="store_true", help="aggregate checksum for signature, default: off")
@@ -96,7 +105,7 @@ def gen_parser():
     parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
-    parser.add_argument("-o", "--output", default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
+    parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
 
     return parser
 
@@ -509,13 +518,6 @@ class FCP(BaseTask):
             ck = ChunkSum(work.src, offset=work.offset, length=work.length,
                           digest=m.hexdigest())
             self.chunksums.append(ck)
-
-
-def err_and_exit(msg, code):
-    if comm.rank == 0:
-        print("\n%s" % msg)
-    MPI.Finalize()
-    sys.exit(0)
 
 
 def check_dbstore_resume_condition(rid):

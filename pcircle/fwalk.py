@@ -308,15 +308,15 @@ class FWalk(BaseTask):
         self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
-            print("")
-            print("{:<20}{:<20}".format("Directory count:", total_dirs))
-            print("{:<20}{:<20}".format("Sym Links count:", total_symlinks))
-            print("{:<20}{:<20}".format("File count:", total_files))
-            print("{:<20}{:<20}".format("Skipped count:", total_skipped))
-            print("{:<20}{:<20}".format("Total file size:", bytes_fmt(total_filesize)))
-            print("{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
-            print("{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
-            print("FWALK Loads: %s" % taskloads)
+            print("\nFWALK Epilogue:\n")
+            print("\t{:<20}{:<20}".format("Directory count:", total_dirs))
+            print("\t{:<20}{:<20}".format("Sym Links count:", total_symlinks))
+            print("\t{:<20}{:<20}".format("File count:", total_files))
+            print("\t{:<20}{:<20}".format("Skipped count:", total_skipped))
+            print("\t{:<20}{:<20}".format("Total file size:", bytes_fmt(total_filesize)))
+            print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
+            print("\t{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
+            print("\tFWALK Loads: %s" % taskloads)
             print("")
 
         return total_filesize

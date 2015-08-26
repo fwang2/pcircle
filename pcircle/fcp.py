@@ -55,6 +55,8 @@ from _version import get_versions
 __version__ = get_versions()['version']
 del get_versions
 
+src = None
+dest = None
 args = None
 circle = None
 num_of_hosts = 0
@@ -902,41 +904,36 @@ def main():
 
     # This might be an overkill function
     signal.signal(signal.SIGINT, sig_handler)
-
     treewalk, pcp, totalsize = None, None, None
-
     parse_and_bcast()
     tally_hosts()
     G.loglevel = args.loglevel
     G.use_store = args.use_store
+    G.fix_opt = args.fix_opt  # os.geteuid() == 0 (not required anymore)
+    G.preserve = args.preserve
 
-    if args.fix_opt:  # os.geteuid() == 0 (not required anymore)
-        G.fix_opt = True
-
-    if args.preserve:
-        G.preserve = True
-
-    if args.signature:
+    if args.signature:  # with signature implies doing checksum as well
         args.checksum = True
 
     check_path(args.src, args.dest)
 
     dbname = get_dbname()
 
-    G.logfile = ".pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
+    G.logfile = ".pcircle-%s.log" % comm.rank
     logger = utils.getLogger("fcp")
 
+    circle = Circle()
+    circle.dbname = dbname
+    circle.reduce_interval = args.reduce_interval
     if args.rid:
-        circle = Circle(dbname=dbname, reduce_interval=args.reduce_interval, resume=True)
-    else:
-        circle = Circle(dbname=dbname, reduce_interval=args.reduce_interval)
+        circle.resume = True
 
     if circle.rank == 0:
         print("Running Parameters:\n")
         print("\t{:<20}{:<20}".format("Starting at:", utils.current_time()))
         print("\t{:<20}{:<20}".format("FCP version:", __version__))
         print("\t{:<20}{:<20}".format("Num of Hosts:", num_of_hosts))
-        print("\t{:<20}{:<20}".format("Num of Processes:", MPI.COMM_WORLD.Get_size()))
+        print("\t{:<20}{:<20}".format("Num of Processes:", comm.size))
         print("\t{:<20}{:<20}".format("Source:", os.path.abspath(args.src)))
         print("\t{:<20}{:<20}".format("Destination:", os.path.abspath(args.dest)))
         print("\t{:<20}{:<20}".format("Overwrite:", "%r" % args.force))

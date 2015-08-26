@@ -55,10 +55,10 @@ from _version import get_versions
 __version__ = get_versions()['version']
 del get_versions
 
-ARGS = None
+args = None
 logger = None
 circle = None
-NUM_OF_HOSTS = 0
+num_of_hosts = 0
 taskloads = []
 comm = MPI.COMM_WORLD
 
@@ -359,7 +359,7 @@ class FCP(BaseTask):
             return False
         wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT, self._write_cache_limit)
         if wfd < 0:
-            if ARGS.force:
+            if args.force:
                 try:
                     os.unlink(dest)
                 except OSError as e:
@@ -560,7 +560,7 @@ def check_path(isrc, idest):
     if not os.path.exists(isrc) or not os.access(isrc, os.R_OK):
         err_and_exit("source directory %s is not readable" % isrc, 0)
 
-    if os.path.exists(idest) and not ARGS.force:
+    if os.path.exists(idest) and not args.force:
         err_and_exit("Destination [%s] exists, will not overwrite!" % idest, 0)
 
     # idest doesn't exits at this point
@@ -572,41 +572,41 @@ def check_path(isrc, idest):
 
 
 def set_chunksize(pcp, tsz):
-    if ARGS.adaptive:
+    if args.adaptive:
         pcp.set_adaptive_chunksize(tsz)
     else:
-        pcp.set_fixed_chunksize(utils.conv_unit(ARGS.chunksize))
+        pcp.set_fixed_chunksize(utils.conv_unit(args.chunksize))
 
 
 def mem_start():
     global circle
-    src = os.path.abspath(ARGS.src)
+    src = os.path.abspath(args.src)
     src = os.path.realpath(src)  # the starting point can't be a sym-linked path
-    dest = os.path.abspath(ARGS.dest)
+    dest = os.path.abspath(args.dest)
     # dest = check_path(circle, src, dest)
 
-    treewalk = FWalk(circle, src, dest, force=ARGS.force)
+    treewalk = FWalk(circle, src, dest, force=args.force)
 
     circle.begin(treewalk)
-    circle.finalize(reduce_interval=ARGS.reduce_interval)
+    circle.finalize(reduce_interval=args.reduce_interval)
     tsz = treewalk.epilogue()
 
     pcp = FCP(circle, src, dest, treewalk=treewalk,
-              totalsize=tsz, do_checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
+              totalsize=tsz, do_checksum=args.checksum, hostcnt=num_of_hosts)
 
     set_chunksize(pcp, tsz)
 
-    pcp.checkpoint_interval = ARGS.checkpoint_interval
+    pcp.checkpoint_interval = args.checkpoint_interval
 
-    if ARGS.checkpoint_id:
-        pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ARGS.checkpoint_id, circle.rank))
+    if args.checkpoint_id:
+        pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (args.checkpoint_id, circle.rank))
     else:
         ts = utils.timestamp()
         circle.comm.bcast(ts)
         pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ts, circle.rank))
 
     circle.begin(pcp)
-    circle.finalize(reduce_interval=ARGS.reduce_interval)
+    circle.finalize(reduce_interval=args.reduce_interval)
     pcp.cleanup()
 
     return treewalk, pcp, tsz
@@ -679,11 +679,11 @@ def mem_resume(rid):
     # second task
     pcp = FCP(circle, src, dest,
               totalsize=tsz, workq=cobj.workq,
-              hostcnt=NUM_OF_HOSTS)
+              hostcnt=num_of_hosts)
 
     set_chunksize(pcp, tsz)
 
-    pcp.checkpoint_interval = ARGS.checkpoint_interval
+    pcp.checkpoint_interval = args.checkpoint_interval
     if rid:
         pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (rid, circle.rank))
     else:
@@ -691,7 +691,7 @@ def mem_resume(rid):
         circle.comm.bcast(ts)
         pcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ts, circle.rank))
     circle.begin(pcp)
-    circle.finalize(reduce_interval=ARGS.reduce_interval)
+    circle.finalize(reduce_interval=args.reduce_interval)
     pcp.cleanup()
 
     return pcp, tsz
@@ -717,21 +717,21 @@ def fix_opt(treewalk):
 
     # fix top-level
     try:
-        st = os.lstat(ARGS.src)
-        os.lchown(ARGS.dest, st.st_uid, st.st_gid)
+        st = os.lstat(args.src)
+        os.lchown(args.dest, st.st_uid, st.st_gid)
         if not stat.S_ISLNK(st.st_mode):
-            os.chmod(ARGS.dest, st.st_mode)
+            os.chmod(args.dest, st.st_mode)
     except OSError as e:
         print("fix-opt warning: ", e)
 
 
 def parse_and_bcast():
-    global ARGS
+    global args
     parse_flags = True
     if MPI.COMM_WORLD.rank == 0:
         parser = gen_parser()
         try:
-            ARGS = parser.parse_args()
+            args = parser.parse_args()
         except ArgumentParserError as e:
             parse_flags = False
             parser.print_usage()
@@ -739,16 +739,16 @@ def parse_and_bcast():
 
     parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
     if parse_flags:
-        ARGS = MPI.COMM_WORLD.bcast(ARGS)
+        args = MPI.COMM_WORLD.bcast(args)
     else:
         sys.exit(0)
 
-    if MPI.COMM_WORLD.rank == 0 and ARGS.loglevel == "debug":
-        print("ARGUMENT DEBUG: %s", ARGS)
+    if MPI.COMM_WORLD.rank == 0 and args.loglevel == "debug":
+        print("ARGUMENT DEBUG: %s", args)
 
 
 def store_resume(rid):
-    global circle, ARGS
+    global circle, args
     dmsg = {"rank": "rank %s" % circle.rank}
 
     # check and exchange old dataset size
@@ -772,15 +772,15 @@ def store_resume(rid):
         circle.exit(0)
 
     # src, dest probably not needed here anymore.
-    src = os.path.abspath(ARGS.src)
-    dest = os.path.abspath(ARGS.dest)
+    src = os.path.abspath(args.src)
+    dest = os.path.abspath(args.dest)
 
     # resume mode, we don't check destination path
     # dest = check_path(circle, src, dest)
     # note here that we use resume flag
     pcp = FCP(circle, src, dest, resume=True,
-              totalsize=tsz, do_checksum=ARGS.checksum,
-              hostcnt=NUM_OF_HOSTS)
+              totalsize=tsz, do_checksum=args.checksum,
+              hostcnt=num_of_hosts)
 
     pcp.checkpoint_file = chk_file
 
@@ -793,11 +793,11 @@ def store_resume(rid):
 
 def store_start():
     global circle
-    src = os.path.abspath(ARGS.src)
-    dest = os.path.abspath(ARGS.dest)
+    src = os.path.abspath(args.src)
+    dest = os.path.abspath(args.dest)
     # dest = check_path(circle, src, dest)
 
-    treewalk = FWalk(circle, src, dest, force=ARGS.force)
+    treewalk = FWalk(circle, src, dest, force=args.force)
     circle.begin(treewalk)
     treewalk.flushdb()
 
@@ -805,7 +805,7 @@ def store_start():
     total_sz = treewalk.epilogue()
 
     pcp = FCP(circle, src, dest, treewalk=treewalk,
-              totalsize=total_sz, do_checksum=ARGS.checksum, hostcnt=NUM_OF_HOSTS)
+              totalsize=total_sz, do_checksum=args.checksum, hostcnt=num_of_hosts)
     set_chunksize(pcp, total_sz)
     circle.begin(pcp)
 
@@ -822,12 +822,12 @@ def store_start():
 
 
 def get_dbname():
-    global ARGS
+    global args
     name = None
-    if ARGS.checkpoint_id:
-        name = "workq.%s" % ARGS.checkpoint_id
-    elif ARGS.rid:
-        name = "workq.%s" % ARGS.rid[0]
+    if args.checkpoint_id:
+        name = "workq.%s" % args.checkpoint_id
+    elif args.rid:
+        name = "workq.%s" % args.rid[0]
     else:
         ts = utils.timestamp()
         MPI.COMM_WORLD.bcast(ts)
@@ -838,12 +838,12 @@ def get_dbname():
 def tally_hosts():
     """ How many physical hosts are there?
     """
-    global NUM_OF_HOSTS
+    global num_of_hosts
     localhost = MPI.Get_processor_name()
     hosts = MPI.COMM_WORLD.gather(localhost)
     if MPI.COMM_WORLD.rank == 0:
-        NUM_OF_HOSTS = len(set(hosts))
-    NUM_OF_HOSTS = MPI.COMM_WORLD.bcast(NUM_OF_HOSTS)
+        num_of_hosts = len(set(hosts))
+    num_of_hosts = MPI.COMM_WORLD.bcast(num_of_hosts)
 
 
 def aggregate_checksums(localChunkSums, dbname="checksums.db"):
@@ -884,7 +884,7 @@ def gen_signature(pcp, totalsize):
         print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
         print("\t{:<20}{:<20}".format("Running time:", utils.conv_time(tend - tbegin)))
         print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
-        with open(ARGS.output, "w") as f:
+        with open(args.output, "w") as f:
             f.write("sha1: %s\n" % sig)
             f.write("chunksize: %s\n" % pcp.chunksize)
             f.write("fcp version: %s\n" % __version__)
@@ -892,11 +892,11 @@ def gen_signature(pcp, totalsize):
             f.write("destination: %s\n" % pcp.dest)
             f.write("date: %s\n" % utils.current_time())
             f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
-        print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, ARGS.output)))
+        print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, args.output)))
 
 
 def main():
-    global ARGS, logger, circle
+    global args, logger, circle
 
     # This might be an overkill function
     signal.signal(signal.SIGINT, sig_handler)
@@ -905,66 +905,66 @@ def main():
 
     parse_and_bcast()
     tally_hosts()
-    G.loglevel = ARGS.loglevel
-    G.use_store = ARGS.use_store
+    G.loglevel = args.loglevel
+    G.use_store = args.use_store
 
-    if ARGS.fix_opt:  # os.geteuid() == 0 (not required anymore)
+    if args.fix_opt:  # os.geteuid() == 0 (not required anymore)
         G.fix_opt = True
 
-    if ARGS.preserve:
+    if args.preserve:
         G.preserve = True
 
-    if ARGS.signature:
-        ARGS.checksum = True
+    if args.signature:
+        args.checksum = True
 
-    check_path(ARGS.src, ARGS.dest)
+    check_path(args.src, args.dest)
 
     dbname = get_dbname()
 
     G.logfile = ".pcircle-%s.log" % MPI.COMM_WORLD.Get_rank()
     logger = utils.getLogger("fcp")
 
-    if ARGS.rid:
-        circle = Circle(dbname=dbname, reduce_interval=ARGS.reduce_interval, resume=True)
+    if args.rid:
+        circle = Circle(dbname=dbname, reduce_interval=args.reduce_interval, resume=True)
     else:
-        circle = Circle(dbname=dbname, reduce_interval=ARGS.reduce_interval)
+        circle = Circle(dbname=dbname, reduce_interval=args.reduce_interval)
 
     if circle.rank == 0:
         print("Running Parameters:\n")
         print("\t{:<20}{:<20}".format("Starting at:", utils.current_time()))
         print("\t{:<20}{:<20}".format("FCP version:", __version__))
-        print("\t{:<20}{:<20}".format("Num of Hosts:", NUM_OF_HOSTS))
+        print("\t{:<20}{:<20}".format("Num of Hosts:", num_of_hosts))
         print("\t{:<20}{:<20}".format("Num of Processes:", MPI.COMM_WORLD.Get_size()))
-        print("\t{:<20}{:<20}".format("Source:", os.path.abspath(ARGS.src)))
-        print("\t{:<20}{:<20}".format("Destination:", os.path.abspath(ARGS.dest)))
-        print("\t{:<20}{:<20}".format("Overwrite:", "%r" % ARGS.force))
-        print("\t{:<20}{:<20}".format("Checksum verify:", "%r" % ARGS.checksum))
-        print("\t{:<20}{:<20}".format("Dataset signature:", "%r" % ARGS.signature))
+        print("\t{:<20}{:<20}".format("Source:", os.path.abspath(args.src)))
+        print("\t{:<20}{:<20}".format("Destination:", os.path.abspath(args.dest)))
+        print("\t{:<20}{:<20}".format("Overwrite:", "%r" % args.force))
+        print("\t{:<20}{:<20}".format("Checksum verify:", "%r" % args.checksum))
+        print("\t{:<20}{:<20}".format("Dataset signature:", "%r" % args.signature))
         print("\t{:<20}{:<20}".format("Stripe Preserve:", "%r" % G.preserve))
 
     # TODO: there are some redundant code brought in by merging
     # memory/store-based checkpoint/restart, need to be refactored
-    if ARGS.rid:
+    if args.rid:
         if G.use_store:
-            pcp, totalsize = store_resume(ARGS.rid[0])
+            pcp, totalsize = store_resume(args.rid[0])
         else:
-            treewalk, pcp, totalsize = mem_resume(ARGS.rid[0])
+            treewalk, pcp, totalsize = mem_resume(args.rid[0])
     else:
         if G.use_store:
             treewalk, pcp, totalsize = store_start()
         else:
             treewalk, pcp, totalsize = mem_start()
 
-    if ARGS.pause and ARGS.checksum:
+    if args.pause and args.checksum:
         if circle.rank == 0:
             # raw_input("\n--> Press any key to continue ...\n")
-            print("Pause, resume after %s seconds ..." % ARGS.pause)
+            print("Pause, resume after %s seconds ..." % args.pause)
             sys.stdout.flush()
-        time.sleep(ARGS.pause)
+        time.sleep(args.pause)
         circle.comm.Barrier()
 
     # third task
-    if ARGS.checksum:
+    if args.checksum:
         pcheck = PVerify(circle, pcp, totalsize)
         circle.begin(pcheck)
         tally = pcheck.fail_tally()
@@ -978,14 +978,14 @@ def main():
 
         comm.Barrier()
 
-        if ARGS.signature:
+        if args.signature:
             gen_signature(pcp, totalsize)
 
     # fix permission
 
     comm.Barrier()
 
-    if ARGS.fix_opt and treewalk:
+    if args.fix_opt and treewalk:
         if comm.rank == 0:
             print("\nFixing ownership and permissions ...")
         fix_opt(treewalk)

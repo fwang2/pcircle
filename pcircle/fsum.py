@@ -28,7 +28,7 @@ from globals import G
 import utils
 from pcircle.mpihelper import tally_hosts
 
-ARGS = None
+args = None
 __version__ = get_versions()['version']
 
 del get_versions
@@ -251,13 +251,13 @@ def do_checksum(chunks):
 
 
 def export_checksum(chunks):
-    fullpath = os.path.abspath(ARGS.output)
+    fullpath = os.path.abspath(args.output)
     ex_base = os.path.basename(fullpath).split(".")[0] + ".checksums"
     ex_dir = os.path.dirname(fullpath)
     ex_path = os.path.join(ex_dir, ex_base)
 
     for c in chunks:
-        c.filename = os.path.relpath(c.filename, start=ARGS.path)
+        c.filename = os.path.relpath(c.filename, start=args.path)
 
     with open(ex_path, "wb") as f:
         pickle.dump(chunks, f, pickle.HIGHEST_PROTOCOL)
@@ -279,7 +279,7 @@ def export_checksum2(chunks, ofile):
     return ofile
 
 def parse_and_bcast():
-    global ARGS
+    global args
     parse_flags = True
     if MPI.COMM_WORLD.rank == 0:
         try:
@@ -297,7 +297,7 @@ def parse_and_bcast():
 
 
 def main():
-    global ARGS
+    global args
     signal.signal(signal.SIGINT, sig_handler)
 
     ARGS = parse_args()

@@ -21,7 +21,7 @@ import utils
 
 from _version import get_versions
 
-ARGS = None
+args = None
 __version__ = get_versions()['version']
 logger = None
 taskloads = []
@@ -327,7 +327,7 @@ class FWalk(BaseTask):
 
 
 def main():
-    global ARGS, logger
+    global args, logger
     ARGS = parse_args()
     G.use_store = ARGS.use_store
     G.loglevel = ARGS.loglevel

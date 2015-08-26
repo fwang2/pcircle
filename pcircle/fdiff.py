@@ -12,7 +12,7 @@ from itertools import izip_longest
 from fdef import ChunkSum
 __version__ = get_versions()['version']
 
-ARGS = None
+args = None
 del get_versions
 
 MISSING = []
@@ -91,7 +91,7 @@ def gen_chunksum(b, sig):
 
 
 def main():
-    global ARGS, SRC, DEST
+    global args, SRC, DEST
     signal.signal(signal.SIGINT, sig_handler)
     ARGS = parse_args()
     G.loglevel = ARGS.loglevel

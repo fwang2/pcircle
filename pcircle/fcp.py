@@ -464,6 +464,7 @@ class FCP(BaseTask):
         taskloads = self.circle.comm.gather(self.reduce_items)
         if self.circle.rank == 0:
             if self.totalsize == 0:
+                print("\nZero filesize detected, done.\n")
                 return
             tlapse = self.wtime_ended - self.wtime_started
             rate = float(self.totalsize) / tlapse
@@ -708,26 +709,24 @@ def get_oldsize(chk_file):
     return totalsize
 
 
+def fix_file_opt(f, mode, uid, gid):
+    """ f is file/dir path """
+    try:
+        if not stat.S_ISLNK(mode):
+            os.lchown(f, uid, gid)
+            os.chmod(f, mode)
+    except OSError as e:
+        logger.warn("fix-opt:", e, extra=dmsg)
+
 def fix_opt(treewalk):
     flist = treewalk.flist
     for f in flist:
         dpath = destpath(treewalk.src, treewalk.dest, f.path)  # f[0]
-        try:
-            os.lchown(dpath, f.st_uid, f.st_gid)
-            if not stat.S_ISLNK(f.st_mode):
-                os.chmod(dpath, f.st_mode)
-        except OSError as e:
-            print("fix-opt warning: ", e)
+        fix_file_opt(dpath, f.st_mode, f.st_uid, f.st_gid)
 
     # fix top-level
-    try:
-        st = os.lstat(args.src)
-        os.lchown(args.dest, st.st_uid, st.st_gid)
-        if not stat.S_ISLNK(st.st_mode):
-            os.chmod(args.dest, st.st_mode)
-    except OSError as e:
-        print("fix-opt warning: ", e)
-
+    st = os.lstat(args.src)
+    fix_file_opt(args.dest, st.st_mode, st.st_uid, st.st_gid)
 
 def parse_and_bcast():
     global args

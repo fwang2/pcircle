@@ -346,7 +346,8 @@ class FWalk(BaseTask):
             print("\t{:<20}{:<20}".format("File count:", total_files))
             print("\t{:<20}{:<20}".format("Skipped count:", total_skipped))
             print("\t{:<20}{:<20}".format("Total file size:", bytes_fmt(total_filesize)))
-            print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
+            if total_files != 0:
+                print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
             print("\t{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
             print("\tFWALK Loads: %s" % taskloads)
             print("")

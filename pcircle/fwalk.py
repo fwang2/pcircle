@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from __future__ import print_function
 from mpi4py import MPI
 from scandir import scandir
@@ -8,6 +9,7 @@ import os.path
 import sys
 import argparse
 import xattr
+import numpy as np
 
 from task import BaseTask
 from circle import Circle
@@ -20,12 +22,13 @@ from mpihelper import tally_hosts
 import utils
 
 from _version import get_versions
+__version__ = get_versions()['version']
 
 args = None
-__version__ = get_versions()['version']
 logger = None
 taskloads = []
-
+bins = None
+comm = MPI.COMM_WORLD
 
 def parse_args():
     parser = argparse.ArgumentParser(description="fwalk")
@@ -39,6 +42,35 @@ def parse_args():
 
     return parser.parse_args()
 
+
+def local_histogram(flist):
+    """ A list FileItems, build np array  """
+    global bins
+    b4k = 4 * 1024
+    b64k = 64 * 1024
+    b512k = 512 * 1024
+    b1m = 1024 *1024
+    b4m = 4 * b1m
+    b16m = 16 * b1m
+    b512m = 512 * b1m
+    b1g = 2 * b512m
+    b100g = 100 * b1g
+    b512g = 512 * b1g
+    b1tb = 1024 * b1g
+    bins = [ 0, b4k, b64k,b512k, b1m, b4m, b16m, b512m, b1g, b512g, b1tb]
+    fsizes = [f.st_size for f in flist]
+    arr = np.array(fsizes)
+    hist, _ = np.histogram(arr, bins)
+    return hist
+
+
+def global_histogram(treewalk):
+    all_hist = None
+    local_hist = local_histogram(treewalk.flist)
+    all_hist = comm.gather(local_hist)
+    if comm.rank == 0:
+        local_hist = sum(all_hist)
+    return local_hist
 
 class FWalk(BaseTask):
 
@@ -328,11 +360,11 @@ class FWalk(BaseTask):
 
 def main():
     global args, logger
-    ARGS = parse_args()
-    G.use_store = ARGS.use_store
-    G.loglevel = ARGS.loglevel
+    args = parse_args()
+    G.use_store = args.use_store
+    G.loglevel = args.loglevel
     logger = utils.getLogger(__name__)
-    root = os.path.abspath(ARGS.path)
+    root = os.path.abspath(args.path)
     root = os.path.realpath(root)
     comm = MPI.COMM_WORLD
 
@@ -351,27 +383,39 @@ def main():
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", root))
 
-    circle = Circle(reduce_interval=ARGS.interval)
+    circle = Circle(reduce_interval=args.interval)
     treewalk = FWalk(circle, root)
     circle.begin(treewalk)
 
     if G.use_store:
         treewalk.flushdb()
 
-    if ARGS.stats:
-        treewalk.flist.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
-        globaltops = comm.gather(treewalk.flist[:ARGS.top])
+    if args.stats:
+        hist = global_histogram(treewalk)
+        total = hist.sum()
+        bucket_scale = 0.5
+        if comm.rank == 0:
+            print("\nFileset histograms:\n")
+            for idx, rightbound in enumerate(bins[1:]):
+                percent = 100 * hist[idx] / float(total)
+                star_count = int(bucket_scale * percent)
+                print("\t{:<3}{:<15}{:<8}{:<8}{:<50}".format("< ",
+                    utils.bytes_fmt(rightbound), hist[idx],
+                    "%0.2f%%" % percent, '∎' * star_count))
 
-    if ARGS.stats and comm.rank == 0:
-        globaltops = [item for sublist in globaltops for item in sublist]
-        globaltops.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
-        if len(globaltops) < ARGS.top:
-            ARGS.top = len(globaltops)
-        print("\nStats, top %s files\n" % ARGS.top)
-        for i in xrange(ARGS.top):
-            print("\t{:15}{:<30}".format(utils.bytes_fmt(globaltops[i].st_size),
-                  globaltops[i].path)
-                                         )
+    if args.stats:
+        treewalk.flist.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
+        globaltops = comm.gather(treewalk.flist[:args.top])
+        if comm.rank == 0:
+            globaltops = [item for sublist in globaltops for item in sublist]
+            globaltops.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
+            if len(globaltops) < args.top:
+                args.top = len(globaltops)
+            print("\nStats, top %s files\n" % args.top)
+            for i in xrange(args.top):
+                print("\t{:15}{:<30}".format(utils.bytes_fmt(globaltops[i].st_size),
+                      globaltops[i].path))
+
     treewalk.epilogue()
     treewalk.cleanup()
     circle.finalize()

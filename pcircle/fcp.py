@@ -977,7 +977,7 @@ def main():
 
         comm.Barrier()
 
-        if args.signature:
+        if args.signature and tally == 0:
             gen_signature(pcp, totalsize)
 
     # fix permission

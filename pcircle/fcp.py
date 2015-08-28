@@ -104,7 +104,7 @@ def gen_parser():
     parser.add_argument("-r", "--resume", dest="rid", metavar="ID", nargs=1, help="resume ID, required in resume mode")
     parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
-    parser.add_argument("--fix-opt", action="store_true", help="fix ownership, permssion, timestamp")
+    parser.add_argument("--fix-opt", action="store_true", default=True, help="fix ownership, permssion, timestamp")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
     parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
@@ -719,10 +719,11 @@ def fix_file_opt(f, mode, uid, gid):
         logger.warn("fix-opt:", e, extra=dmsg)
 
 def fix_opt(treewalk):
-    flist = treewalk.flist
-    for f in flist:
-        dpath = destpath(treewalk.src, treewalk.dest, f.path)  # f[0]
-        fix_file_opt(dpath, f.st_mode, f.st_uid, f.st_gid)
+    for ele in treewalk.optlist:
+        # each ele is a tuple of (dest_file, st)
+        # dpath = destpath(treewalk.src, treewalk.dest, f.path)
+        dpath, st = ele
+        fix_file_opt(dpath, st.st_mode, st.st_uid, st.st_gid)
 
     # fix top-level
     st = os.lstat(args.src)

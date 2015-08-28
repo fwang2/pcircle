@@ -709,25 +709,21 @@ def get_oldsize(chk_file):
     return totalsize
 
 
-def fix_file_opt(f, mode, uid, gid):
+def do_fix_opt(optlist):
     """ f is file/dir path """
-    try:
-        if not stat.S_ISLNK(mode):
-            os.lchown(f, uid, gid)
-            os.chmod(f, mode)
-    except OSError as e:
-        logger.warn("fix-opt:", e, extra=dmsg)
+    for ele in optlist:
+        fi, st = ele
+        try:
+            if not stat.S_ISLNK(st.st_mode):
+                os.lchown(fi, st.st_uid, st.st_gid)
+                os.chmod(fi, st.st_mode)
+        except OSError as e:
+            logger.warn("fix-opt: lchown() or chmod(): %s" % e, extra=dmsg)
 
 def fix_opt(treewalk):
-    for ele in treewalk.optlist:
-        # each ele is a tuple of (dest_file, st)
-        # dpath = destpath(treewalk.src, treewalk.dest, f.path)
-        dpath, st = ele
-        fix_file_opt(dpath, st.st_mode, st.st_uid, st.st_gid)
-
-    # fix top-level
-    st = os.lstat(args.src)
-    fix_file_opt(args.dest, st.st_mode, st.st_uid, st.st_gid)
+    do_fix_opt(treewalk.optlist)
+    treewalk.opt_dir_list.sort(reverse=True)
+    do_fix_opt(treewalk.opt_dir_list)
 
 def parse_and_bcast():
     global args

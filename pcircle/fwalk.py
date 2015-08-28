@@ -93,7 +93,8 @@ class FWalk(BaseTask):
         self.checksum = False
 
         # to be fixed
-        self.optlist = []
+        self.optlist = []  # files
+        self.opt_dir_list = []  # dirs
 
         self.sym_links = 0
         self.follow_sym_links = False
@@ -153,18 +154,22 @@ class FWalk(BaseTask):
         """
         if self.dest:
             # we create destination directory
+            # but first we check if we need to change mode for it to work
             o_dir = destpath(self.src, self.dest, i_dir)
+            mode = st.st_mode
+            if not (st.st_mode & stat.S_IWUSR):
+                mode = st.st_mode | stat.S_IWUSR
+                self.opt_dir_list.append((o_dir, st))
             try:
-                os.mkdir(o_dir, st.st_mode | stat.S_IWUSR)  # mimic cp: even read-only directory
-                                                            # will copy with write permission
+                os.mkdir(o_dir, mode)
             except OSError as e:
                 self.logger.warn("mkdir(): %s" % e, extra=self.d)
 
-            if G.fix_opt:
-                try:
-                    os.lchown(o_dir, st.st_uid, st.st_gid)
-                except OSError as e:
-                    self.logger.warn(e, extra=self.d)
+            #if G.fix_opt:
+            #    try:
+            #        os.lchown(o_dir, st.st_uid, st.st_gid)
+            #    except OSError as e:
+            #        self.logger.warn(e, extra=self.d)
 
             if G.preserve:
                 self.copy_xattr(i_dir, o_dir)

@@ -35,3 +35,8 @@ class G:
     fix_opt = False
     preserve = False
     DB_BUFSIZE = 10000
+    totalsize = 0
+    real_src = None
+    real_dest = None
+    args_src = None
+    args_dest = None

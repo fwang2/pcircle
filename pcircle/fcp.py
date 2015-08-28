@@ -963,7 +963,7 @@ def main():
         pcheck = PVerify(circle, pcp, totalsize)
         circle.begin(pcheck)
         tally = pcheck.fail_tally()
-
+        tally = comm.bcast(tally)
         if circle.rank == 0:
             print("")
             if tally == 0:

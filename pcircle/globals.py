@@ -40,3 +40,5 @@ class G:
     real_dest = None
     args_src = None
     args_dest = None
+    resume = None
+    

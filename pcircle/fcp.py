@@ -91,22 +91,22 @@ def gen_parser():
     parser.add_argument("--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("-v", "--verbosity", action="count", help="increase verbosity")
 #   parser.add_argument("--use-store", action="store_true", help="Use persistent store")
-    parser.add_argument("--loglevel", default="warn", help="log level for file, default WARN")
+    parser.add_argument("--loglevel", default="warn", help="log level, default WARN")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
     parser.add_argument("--reduce-interval", metavar="s", type=int, default=10, help="interval, default 10s")
-    parser.add_argument("--cptime", metavar="s", type=int, default=3600, help="checkpoint interval, default: 360s")
+    parser.add_argument("--fix-opt", action="store_true", default=True, help="fix ownership, permssion, timestamp, default: on")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
     parser.add_argument("-s", "--signature", action="store_true", help="aggregate checksum for signature, default: off")
-    parser.add_argument("--cpid", metavar="ID", default=None, help="checkpoint file id, default: timestamp")
     parser.add_argument("-p", "--preserve", action="store_true", help="Preserving meta, default: off")
-    parser.add_argument("-r", "--rid", dest="rid", metavar="ID", help="resume ID, required in resume mode")
+    parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
     parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
-    parser.add_argument("--pause", type=int, help="pause a delay (seconds) after copy, test only")
-    parser.add_argument("--fix-opt", action="store_true", default=True, help="fix ownership, permssion, timestamp")
+    parser.add_argument("-t", "--cptime", metavar="s", type=int, default=3600, help="checkpoint interval, default: 1hr")
+    parser.add_argument("-i", "--cpid", metavar="ID", default=None, help="checkpoint file id, default: timestamp")
+    parser.add_argument("-r", "--rid", dest="rid", metavar="ID", help="resume ID, required in resume mode")
+    parser.add_argument("--pause", metavar="s", type=int, help="pause a delay (seconds) after copy, test only")
     parser.add_argument("src", help="copy from")
     parser.add_argument("dest", help="copy to")
-    parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
 
     return parser
 
@@ -896,6 +896,7 @@ def main():
     G.loglevel = args.loglevel
     G.fix_opt = args.fix_opt  # os.geteuid() == 0 (not required anymore)
     G.preserve = args.preserve
+    G.resume = True if args.cpid else False
 
     if args.signature:  # with signature implies doing checksum as well
         args.checksum = True
@@ -912,16 +913,18 @@ def main():
 
     if circle.rank == 0:
         print("Running Parameters:\n")
-        print("\t{:<20}{:<20}".format("Starting at:", utils.current_time()))
-        print("\t{:<20}{:<20}".format("FCP version:", __version__))
-        print("\t{:<20}{:<20}".format("Num of Hosts:", num_of_hosts))
-        print("\t{:<20}{:<20}".format("Num of Processes:", comm.size))
-        print("\t{:<20}{:<20}".format("Source:", os.path.abspath(args.src)))
-        print("\t{:<20}{:<20}".format("Destination:", os.path.abspath(args.dest)))
-        print("\t{:<20}{:<20}".format("Overwrite:", "%r" % args.force))
-        print("\t{:<20}{:<20}".format("Checksum verify:", "%r" % args.checksum))
-        print("\t{:<20}{:<20}".format("Dataset signature:", "%r" % args.signature))
-        print("\t{:<20}{:<20}".format("Stripe Preserve:", "%r" % G.preserve))
+        print("\t{:<25}{:<20}".format("Starting at:", utils.current_time()))
+        print("\t{:<25}{:<20}".format("FCP version:", __version__))
+        print("\t{:<25}{:<20}".format("Source:", os.path.abspath(args.src)))
+        print("\t{:<25}{:<20}".format("Destination:", os.path.abspath(args.dest)))
+        print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Num of Hosts:", num_of_hosts, "|",
+            "Num of Processes:", comm.size))
+        print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Overwrite:", "%r" % args.force, "|",
+            "Checksum verify:", "%r" % args.checksum))
+        print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Dataset signature:", "%r" % args.signature, "|",
+            "Stripe Preserve:", "%r" % G.preserve))
+        print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
+            "Resume:", "%r" % G.resume))
 
     # TODO: there are some redundant code brought in by merging
     # memory/store-based checkpoint/restart, need to be refactored

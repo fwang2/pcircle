@@ -382,7 +382,6 @@ def main():
     logger = utils.getLogger(__name__)
     root = os.path.abspath(args.path)
     root = os.path.realpath(root)
-    comm = MPI.COMM_WORLD
 
     if not os.path.exists(root):
         if comm.rank == 0:

@@ -31,12 +31,9 @@ from pcircle.mpihelper import tally_hosts
 args = None
 __version__ = get_versions()['version']
 
-del get_versions
 
-
-def sig_handler():
-    # catch keyboard, do nothing
-    # eprint("\tUser cancelled ... cleaning up")
+def sig_handler(signum, sigstack):
+    print("\tUser cancelled ... cleaning up")
     sys.exit(1)
 
 
@@ -307,6 +304,8 @@ def main():
     G.use_store = ARGS.use_store
 
     root = os.path.abspath(ARGS.path)
+    root = os.path.realpath(root)
+
     hosts_cnt = tally_hosts()
     circle = Circle(reduce_interval=ARGS.interval)
 

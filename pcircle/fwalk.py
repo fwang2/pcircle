@@ -398,7 +398,7 @@ def main():
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", root))
 
-    circle = Circle(reduce_interval=args.interval)
+    circle = Circle()
     treewalk = FWalk(circle, root)
     circle.begin(treewalk)
 

@@ -134,7 +134,6 @@ class FCP(BaseTask):
         self.workq = workq
         self.resume = resume
         self.checkpoint_file = None
-        self.vvv = False
         self.src = os.path.abspath(src)
         self.srcbase = os.path.basename(src)
         self.dest = os.path.abspath(dest)
@@ -167,7 +166,7 @@ class FCP(BaseTask):
         self.wtime_ended = None
         self.workcnt = 0  # this is the cnt for the enqued items
         self.reduce_items = 0  # this is the cnt for processed items
-        if self.treewalk and self.vvv:
+        if self.treewalk:
             logger.debug("treewalk files = %s" % treewalk.flist, extra=self.d)
 
         # fini_check
@@ -387,7 +386,7 @@ class FCP(BaseTask):
         # update tally
         self.cnt_filesize += work.length
 
-        if self.vvv:
+        if G.verbosity > 2:
             logger.debug("Transferred %s bytes from:\n\t [%s] to [%s]" %
                          (self.cnt_filesize, src, dest), extra=self.d)
 
@@ -589,11 +588,11 @@ def mem_start():
     dest = os.path.abspath(args.dest)
 
     treewalk = FWalk(circle, src, dest, force=args.force)
-
     circle.begin(treewalk)
-    circle.finalize(reduce_interval=args.reduce_interval)
+    circle.finalize()
     G.totalsize = treewalk.epilogue()
 
+    circle = Circle()
     fcp = FCP(circle, src, dest, treewalk=treewalk,
               totalsize=G.totalsize, do_checksum=args.checksum, hostcnt=num_of_hosts)
 
@@ -608,10 +607,10 @@ def mem_start():
         fcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ts, circle.rank))
 
     circle.begin(fcp)
-    circle.finalize(reduce_interval=args.reduce_interval)
-    if fcp:
-        fcp.cleanup()
-
+    circle.finalize()
+    fcp.cleanup()
+    if G.verbosity > 0:
+        print(circle.token)
 
 def get_workq_size(workq):
     """ workq is a list of FileChunks, we iterate each and summarize the size,
@@ -812,7 +811,7 @@ def store_start():
     if fcp:
         fcp.cleanup()
 
-def get_dbname():
+def get_workq_name():
     global args
     name = None
     if args.cpid:
@@ -897,17 +896,18 @@ def main():
     G.fix_opt = args.fix_opt  # os.geteuid() == 0 (not required anymore)
     G.preserve = args.preserve
     G.resume = True if args.cpid else False
+    G.reduce_interval = args.reduce_interval
+    G.verbosity = args.verbosity
 
     if args.signature:  # with signature implies doing checksum as well
         args.checksum = True
 
     check_path(args.src, args.dest)
-    dbname = get_dbname()
-    G.logfile = ".pcircle-%s.log" % comm.rank
+    dbname = get_workq_name()
 
     circle = Circle()
     circle.dbname = dbname
-    circle.reduce_interval = args.reduce_interval
+
     if args.rid:
         circle.resume = True
 
@@ -943,6 +943,7 @@ def main():
 
     # do checksum verification
     if args.checksum:
+        circle = Circle()
         pcheck = PVerify(circle, fcp, G.totalsize)
         circle.begin(pcheck)
         tally = pcheck.fail_tally()
@@ -960,9 +961,7 @@ def main():
             gen_signature(fcp, G.totalsize)
 
     # fix permission
-
     comm.Barrier()
-
     if args.fix_opt and treewalk:
         if comm.rank == 0:
             print("\nFixing ownership and permissions ...")

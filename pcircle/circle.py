@@ -6,6 +6,7 @@ import sys
 import os
 import os.path
 from collections import deque
+from pprint import pprint
 
 """
 
@@ -46,59 +47,28 @@ Reduce Note:
 from pcircle.globals import T, G
 from pcircle.dbstore import DbStore
 from pcircle.utils import getLogger
+from pcircle.token import Token
 
 DB_BUFSIZE = 10000
 
 
 class Circle:
-    def __init__(self, name="Circle", split="equal",
-                 reduce_interval=10, k=2,
-                 dbname=None, resume=False):
-
-        self.logger = getLogger(__name__)
+    def __init__(self, name="Circle", split="equal", k=2, dbname=None, resume=False):
 
         random.seed()  # use system time to seed
-
         self.comm = MPI.COMM_WORLD
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
-
-        # debug
         self.d = {"rank": "rank %s" % self.rank}
+        self.logger = getLogger(__name__)
+
 
         self.useStore = G.use_store
         self.split = split
         self.dbname = dbname
         self.resume = resume
-        self.reduce_time_interval = reduce_interval
-
-        # var
-        self.var_init()
-
-        # token
-        self.token_init()
-
-        # tree
-        self.tree_init(k)
-
-        # workq init
-        # TODO: compare list vs. deque
-        if G.use_store:
-            self.workq_init(dbname, resume)
-        else:
-            self.workq = []
-
-        self.logger.debug("Circle initialized", extra=self.d)
-
-    def finalize(self, cleanup=True, reduce_interval=10):
-        self.var_init()
-        self.token_init()
-        self.reduce_interval = reduce_interval
-        if cleanup and G.use_store:
-            self.workq.cleanup()
-
-    def var_init(self):
+        self.reduce_time_interval = G.reduce_interval
 
         self.task = None
         self.abort = False
@@ -115,10 +85,9 @@ class Circle:
         self.workreq_outstanding = False
         self.workreq_rank = None
 
-        # manage reduction
+        # reduction
         self.reduce_enabled = True
         self.reduce_time_last = MPI.Wtime()
-
         self.reduce_outstanding = False
         self.reduce_replies = 0
         self.reduce_buf = {}
@@ -137,37 +106,10 @@ class Circle:
             except OSError:
                 pass
 
-    def workq_init(self, dbname=None, resume=False):
+        # token
+        self.token = Token(self)
 
-        # NOTE: the db filename and its rank is seprated with "-"
-        # we rely on this to separate, so the filename itself (within our control)
-        # should not use dash ... the default is to use "." for sepration
-        # Yes, this is very fragile, hopefully we will fix this later
-
-        if dbname is None:
-            self.dbname = os.path.join(self.tempdir, "workq-%s" % self.rank)
-        else:
-            self.dbname = os.path.join(self.tempdir, "%s-%s" % (dbname, self.rank))
-
-        self.workq = DbStore(self.dbname, resume=resume)
-
-    def set_reduce_interval(self, interval):
-        self.reduce_time_interval = interval
-
-    def token_init(self):
-
-        self.token_src = (self.rank - 1 + self.size) % self.size
-        self.token_dest = (self.rank + 1 + self.size) % self.size
-        self.token_color = G.BLACK
-        self.token_proc = G.WHITE
-        self.token_is_local = False
-        if self.rank == 0:
-            self.token_is_local = True
-            self.token_color = G.WHITE
-            self.token_proc = G.WHITE
-        self.token_send_req = MPI.REQUEST_NULL
-
-    def tree_init(self, k):
+        # tree init
         self.k = k
         self.parent_rank = MPI.PROC_NULL
         self.child_ranks = []  # [MPI.PROC_NULL] * k is too much C
@@ -195,16 +137,39 @@ class Circle:
         self.logger.debug("parent: %s, children: %s" % (self.parent_rank, self.child_ranks),
                           extra=self.d)
 
+        # workq init
+        # TODO: compare list vs. deque
+        if G.use_store:
+            self.workq_init(dbname, resume)
+        else:
+            self.workq = []
+
+        self.logger.debug("Circle initialized", extra=self.d)
+
+    def finalize(self, cleanup=True):
+        if cleanup and G.use_store:
+            self.workq.cleanup()
+
+    def workq_init(self, dbname=None, resume=False):
+
+        # NOTE: the db filename and its rank is seprated with "-"
+        # we rely on this to separate, so the filename itself (within our control)
+        # should not use dash ... the default is to use "." for sepration
+        # Yes, this is very fragile, hopefully we will fix this later
+
+        if dbname is None:
+            self.dbname = os.path.join(self.tempdir, "workq-%s" % self.rank)
+        else:
+            self.dbname = os.path.join(self.tempdir, "%s-%s" % (dbname, self.rank))
+
+        self.workq = DbStore(self.dbname, resume=resume)
+
     def next_proc(self):
         """ Note next proc could return rank of itself """
         if self.size == 1:
             return MPI.PROC_NULL
         else:
             return random.randint(0, self.size - 1)
-
-    def token_status(self):
-        return "rank: %s, token_src: %s, token_dest: %s, token_color: %s, token_proc: %s" % \
-               (self.rank, self.token_src, self.token_dest, G.str[self.token_color], G.str[self.token_proc])
 
     def workq_info(self):
         s = "has %s items in work queue\n" % len(self.workq)
@@ -223,8 +188,14 @@ class Circle:
 
         if self.rank == 0:
             self.logger.debug("Loop finished, cleaning up ... ", extra=self.d)
-
         self.cleanup()
+        self.comm.barrier()
+
+        if len(self.workq) != 0:
+            pprint("Rank %s workq.len = %s" % (self.rank, self.qsize()))
+            pprint(self.__dict__)
+            sys.stdout.flush()
+            self.comm.Abort(1)
 
     def loop(self):
         """ central loop to finish the work """
@@ -244,7 +215,7 @@ class Circle:
                 self.task.process()
                 self.work_processed += 1
             else:
-                status = self.check_for_term()
+                status = self.token.check_for_term()
                 if status == G.TERMINATE:
                     break
 
@@ -267,7 +238,7 @@ class Circle:
         self.barrier_started = True
 
     def barrier_test(self):
-        if not self.barrier_start:
+        if not self.barrier_started:
             return False
 
         # check if we have received message from all children
@@ -331,8 +302,9 @@ class Circle:
     def cleanup(self):
         while True:
             # start non-block barrier if we have no outstanding items
-            if not self.reduce_outstanding and not self.workreq_outstanding and \
-                    self.token_send_req == MPI.REQUEST_NULL:
+            if not self.reduce_outstanding and \
+                    not self.workreq_outstanding and \
+                    self.token.send_req == MPI.REQUEST_NULL:
                 self.barrier_start()
 
             # break the loop when non-blocking barrier completes
@@ -350,42 +322,14 @@ class Circle:
             self.request_work(cleanup=True)
 
             # check and recv any incoming token
-            self.token_check()
+            self.token.check_and_recv()
 
             # if we have an outstanding token, check if it has been recv'ed
             # I don't think this is needed as there seem no side effect
-            if self.token_send_req != MPI.REQUEST_NULL:
-                if self.token_send_req.Test():
-                    self.token_send_req = MPI.REQUEST_NULL
+            if self.token.send_req != MPI.REQUEST_NULL:
+                if self.token.send_req.Test():
+                    self.token.send_req = MPI.REQUEST_NULL
 
-    def check_for_term(self):
-
-        if self.token_proc == G.TERMINATE:
-            return G.TERMINATE
-
-        if self.size == 1:
-            self.token_proc = G.TERMINATE
-            return G.TERMINATE
-
-        if self.token_is_local:
-            # we have no work, but we have token
-            if self.rank == 0:
-                # rank 0 start with white token
-                self.token_color = G.WHITE
-            elif self.token_proc == G.BLACK:
-                # others turn the token black
-                # if they are in black state
-                self.token_color = G.BLACK
-
-            self.token_issend()
-            # flip process color from black to white
-            self.token_proc = G.WHITE
-        else:
-            # we have no work, but we don't have the token
-            self.token_check()
-
-        # return current status
-        return self.token_proc
 
     def workreq_check(self, cleanup=False):
         """ for any process that sends work request message:
@@ -488,8 +432,8 @@ class Circle:
             return
 
         # for termination detection
-        if (rank < self.rank) or (rank == self.token_src):
-            self.token_proc = G.BLACK
+        if (rank < self.rank) or (rank == self.token.src):
+            self.token.proc = G.BLACK
 
         buf = None
 
@@ -559,76 +503,6 @@ class Circle:
         else:
             assert type(buf[G.VAL]) == list
             self.workq.extend(buf[G.VAL])
-
-    def token_recv(self):
-        # verify we don't have a local token
-        if self.token_is_local:
-            raise RuntimeError("token_is_local True")
-
-        # this won't block as token is waiting
-        buf = self.comm.recv(source=self.token_src, tag=T.TOKEN)
-
-        # record token is local
-        self.token_is_local = True
-
-        # if we have a token outstanding, at this point
-        # we should have received the reply (even if we
-        # sent the token to ourself, we just replied above
-        # so the send should now complete
-        #
-        if self.token_send_req != MPI.PROC_NULL:
-            self.token_send_req.Wait()
-
-        # now send is complete, we can overwrite
-        self.token_color = buf
-
-        # now set our state
-        # a black machine receives a black token, set machine color as white
-        if self.token_proc == G.BLACK and self.token_color == G.BLACK:
-            self.token_proc = G.WHITE
-
-        # check for terminate condition
-        terminate = False
-
-        if self.rank == 0 and self.token_color == G.WHITE:
-            # if rank 0 receive a white token
-            self.logger.debug("Master detected termination", extra=self.d)
-            terminate = True
-        elif self.token_color == G.TERMINATE:
-            terminate = True
-
-        # forward termination token if we have one
-        if terminate:
-            # send terminate token, don't bother
-            # if we the last rank
-            self.token_color = G.TERMINATE
-            if self.rank < self.size - 1:
-                self.token_issend()
-
-            # set our state to terminate
-            self.token_proc = G.TERMINATE
-
-    def token_check(self):
-        """
-        check for token, and receive it if arrived
-        """
-
-        status = MPI.Status()
-        flag = self.comm.Iprobe(self.token_src, T.TOKEN, status)
-        if flag:
-            self.token_recv()
-
-    def token_issend(self):
-
-        if self.abort:
-            return
-
-        self.logger.debug("token send to rank %s: token_color = %s" %
-                          (self.token_dest, G.str[self.token_color]), extra=self.d)
-        self.token_send_req = self.comm.issend(self.token_color,
-                                               self.token_dest, tag=T.TOKEN)
-        # now we don't have the token
-        self.token_is_local = False
 
     def reduce(self, buf):
         # copy data from user buffer
@@ -730,18 +604,6 @@ class Circle:
                 # sent message to each child
                 for child in self.child_ranks:
                     self.comm.send(None, child, T.REDUCE)
-
-    def debug_info(self):
-        ret = "req outstanding = %s, " % self.workreq_outstanding
-        if self.token_send_req == MPI.REQUEST_NULL:
-            token_send_req = False
-        else:
-            token_send_req = True
-        ret += "token_send_request = %s, " % token_send_req
-        ret += "reduce outstanding = %s, " % self.reduce_outstanding
-        ret += "barrier started = %s " % self.barrier_started
-        ret += "local token = %s" % self.token_is_local
-        return ret
 
     @staticmethod
     def exit(code):

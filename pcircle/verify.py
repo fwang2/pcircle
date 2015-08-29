@@ -7,10 +7,10 @@ from lru import LRU
 
 
 class PVerify(BaseTask):
-    def __init__(self, circle, pcp, totalsize=0):
+    def __init__(self, circle, fcp, totalsize=0):
         BaseTask.__init__(self, circle)
         self.circle = circle
-        self.pcp = pcp
+        self.fcp = fcp
         self.totalsize = totalsize
 
         # cache
@@ -23,23 +23,23 @@ class PVerify(BaseTask):
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
+        self.logger = utils.getLogger(__name__)
 
         # reduce
         self.vsize = 0
 
-        self.logger = utils.getLogger(__name__)
+        assert len(circle.workq) == 0
 
         if self.circle.rank == 0:
             print("\nChecksum verification ...")
 
     def create(self):
-        self.logger.info("Chunk count: %s" % len(self.pcp.chunksums), extra=self.d)
-        for ck in self.pcp.chunksums:
+        self.logger.info("Chunk count: %s" % len(self.fcp.chunksums), extra=self.d)
+        for ck in self.fcp.chunksums:
             self.enq(ck)
 
     def process(self):
         chunk = self.deq()
-        self.logger.debug("process: %s" % chunk, extra=self.d)
 
         # fd = None
         # if chunk.filename in self.fd_cache:
@@ -61,6 +61,12 @@ class PVerify(BaseTask):
         except IOError as e:
             self.logger.error(e, extra=self.d)
             self.failcnt += 1
+            return
+        except AttributeError as e:
+            self.logger.error(e, extra=self.d)
+            self.logger.error(chunk, extra=self.d)
+            self.failcnt += 1
+            #self.circle.Abort(1)
             return
 
         fd.seek(chunk.offset)

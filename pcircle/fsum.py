@@ -280,34 +280,35 @@ def parse_and_bcast():
     parse_flags = True
     if MPI.COMM_WORLD.rank == 0:
         try:
-            ARGS = parse_args()
+            args = parse_args()
         except Exception:
             parse_flags = False
     parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
     if parse_flags:
-        ARGS = MPI.COMM_WORLD.bcast(ARGS)
+        args = MPI.COMM_WORLD.bcast(args)
     else:
         sys.exit(0)
 
-    if MPI.COMM_WORLD.rank == 0 and ARGS.loglevel == "debug":
-        print(ARGS)
+    if MPI.COMM_WORLD.rank == 0 and args.loglevel == "debug":
+        print(args)
 
 
 def main():
     global args
     signal.signal(signal.SIGINT, sig_handler)
 
-    ARGS = parse_args()
+    args = parse_args()
     parse_and_bcast()
 
-    G.loglevel = ARGS.loglevel
-    G.use_store = ARGS.use_store
+    G.loglevel = args.loglevel
+    G.use_store = args.use_store
+    G.reduce_interval = args.interval
 
-    root = os.path.abspath(ARGS.path)
+    root = os.path.abspath(args.path)
     root = os.path.realpath(root)
 
     hosts_cnt = tally_hosts()
-    circle = Circle(reduce_interval=ARGS.interval)
+    circle = Circle()
 
     if circle.rank == 0:
         print("Running Parameters:\n")
@@ -321,16 +322,17 @@ def main():
     if G.use_store:
         fwalk.flushdb()
     totalsize = fwalk.epilogue()
-    circle.finalize(reduce_interval=ARGS.interval)
+    circle.finalize()
 
     # by default, we use adaptive chunksize
     chunksize = utils.calc_chunksize(totalsize)
-    if ARGS.chunksize:
-        chunksize = conv_unit(ARGS.chunksize)
+    if args.chunksize:
+        chunksize = conv_unit(args.chunksize)
 
     if circle.rank == 0:
         print("Chunksize = ", chunksize)
 
+    circle = Circle()
     fcheck = Checksum(circle, fwalk, chunksize, totalsize)
 
     circle.begin(fcheck)
@@ -346,7 +348,7 @@ def main():
         chunks.sort()
         sys.stdout.write("%s chunks\n" % len(chunks))
         sha1val = do_checksum(chunks)
-        with open(ARGS.output, "w") as f:
+        with open(args.output, "w") as f:
             f.write("sha1: %s\n" % sha1val)
             f.write("chunksize: %s\n" % chunksize)
             f.write("fwalk version: %s\n" % __version__)
@@ -355,9 +357,9 @@ def main():
             f.write("totalsize: %s\n" % totalsize)
 
         print("\nSHA1: %s" % sha1val)
-        print("Signature file: [%s]" % ARGS.output)
-        if ARGS.export_block_signatures:
-            export_checksum2(chunks, ARGS.output)
+        print("Signature file: [%s]" % args.output)
+        if args.export_block_signatures:
+            export_checksum2(chunks, args.output)
             print("Exporting block signatures ... \n")
 
     fcheck.epilogue()

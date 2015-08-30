@@ -191,9 +191,6 @@ class FCP(BaseTask):
         if self.circle.rank == 0:
             print("Adaptive chunksize: %s" % bytes_fmt(self.chunksize))
 
-    def set_checkpoint_file(self, f):
-        self.checkpoint_file = f
-
     def cleanup(self):
         for f in self.rfd_cache.values():
             try:
@@ -598,13 +595,7 @@ def mem_start():
 
     set_chunksize(fcp, G.totalsize)
     fcp.checkpoint_interval = args.cptime
-
-    if args.cpid:
-        fcp.set_checkpoint_file(".pcp_workq.%s.%s" % (args.cpid, circle.rank))
-    else:
-        ts = utils.timestamp()
-        circle.comm.bcast(ts)
-        fcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ts, circle.rank))
+    fcp.checkpoint_file = ".pcp_workq.%s.%s" % (args.cpid, circle.rank)
 
     circle.begin(fcp)
     circle.finalize()
@@ -685,13 +676,13 @@ def mem_resume(rid):
     set_chunksize(fcp, tsz)
     fcp.checkpoint_interval = args.cptime
     if rid:
-        fcp.set_checkpoint_file(".pcp_workq.%s.%s" % (rid, circle.rank))
+        fcp.checkpoint_file = ".pcp_workq.%s.%s" % (rid, circle.rank)
     else:
         ts = utils.timestamp()
         circle.comm.bcast(ts)
-        fcp.set_checkpoint_file(".pcp_workq.%s.%s" % (ts, circle.rank))
+        fcp.checkpoint_file = ".pcp_workq.%s.%s" % (ts, circle.rank)
     circle.begin(fcp)
-    circle.finalize(reduce_interval=args.reduce_interval)
+    circle.finalize()
     fcp.cleanup()
 
 
@@ -899,6 +890,7 @@ def main():
     G.reduce_interval = args.reduce_interval
     G.verbosity = args.verbosity
 
+
     if args.signature:  # with signature implies doing checksum as well
         args.checksum = True
 
@@ -910,6 +902,11 @@ def main():
 
     if args.rid:
         circle.resume = True
+        args.signature = False # when recovery, no signature
+
+    if not args.cpid:
+        ts = utils.timestamp()
+        args.cpid = circle.comm.bcast(ts)
 
     if circle.rank == 0:
         print("Running Parameters:\n")
@@ -924,10 +921,8 @@ def main():
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Dataset signature:", "%r" % args.signature, "|",
             "Stripe Preserve:", "%r" % G.preserve))
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
-            "Resume:", "%r" % G.resume))
+            "Checkpoint ID:", "%s" % args.cpid))
 
-    # TODO: there are some redundant code brought in by merging
-    # memory/store-based checkpoint/restart, need to be refactored
     if args.rid:
         mem_resume(args.rid)
     else:

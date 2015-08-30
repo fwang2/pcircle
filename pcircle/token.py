@@ -102,7 +102,6 @@ class Token:
 
         if self.rank == 0 and self.color == G.WHITE:
             # if rank 0 receive a white token
-            print("Master detected termination\n")
             terminate = True
         elif self.color == G.TERMINATE:
             terminate = True

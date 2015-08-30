@@ -578,20 +578,73 @@ def set_chunksize(pcp, tsz):
         pcp.set_fixed_chunksize(utils.conv_unit(args.chunksize))
 
 
-def mem_start():
+def prep_recovery():
+    """ Prepare for checkpoint recovery, return recovered workq """
+    global args, circle
+
+    oldsz, tsz, sz = 0, 0, 0
+    cobj = None
+    local_checkpoint_cnt = 0
+    chk_file = ".pcp_workq.%s.%s" % (args.rid, circle.rank)
+
+    if os.path.exists(chk_file):
+        local_checkpoint_cnt = 1
+        with open(chk_file, "rb") as f:
+            try:
+                cobj = pickle.load(f)
+                sz = get_workq_size(cobj.workq)
+                src = cobj.src
+                dest = cobj.dest
+                oldsz = cobj.totalsize
+            except Exception as e:
+                logger.error("error reading %s" % chk_file, extra=dmsg)
+                circle.comm.Abort()
+
+    logger.debug("located chkpoint %s, sz=%s, local_cnt=%s" %
+                 (chk_file, sz, local_checkpoint_cnt), extra=dmsg)
+
+    total_checkpoint_cnt = circle.comm.allreduce(local_checkpoint_cnt)
+    logger.debug("total_checkpoint_cnt = %s" % total_checkpoint_cnt, extra=dmsg)
+    verify_checkpoint(chk_file, total_checkpoint_cnt)
+
+    # acquire total size
+    G.totalsize = circle.comm.allreduce(sz)
+    if G.totalsize == 0:
+        if circle.rank == 0:
+            print("\nRecovery size is 0 bytes, can't proceed.")
+        circle.exit(0)
+
+    if circle.rank == 0:
+        print("\nResume copy\n")
+        print("\t{:<20}{:<20}".format("Original size:", bytes_fmt(oldsz)))
+        print("\t{:<20}{:<20}".format("Recovery size:", bytes_fmt(G.totalsize)))
+        print("")
+
+    return cobj.workq
+
+
+def fcp_start():
     global circle, fcp, treewalk
-    src = os.path.abspath(args.src)
-    src = os.path.realpath(src)
+
+    workq = None  # if fresh start, workq is None
+    src = os.path.realpath(os.path.abspath(args.src))
     dest = os.path.abspath(args.dest)
 
-    treewalk = FWalk(circle, src, dest, force=args.force)
-    circle.begin(treewalk)
-    circle.finalize()
-    G.totalsize = treewalk.epilogue()
+    if not args.rid: # if not in recovery
+        treewalk = FWalk(circle, src, dest, force=args.force)
+        circle.begin(treewalk)
+        circle.finalize()
+        G.totalsize = treewalk.epilogue()
+    else:  # okay, let's do checkpoint recovery
+        workq = prep_recovery()
 
     circle = Circle()
-    fcp = FCP(circle, src, dest, treewalk=treewalk,
-              totalsize=G.totalsize, do_checksum=args.checksum, hostcnt=num_of_hosts)
+    fcp = FCP(circle, src, dest,
+              treewalk=treewalk,
+              totalsize=G.totalsize,
+              do_checksum=args.checksum,
+              workq=workq,
+              hostcnt=num_of_hosts)
 
     set_chunksize(fcp, G.totalsize)
     fcp.checkpoint_interval = args.cptime
@@ -602,6 +655,7 @@ def mem_start():
     fcp.cleanup()
     if G.verbosity > 0:
         print(circle.token)
+
 
 def get_workq_size(workq):
     """ workq is a list of FileChunks, we iterate each and summarize the size,
@@ -622,68 +676,6 @@ def verify_checkpoint(chk_file, total_checkpoint_cnt):
             print("")
 
         circle.exit(0)
-
-
-def mem_resume(rid):
-    global circle, fcp, treewalk
-    oldsz, tsz, sz = 0, 0, 0
-    cobj = None
-    src = None
-    dest = None
-    local_checkpoint_cnt = 0
-    chk_file = ".pcp_workq.%s.%s" % (rid, circle.rank)
-
-    if os.path.exists(chk_file):
-        local_checkpoint_cnt = 1
-        with open(chk_file, "rb") as f:
-            try:
-                cobj = pickle.load(f)
-                sz = get_workq_size(cobj.workq)
-                src = cobj.src
-                dest = cobj.dest
-                oldsz = cobj.totalsize
-            except Exception as e:
-                logger.error("error reading %s" % chk_file, extra=dmsg)
-                circle.comm.Abort()
-
-    logger.debug("located chkpoint %s, sz=%s, local_cnt=%s" %
-                 (chk_file, sz, local_checkpoint_cnt), extra=dmsg)
-
-    # do we have any checkpoint files?
-
-    total_checkpoint_cnt = circle.comm.allreduce(local_checkpoint_cnt)
-    logger.debug("total_checkpoint_cnt = %s" % total_checkpoint_cnt, extra=dmsg)
-    verify_checkpoint(chk_file, total_checkpoint_cnt)
-
-    # acquire total size
-    G.totalsize = circle.comm.allreduce(sz)
-    if G.totalsize == 0:
-        if circle.rank == 0:
-            print("\nRecovery size is 0 bytes, can't proceed.")
-        circle.exit(0)
-
-    if circle.rank == 0:
-        print("\nResume copy\n")
-        print("\t{:<20}{:<20}".format("Original size:", bytes_fmt(oldsz)))
-        print("\t{:<20}{:<20}".format("Recovery size:", bytes_fmt(G.totalsize)))
-        print("")
-
-    # second task
-    fcp = FCP(circle, src, dest,
-              totalsize=G.totalsize, workq=cobj.workq,
-              hostcnt=num_of_hosts)
-
-    set_chunksize(fcp, tsz)
-    fcp.checkpoint_interval = args.cptime
-    if rid:
-        fcp.checkpoint_file = ".pcp_workq.%s.%s" % (rid, circle.rank)
-    else:
-        ts = utils.timestamp()
-        circle.comm.bcast(ts)
-        fcp.checkpoint_file = ".pcp_workq.%s.%s" % (ts, circle.rank)
-    circle.begin(fcp)
-    circle.finalize()
-    fcp.cleanup()
 
 
 def get_oldsize(chk_file):
@@ -732,75 +724,75 @@ def parse_and_bcast():
     if MPI.COMM_WORLD.rank == 0 and args.loglevel == "debug":
         print("ARGUMENT DEBUG: %s", args)
 
+#
+# def store_resume(rid):
+#     global circle, args
+#
+#     # check and exchange old dataset size
+#     oldsz = 0
+#     chk_file, db_file = check_resume_condition(rid)
+#     if circle.rank == 0:
+#         oldsz = get_oldsize(chk_file)
+#     oldsz = circle.comm.bcast(oldsz)
+#
+#     # check and exchange recovery size
+#     localsz = circle.workq.fsize
+#     tsz = circle.comm.allreduce(localsz)
+#
+#     if circle.rank == 0:
+#         print("Original size: %s" % bytes_fmt(oldsz))
+#         print("Recovery size: %s" % bytes_fmt(tsz))
+#
+#     if tsz == 0:
+#         if circle.rank == 0:
+#             print("Recovery size is 0 bytes, can't proceed.")
+#         circle.exit(0)
+#
+#     # src, dest probably not needed here anymore.
+#     src = os.path.abspath(args.src)
+#     dest = os.path.abspath(args.dest)
+#
+#     # resume mode, we don't check destination path
+#     # dest = check_path(circle, src, dest)
+#     # note here that we use resume flag
+#     pcp = FCP(circle, src, dest, resume=True,
+#               totalsize=tsz, do_checksum=args.checksum,
+#               hostcnt=num_of_hosts)
+#
+#     pcp.checkpoint_file = chk_file
+#
+#     set_chunksize(pcp, tsz)
+#     circle.begin(pcp)
+#     circle.finalize(cleanup=True)
+#
+#     return pcp, tsz
+#
+#
+# def store_start():
+#     global circle, treewalk, fcp
+#     src = os.path.abspath(args.src)
+#     dest = os.path.abspath(args.dest)
+#     # dest = check_path(circle, src, dest)
+#
+#     treewalk = FWalk(circle, src, dest, force=args.force)
+#     circle.begin(treewalk)
+#     treewalk.flushdb()
+#
+#     circle.finalize(cleanup=False)
+#     G.totalsize = treewalk.epilogue()
+#
+#     fcp = FCP(circle, src, dest, treewalk=treewalk,
+#               totalsize=G.totalsize, do_checksum=args.checksum, hostcnt=num_of_hosts)
+#     set_chunksize(fcp, G.totalsize)
+#     circle.begin(fcp)
+#
+#     # cleanup the db trails
+#     if treewalk:
+#         treewalk.cleanup()
+#
+#     if fcp:
+#         fcp.cleanup()
 
-def store_resume(rid):
-    global circle, args
-    dmsg = {"rank": "rank %s" % circle.rank}
-
-    # check and exchange old dataset size
-    oldsz = 0
-    chk_file, db_file = check_resume_condition(rid)
-    if circle.rank == 0:
-        oldsz = get_oldsize(chk_file)
-    oldsz = circle.comm.bcast(oldsz)
-
-    # check and exchange recovery size
-    localsz = circle.workq.fsize
-    tsz = circle.comm.allreduce(localsz)
-
-    if circle.rank == 0:
-        print("Original size: %s" % bytes_fmt(oldsz))
-        print("Recovery size: %s" % bytes_fmt(tsz))
-
-    if tsz == 0:
-        if circle.rank == 0:
-            print("Recovery size is 0 bytes, can't proceed.")
-        circle.exit(0)
-
-    # src, dest probably not needed here anymore.
-    src = os.path.abspath(args.src)
-    dest = os.path.abspath(args.dest)
-
-    # resume mode, we don't check destination path
-    # dest = check_path(circle, src, dest)
-    # note here that we use resume flag
-    pcp = FCP(circle, src, dest, resume=True,
-              totalsize=tsz, do_checksum=args.checksum,
-              hostcnt=num_of_hosts)
-
-    pcp.checkpoint_file = chk_file
-
-    set_chunksize(pcp, tsz)
-    circle.begin(pcp)
-    circle.finalize(cleanup=True)
-
-    return pcp, tsz
-
-
-def store_start():
-    global circle, treewalk, fcp
-    src = os.path.abspath(args.src)
-    dest = os.path.abspath(args.dest)
-    # dest = check_path(circle, src, dest)
-
-    treewalk = FWalk(circle, src, dest, force=args.force)
-    circle.begin(treewalk)
-    treewalk.flushdb()
-
-    circle.finalize(cleanup=False)
-    G.totalsize = treewalk.epilogue()
-
-    fcp = FCP(circle, src, dest, treewalk=treewalk,
-              totalsize=G.totalsize, do_checksum=args.checksum, hostcnt=num_of_hosts)
-    set_chunksize(fcp, G.totalsize)
-    circle.begin(fcp)
-
-    # cleanup the db trails
-    if treewalk:
-        treewalk.cleanup()
-
-    if fcp:
-        fcp.cleanup()
 
 def get_workq_name():
     global args
@@ -890,7 +882,6 @@ def main():
     G.reduce_interval = args.reduce_interval
     G.verbosity = args.verbosity
 
-
     if args.signature:  # with signature implies doing checksum as well
         args.checksum = True
 
@@ -923,10 +914,7 @@ def main():
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
             "Checkpoint ID:", "%s" % args.cpid))
 
-    if args.rid:
-        mem_resume(args.rid)
-    else:
-        mem_start()
+    fcp_start()
 
     if args.pause and args.checksum:
         if circle.rank == 0:

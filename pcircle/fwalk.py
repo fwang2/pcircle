@@ -163,7 +163,8 @@ class FWalk(BaseTask):
             try:
                 os.mkdir(o_dir, mode)
             except OSError as e:
-                self.logger.warn("mkdir(): %s" % e, extra=self.d)
+                if G.verbosity > 0:
+                    self.logger.warn("mkdir(): %s" % e, extra=self.d)
 
             #if G.fix_opt:
             #    try:

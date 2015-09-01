@@ -266,7 +266,8 @@ class FCP(BaseTask):
             try:
                 os.symlink(linkto, dest)
             except Exception as e:
-                logger.warn("%s, skipping sym link %s" % (e, fi.path), extra=self.d)
+                if G.verbosity > 0:
+                    logger.warn("%s, skipping sym link %s" % (e, fi.path), extra=self.d)
         elif stat.S_ISREG(fi.st_mode):
             self.enq_file(fi)  # where chunking takes place
 
@@ -653,8 +654,6 @@ def fcp_start():
     circle.begin(fcp)
     circle.finalize()
     fcp.cleanup()
-    if G.verbosity > 0:
-        print(circle.token)
 
 
 def get_workq_size(workq):

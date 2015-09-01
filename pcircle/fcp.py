@@ -24,8 +24,6 @@ import time
 import stat
 import os
 import os.path
-import logging
-import argparse
 import hashlib
 import sys
 import signal
@@ -51,6 +49,7 @@ from dbstore import DbStore
 from dbsum import MemSum
 from fsum import export_checksum2
 from _version import get_versions
+from mpihelper import ThrowingArgumentParser, parse_and_bcast
 
 __version__ = get_versions()['version']
 del get_versions
@@ -63,19 +62,7 @@ num_of_hosts = 0
 taskloads = []
 comm = MPI.COMM_WORLD
 dmsg = {"rank": "rank %s" % comm.rank}
-logger = utils.getLogger(__name__)
-
-
-class ArgumentParserError(Exception):
-    """ change default error handling behavior of argparse
-    we need to catch the error so MPI can gracefully exit
-    """
-    pass
-
-
-class ThrowingArgumentParser(argparse.ArgumentParser):
-    def error(self, message):
-        raise ArgumentParserError(message)
+log = utils.getLogger(__name__)
 
 
 def err_and_exit(msg, code):
@@ -90,8 +77,7 @@ def gen_parser():
                                      epilog="Please report issues to fwang2@ornl.gov")
     parser.add_argument("--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("-v", "--verbosity", action="count", help="increase verbosity")
-#   parser.add_argument("--use-store", action="store_true", help="Use persistent store")
-    parser.add_argument("--loglevel", default="warn", help="log level, default WARN")
+    parser.add_argument("--loglevel", default="error", help="log level, default ERROR")
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
     parser.add_argument("--reduce-interval", metavar="s", type=int, default=10, help="interval, default 10s")
@@ -167,7 +153,7 @@ class FCP(BaseTask):
         self.workcnt = 0  # this is the cnt for the enqued items
         self.reduce_items = 0  # this is the cnt for processed items
         if self.treewalk:
-            logger.debug("treewalk files = %s" % treewalk.flist, extra=self.d)
+            log.debug("treewalk files = %s" % treewalk.flist, extra=self.d)
 
         # fini_check
         self.fini_cnt = Counter()
@@ -259,7 +245,7 @@ class FCP(BaseTask):
         # save work cnt
         self.workcnt += workcnt
 
-        logger.debug("enq_file(): %s, size = %s, workcnt = %s" % (fi.path, fi.st_size, workcnt),
+        log.debug("enq_file(): %s, size = %s, workcnt = %s" % (fi.path, fi.st_size, workcnt),
                      extra=self.d)
 
     def handle_fitem(self, fi):
@@ -269,8 +255,7 @@ class FCP(BaseTask):
             try:
                 os.symlink(linkto, dest)
             except Exception as e:
-                if G.verbosity > 0:
-                    logger.warn("%s, skipping sym link %s" % (e, fi.path), extra=self.d)
+                log.debug("%s, skipping sym link %s" % (e, fi.path), extra=self.d)
         elif stat.S_ISREG(fi.st_mode):
             self.enq_file(fi)  # where chunking takes place
 
@@ -288,7 +273,7 @@ class FCP(BaseTask):
 
         # construct and enable all copy operations
         # we batch operation hard-coded
-        logger.info("create() starts, flist length = %s" % len(self.treewalk.flist),
+        log.info("create() starts, flist length = %s" % len(self.treewalk.flist),
                     extra=self.d)
 
         if G.use_store:
@@ -299,7 +284,7 @@ class FCP(BaseTask):
                 self.treewalk.flist.mdel(G.DB_BUFSIZE)
 
             # store checkpoint
-            logger.debug("dbname = %s" % self.circle.dbname)
+            log.debug("dbname = %s" % self.circle.dbname)
             dirname = os.path.dirname(self.circle.dbname)
             basename = os.path.basename(self.circle.dbname)
             chkpointname = basename + ".CHECK_OK"
@@ -332,17 +317,17 @@ class FCP(BaseTask):
             try:
                 os.close(old_v)
             except OSError as e:
-                logger.warn("FD for %s not valid when closing" % old_k, extra=self.d)
+                log.warn("FD for %s not valid when closing" % old_k, extra=self.d)
 
         fd = -1
         try:
             fd = os.open(k, flag)
         except OSError as e:
             if e.errno == 28:  # no space left
-                logger.error("Critical error: %s, exit!" % e, extra=self.d)
+                log.error("Critical error: %s, exit!" % e, extra=self.d)
                 self.circle.exit(0)  # should abort
             else:
-                logger.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
+                log.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
         else:
             if fd > 0:
                 d[k] = fd
@@ -373,12 +358,12 @@ class FCP(BaseTask):
                 try:
                     os.unlink(dest)
                 except OSError as e:
-                    logger.error("Failed to unlink %s, %s " % (dest, e), extra=self.d)
+                    log.error("Failed to unlink %s, %s " % (dest, e), extra=self.d)
                     return False
                 else:
                     wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY, self._write_cache_limit)
             else:
-                logger.error("Failed to create output file %s" % dest, extra=self.d)
+                log.error("Failed to create output file %s" % dest, extra=self.d)
                 return False
 
         # do the actual copy
@@ -388,7 +373,7 @@ class FCP(BaseTask):
         self.cnt_filesize += work.length
 
         if G.verbosity > 2:
-            logger.debug("Transferred %s bytes from:\n\t [%s] to [%s]" %
+            log.debug("Transferred %s bytes from:\n\t [%s] to [%s]" %
                          (self.cnt_filesize, src, dest), extra=self.d)
 
         return True
@@ -397,7 +382,7 @@ class FCP(BaseTask):
         a = Thread(target=self.do_checkpoint)
         a.start()
         a.join()
-        logger.debug("checkpoint: %s" % self.checkpoint_file, extra=self.d)
+        log.debug("checkpoint: %s" % self.checkpoint_file, extra=self.d)
 
     def do_checkpoint(self):
         for k in self.wfd_cache.keys():
@@ -422,7 +407,7 @@ class FCP(BaseTask):
             curtime = MPI.Wtime()
             if curtime - self.checkpoint_last > self.checkpoint_interval:
                 self.do_no_interrupt_checkpoint()
-                logger.info("Checkpointing done ...", extra=self.d)
+                log.info("Checkpointing done ...", extra=self.d)
                 self.checkpoint_last = curtime
 
         work = self.deq()
@@ -430,7 +415,7 @@ class FCP(BaseTask):
         if isinstance(work, FileChunk):
             self.do_copy(work)
         else:
-            logger.warn("Unknown work object: %s" % work, extra=self.d)
+            log.warn("Unknown work object: %s" % work, extra=self.d)
 
     def reduce_init(self, buf):
         buf['cnt_filesize'] = self.cnt_filesize
@@ -601,14 +586,14 @@ def prep_recovery():
                 dest = cobj.dest
                 oldsz = cobj.totalsize
             except Exception as e:
-                logger.error("error reading %s" % chk_file, extra=dmsg)
+                log.error("error reading %s" % chk_file, extra=dmsg)
                 circle.comm.Abort()
 
-    logger.debug("located chkpoint %s, sz=%s, local_cnt=%s" %
+    log.debug("located chkpoint %s, sz=%s, local_cnt=%s" %
                  (chk_file, sz, local_checkpoint_cnt), extra=dmsg)
 
     total_checkpoint_cnt = circle.comm.allreduce(local_checkpoint_cnt)
-    logger.debug("total_checkpoint_cnt = %s" % total_checkpoint_cnt, extra=dmsg)
+    log.debug("total_checkpoint_cnt = %s" % total_checkpoint_cnt, extra=dmsg)
     verify_checkpoint(chk_file, total_checkpoint_cnt)
 
     # acquire total size
@@ -702,7 +687,7 @@ def do_fix_opt(optlist):
                 os.lchown(fi, st.st_uid, st.st_gid)
                 os.chmod(fi, st.st_mode)
         except OSError as e:
-            logger.warn("fix-opt: lchown() or chmod(): %s" % e, extra=dmsg)
+            log.warn("fix-opt: lchown() or chmod(): %s" % e, extra=dmsg)
 
 
 def fix_opt(treewalk):
@@ -710,27 +695,6 @@ def fix_opt(treewalk):
     treewalk.opt_dir_list.sort(reverse=True)
     do_fix_opt(treewalk.opt_dir_list)
 
-
-def parse_and_bcast():
-    global args
-    parse_flags = True
-    if MPI.COMM_WORLD.rank == 0:
-        parser = gen_parser()
-        try:
-            args = parser.parse_args()
-        except ArgumentParserError as e:
-            parse_flags = False
-            parser.print_usage()
-            print(e)
-
-    parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
-    if parse_flags:
-        args = MPI.COMM_WORLD.bcast(args)
-    else:
-        sys.exit(0)
-
-    if MPI.COMM_WORLD.rank == 0 and args.loglevel == "debug":
-        print("ARGUMENT DEBUG: %s", args)
 
 #
 # def store_resume(rid):
@@ -877,11 +841,10 @@ def gen_signature(fcp, totalsize):
 
 
 def main():
-    global args, logger, circle, fcp, treewalk
-
+    global args, log, circle, fcp, treewalk
     # This might be an overkill function
     signal.signal(signal.SIGINT, sig_handler)
-    parse_and_bcast()
+    args = parse_and_bcast(comm, gen_parser)
     tally_hosts()
     G.loglevel = args.loglevel
     G.fix_opt = args.fix_opt  # os.geteuid() == 0 (not required anymore)

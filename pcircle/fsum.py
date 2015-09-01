@@ -26,21 +26,21 @@ from cio import readn
 from fdef import ChunkSum
 from globals import G
 import utils
-from pcircle.mpihelper import tally_hosts
+from pcircle.mpihelper import tally_hosts, parse_and_bcast, ThrowingArgumentParser
 
-args = None
 __version__ = get_versions()['version']
-
+args = None
+comm = MPI.COMM_WORLD
 
 def sig_handler(signum, sigstack):
     print("\tUser cancelled ... cleaning up")
     sys.exit(1)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="fsum")
+def gen_parser():
+    parser = ThrowingArgumentParser(description="fsum")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
-    parser.add_argument("--loglevel", default="WARN", help="log level")
+    parser.add_argument("--loglevel", default="error", help="log level, default: ERROR")
     parser.add_argument("path", default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
-    return parser.parse_args()
+    return parser
 
 
 class Checksum(BaseTask):
@@ -275,30 +275,11 @@ def export_checksum2(chunks, ofile):
 
     return ofile
 
-def parse_and_bcast():
-    global args
-    parse_flags = True
-    if MPI.COMM_WORLD.rank == 0:
-        try:
-            args = parse_args()
-        except Exception:
-            parse_flags = False
-    parse_flags = MPI.COMM_WORLD.bcast(parse_flags)
-    if parse_flags:
-        args = MPI.COMM_WORLD.bcast(args)
-    else:
-        sys.exit(0)
-
-    if MPI.COMM_WORLD.rank == 0 and args.loglevel == "debug":
-        print(args)
-
 
 def main():
-    global args
+    global args, comm
     signal.signal(signal.SIGINT, sig_handler)
-
-    args = parse_args()
-    parse_and_bcast()
+    args = parse_and_bcast(comm, gen_parser)
 
     G.loglevel = args.loglevel
     G.use_store = args.use_store

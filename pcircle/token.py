@@ -4,6 +4,9 @@ from mpi4py import MPI
 from globals import G, T
 from utils import getLogger
 
+# module variables
+log = getLogger(__name__)
+
 
 def colorstr(c):
     if c == G.BLACK:
@@ -43,7 +46,6 @@ class Token:
         self.send_req = MPI.REQUEST_NULL
 
         self.d = {"rank": "rank %s" % self.rank}
-        self.logger = getLogger(__name__)
 
     def check_and_recv(self):
         """ check for token, and receive it if arrived """
@@ -62,7 +64,7 @@ class Token:
         if self.circle.abort:
             return
 
-        self.logger.debug("token send to rank %s: token_color = %s" %
+        log.debug("token send to rank %s: token_color = %s" %
                           (self.dest, colorstr(self.color)), extra=self.d)
 
         self.send_req = self.comm.issend(self.color, self.dest, tag=T.TOKEN)

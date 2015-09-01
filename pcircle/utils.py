@@ -7,6 +7,7 @@ import re
 import os.path
 import traceback
 import datetime
+import argparse
 
 from pcircle.globals import G
 
@@ -22,14 +23,14 @@ def numeric_level(loglevel):
 
 def getLogger(name):
     logger = logging.getLogger(name)
-    ll = numeric_level(G.loglevel)
-    logger.setLevel(ll)
-    # console handler
+    fmt = '%(asctime)s - %(levelname)s - %(rank)s:%(filename)s:%(lineno)d - %(message)s'
+    level = numeric_level(G.loglevel)
+    logger.setLevel(level)
     ch = logging.StreamHandler()
-    ch.setFormatter(logging.Formatter(G.fmt1))
+    ch.setFormatter(logging.Formatter(fmt))
     logger.addHandler(ch)
-
     return logger
+
 
 
 def current_time():

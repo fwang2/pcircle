@@ -14,24 +14,23 @@ import numpy as np
 from task import BaseTask
 from circle import Circle
 from globals import G
-from utils import timestamp, bytes_fmt, destpath
+from utils import getLogger, bytes_fmt, destpath
 from dbstore import DbStore
 from fdef import FileItem
-from mpihelper import tally_hosts
+from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
 import utils
 
 from _version import get_versions
 __version__ = get_versions()['version']
-
 args = None
-logger = None
+log = getLogger(__name__)
 taskloads = []
 bins = None
 comm = MPI.COMM_WORLD
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="fwalk")
+def gen_parser():
+    parser = ThrowingArgumentParser(description="fwalk")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("path", default=".", help="path")
@@ -40,7 +39,7 @@ def parse_args():
     parser.add_argument("-s", "--stats", action="store_true", help="collects stats")
     parser.add_argument("-t", "--top", type=int, default=10, help="Top files (10)")
 
-    return parser.parse_args()
+    return parser
 
 
 def local_histogram(flist):
@@ -72,15 +71,13 @@ def global_histogram(treewalk):
         local_hist = sum(all_hist)
     return local_hist
 
-class FWalk(BaseTask):
 
+class FWalk(BaseTask):
 
     def __init__(self, circle, src, dest=None, preserve=False, force=False):
         BaseTask.__init__(self, circle)
 
-        self.logger = utils.getLogger(__name__)
         self.d = {"rank": "rank %s" % circle.rank}
-
         self.circle = circle
         self.src = src
         self.dest = dest
@@ -129,7 +126,6 @@ class FWalk(BaseTask):
         self.time_started = MPI.Wtime()
         self.time_ended = None
 
-
     def create(self):
         if self.circle.rank == 0:
             self.circle.enq(FileItem(self.src))
@@ -142,7 +138,7 @@ class FWalk(BaseTask):
                 val = xattr.getxattr(src, k)
                 xattr.setxattr(dest, k, val)
             except IOError as e:
-                self.logger.warn(e, extra=self.d)
+                log.warn(e, extra=self.d)
 
     def flushdb(self):
         if len(self.flist_buf) != 0:
@@ -163,14 +159,7 @@ class FWalk(BaseTask):
             try:
                 os.mkdir(o_dir, mode)
             except OSError as e:
-                if G.verbosity > 0:
-                    self.logger.warn("mkdir(): %s" % e, extra=self.d)
-
-            #if G.fix_opt:
-            #    try:
-            #        os.lchown(o_dir, st.st_uid, st.st_gid)
-            #    except OSError as e:
-            #        self.logger.warn(e, extra=self.d)
+                log.debug("mkdir(): %s" % e, extra=self.d)
 
             if G.preserve:
                 self.copy_xattr(i_dir, o_dir)
@@ -180,7 +169,7 @@ class FWalk(BaseTask):
         try:
             entries = scandir(i_dir)
         except OSError as e:
-            self.logger.warn(e, extra=self.d)
+            log.warn(e, extra=self.d)
             self.skipped += 1
         else:
             for entry in entries:
@@ -191,7 +180,7 @@ class FWalk(BaseTask):
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, i_dir, count))
                     last_report = MPI.Wtime()
-            self.logger.info("Finish scan of [%s], count=%s" % (i_dir, count), extra=self.d)
+            log.info("Finish scan of [%s], count=%s" % (i_dir, count), extra=self.d)
 
     def do_metadata_preserve(self, src_file, dest_file, st):
         """ create file node, copy attribute if needed."""
@@ -207,7 +196,7 @@ class FWalk(BaseTask):
                 self.optlist.append((dest_file,st))
             os.mknod(dest_file, mode)  # -r-r-r special
         except OSError as e:
-            self.logger.warn("mknod(): for %s, %s" % (dest_file, e), extra=self.d)
+            log.warn("mknod(): for %s, %s" % (dest_file, e), extra=self.d)
             return
 
         if G.preserve:
@@ -226,7 +215,7 @@ class FWalk(BaseTask):
         # well, destination exists, now we have to check
         if self.sizeonly:
             if os.path.getsize(src_file) == os.path.getsize(dest_file):
-                self.logger.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file),
+                log.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file),
                                  extra=self.d)
                 return True
         elif self.checksum:
@@ -235,9 +224,9 @@ class FWalk(BaseTask):
         try:
             os.unlink(dest_file)
         except OSError as e:
-            self.logger.warn("Can't unlink %s" % dest_file, extra=self.d)
+            log.warn("Can't unlink %s" % dest_file, extra=self.d)
         else:
-            self.logger.info("Retransfer: %s" % src_file, extra=self.d)
+            log.info("Retransfer: %s" % src_file, extra=self.d)
 
         return False
 
@@ -261,7 +250,7 @@ class FWalk(BaseTask):
             try:
                 st = os.lstat(spath)
             except OSError as e:
-                self.logger.warn(e, extra=self.d)
+                log.warn(e, extra=self.d)
                 self.skipped += 1
                 return False
 
@@ -376,11 +365,10 @@ class FWalk(BaseTask):
 
 
 def main():
-    global args, logger
-    args = parse_args()
+    global comm, args
+    args = parse_and_bcast(comm, gen_parser)
     G.use_store = args.use_store
     G.loglevel = args.loglevel
-    logger = utils.getLogger(__name__)
     root = os.path.abspath(args.path)
     root = os.path.realpath(root)
 

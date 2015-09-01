@@ -839,6 +839,30 @@ def gen_signature(fcp, totalsize):
             f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
         print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, args.output)))
 
+def do_sync_files():
+    # check if we need to sync files
+    if args.force and args.rsync:
+        comm.Barrier()
+        if comm.rank == 0:
+            print("\nCheck FileSync\n")
+        cnt_syncfiles = comm.allreduce(len(treewalk.syncfiles))
+        cnt_syncsize = comm.allreduce(treewalk.syncfiles_sz)
+
+        if comm.rank == 0:
+             print("\t{:<20}{:<20}".format("Files to sync:", cnt_syncfiles))
+
+        if cnt_syncfiles != 0:
+            args.checksum = False  # once we involve file syncing, no checksum
+            if comm.rank == 0:
+                print("\t{:<20}{:<20}".format("Total file size:", utils.bytes_fmt(cnt_syncsize)))
+                print("\nStart file syncing")
+
+            # set up total for reduce
+            circle = Circle()
+            fsync = FileSync(circle, treewalk.syncfiles, treewalk.syncfiles_sz)
+            fsync.totalsize = cnt_syncsize
+            circle.begin(fsync)
+            circle.finalize()
 
 def main():
     global args, log, circle, fcp, treewalk

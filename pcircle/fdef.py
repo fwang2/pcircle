@@ -73,3 +73,15 @@ class ChunkSum:
 
     def path(self):
         return self.__repr__()
+
+
+class SyncFile:
+    def __init__(self, src, dest, size):
+        self.src = src
+        self.dest = dest
+        self.size = size
+
+    def __repr__(self):
+        return "SyncFile: " + ",".join(self.src, self.dest)
+
+

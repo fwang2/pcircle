@@ -16,7 +16,7 @@ from circle import Circle
 from globals import G
 from utils import getLogger, bytes_fmt, destpath
 from dbstore import DbStore
-from fdef import FileItem
+from fdef import FileItem, SyncFile
 from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
 import utils
@@ -126,6 +126,10 @@ class FWalk(BaseTask):
         self.time_started = MPI.Wtime()
         self.time_ended = None
 
+        # sync files
+        self.syncfiles = []
+        self.syncfiles_sz = 0
+
     def create(self):
         if self.circle.rank == 0:
             self.circle.enq(FileItem(self.src))
@@ -202,7 +206,7 @@ class FWalk(BaseTask):
         if G.preserve:
             self.copy_xattr(src_file, dest_file)
 
-    def check_dest_exists(self, src_file, dest_file):
+    def check_dest_exists(self, src_file, dest_file, st_size):
         """ return True if dest exists and checksum verified correct
             return False if (1) no overwrite (2) destination doesn't exist
         """
@@ -220,6 +224,11 @@ class FWalk(BaseTask):
                 return True
         elif self.checksum:
             raise NotImplementedError("Checksum comparison")
+
+        if self.force and self.rsync:
+            self.syncfiles.append(SyncFile(src_file, dest_file, st_size))
+            self.syncfiles_sz += st_size
+            return True
 
         try:
             os.unlink(dest_file)

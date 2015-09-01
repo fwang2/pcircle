@@ -183,6 +183,9 @@ class FCP(BaseTask):
         if self.circle.rank == 0:
             print("Start copying process ...")
 
+    def rw_cache_limit(self):
+        return (self._read_cache_limit, self._write_cache_limit)
+
     def set_fixed_chunksize(self, sz):
         self.chunksize = sz
 
@@ -647,6 +650,12 @@ def fcp_start():
               workq=workq,
               hostcnt=num_of_hosts)
 
+    if comm.rank == 0 and G.verbosity > 0:
+        rcl, wcl = fcp.rw_cache_limit()
+        print("")
+        print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Read Cache:", "%s" % rcl, "|",
+                                                      "Write Cache:", "%s" % wcl))
+        print("")
     set_chunksize(fcp, G.totalsize)
     fcp.checkpoint_interval = args.cptime
     fcp.checkpoint_file = ".pcp_workq.%s.%s" % (args.cpid, circle.rank)

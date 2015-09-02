@@ -19,11 +19,7 @@ rpm:
 	$(PYTHON) setup.py bdist_rpm --post-install=rpm/postinstall --pre-uninstall=rpm/preuninstall
 
 
-install:
-	# $(PYTHON) setup.py install
-	rm -rf dist
-	$(PYTHON) setup.py sdist
-	$(VENV)/bin/pip install $(SDIST)
+install: deploy
 
 uninstall:
 	pip uninstall -y pcircle

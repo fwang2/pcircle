@@ -18,11 +18,12 @@ import versioneer
 import sys
 
 requires = [
-    'mpi4py',
-    'lru-dict',
-    'xattr',
-    'scandir',
-    'numpy']
+    'cffi==1.2.1',
+    'mpi4py==1.3.1',
+    'lru-dict==1.1.1',
+    'xattr==0.7.8',
+    'scandir==1.1',
+    'numpy==1.9.2']
 
 if (3, 0, 0) < sys.version_info[:3] < (2, 7, 0):
     raise RuntimeError("This application requires Python 2.7.x")

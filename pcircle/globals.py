@@ -43,3 +43,4 @@ class G:
     resume = None
     reduce_interval = 10
     verbosity = 0
+    am_root = False

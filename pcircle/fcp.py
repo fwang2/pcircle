@@ -81,7 +81,7 @@ def gen_parser():
     parser.add_argument("--chunksize", metavar="sz", default="1m", help="chunk size (KB, MB, GB, TB), default: 1MB")
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
     parser.add_argument("--reduce-interval", metavar="s", type=int, default=10, help="interval, default 10s")
-    parser.add_argument("--fix-opt", action="store_true", default=True, help="fix ownership, permssion, timestamp, default: on")
+    parser.add_argument("--no-fixopt", action="store_true", help="skip fixing ownership, permssion, timestamp")
     parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
     parser.add_argument("-s", "--signature", action="store_true", help="aggregate checksum for signature, default: off")
     parser.add_argument("-p", "--preserve", action="store_true", help="Preserving meta, default: off")
@@ -684,7 +684,8 @@ def do_fix_opt(optlist):
         fi, st = ele
         try:
             if not stat.S_ISLNK(st.st_mode):
-                os.lchown(fi, st.st_uid, st.st_gid)
+                if G.am_root:
+                    os.lchown(fi, st.st_uid, st.st_gid)
                 os.chmod(fi, st.st_mode)
         except OSError as e:
             log.warn("fix-opt: lchown() or chmod(): %s" % e, extra=dmsg)
@@ -847,11 +848,12 @@ def main():
     args = parse_and_bcast(comm, gen_parser)
     tally_hosts()
     G.loglevel = args.loglevel
-    G.fix_opt = args.fix_opt  # os.geteuid() == 0 (not required anymore)
+    G.fix_opt = False if args.no_fixopt else True
     G.preserve = args.preserve
     G.resume = True if args.cpid else False
     G.reduce_interval = args.reduce_interval
     G.verbosity = args.verbosity
+    G.am_root = True if os.geteuid() == 0 else False
 
     if args.signature:  # with signature implies doing checksum as well
         args.checksum = True
@@ -916,7 +918,7 @@ def main():
 
     # fix permission
     comm.Barrier()
-    if args.fix_opt and treewalk:
+    if G.fix_opt and treewalk:
         if comm.rank == 0:
             print("\nFixing ownership and permissions ...")
         fix_opt(treewalk)

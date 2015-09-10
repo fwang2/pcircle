@@ -1,0 +1,49 @@
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "FCP" "8" "September 2015" "" ""
+.
+.SH "NAME"
+\fBfcp\fR \- A Scalable Parallel Data Copy Tool
+.
+.SH "SYNOPSIS"
+.
+.nf
+
+fcp [\-\-version] [\-c] [\-s] [\-p] [\-f] src_dir dest_dir
+mpirun \-np 8 fcp \.\.\.
+.
+.fi
+.
+.SH "DESCRIPTION"
+\fBfcp\fR is a program designed to do large\-scale parallel data transfer from source to destination\. One \fIcrucial\fR difference from regular \fBcp\fR, is that the required arguments of source and destination must be directories\. \fBfcp\fR does do sanity check and will fail if these conditions can not be met\. Roughly speaking, \fBfcp\fR works in two stages: first it analyzes the workload by parallel walking the tree; second it parallelize the job of data copy\. The following options are available:
+.
+.TP
+\fB\-c\fR, \fB\-\-checksum\fR
+Perform checksum verification after the copy\.
+.
+.TP
+\fB\-s\fR, \fB\-\-signature\fR
+Generate a single signature for the entire dataset\. \fB\-c\fR is a prerequisite for this to work, otherwise, this option will be ignored\.
+.
+.TP
+\fB\-p\fR, \fB\-\-preserve\fR
+This option will preserve the metadata attributes\. In the case of Lustre, the striping information is kept\.
+.
+.TP
+\fB\-f\fR, \fB\-\-force\fR
+With this option, \fBfcp\fR will overwrite the destination\. The default is off\.
+.
+.TP
+\fB\-\-reduce\-interval\fR
+\fBfcp\fR by default will provide progress report\. This option controls the frequency\. The default is 10 seconds\.
+.
+.TP
+\fB\-\-chunksize sz\fR
+\fBfcp\fR will break up large files into pieces to increase parallelism\. This option can force upon a certain size\. By default, \fBfcp\fR adaptively set the chunk size based on the overall size of the workload\.
+.
+.SH "PERFORMANCE CONSIDERATIONS"
+Both checksum and dataset signature options have performance implications\. It requires fcp to calculate the checksums of each chunk/file for both source and destination\. It also involves read\-back from destination\. The bookkeepings increases the memory usage as well\. Therefore, for large scale data transfer, a \fIfat\fR node is often needed\.
+.
+.SH "AUTHOR"
+Feiyi Wang (fwang2@ornl\.gov)

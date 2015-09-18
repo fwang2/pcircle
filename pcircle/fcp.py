@@ -82,7 +82,7 @@ def gen_parser():
     parser.add_argument("--adaptive", action="store_true", default=True, help="Adaptive chunk size")
     parser.add_argument("--reduce-interval", metavar="s", type=int, default=10, help="interval, default 10s")
     parser.add_argument("--no-fixopt", action="store_true", help="skip fixing ownership, permssion, timestamp")
-    parser.add_argument("-c", "--checksum", action="store_true", help="verify after copy, default: off")
+    parser.add_argument("--verify", action="store_true", help="verify after copy, default: off")
     parser.add_argument("-s", "--signature", action="store_true", help="aggregate checksum for signature, default: off")
     parser.add_argument("-p", "--preserve", action="store_true", help="Preserving meta, default: off")
     parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
@@ -109,7 +109,7 @@ class FCP(BaseTask):
                  totalsize=0,
                  hostcnt=0,
                  prune=False,
-                 do_checksum=False,
+                 verify=False,
                  resume=False,
                  workq=None):
         BaseTask.__init__(self, circle)
@@ -158,8 +158,8 @@ class FCP(BaseTask):
         # fini_check
         self.fini_cnt = Counter()
 
-        # checksum
-        self.do_checksum = do_checksum
+        # verify
+        self.verify = verify
         self.chunksums = []
 
         # checkpointing
@@ -488,7 +488,7 @@ class FCP(BaseTask):
         os.lseek(wfd, work.offset, os.SEEK_SET)
 
         m = None
-        if self.do_checksum:
+        if self.verify:
             m = hashlib.sha1()
 
         remaining = work.length
@@ -500,7 +500,7 @@ class FCP(BaseTask):
                 self.read_then_write(rfd, wfd, work, remaining, m)
                 remaining = 0
 
-        if self.do_checksum:
+        if self.verify:
             # use src path here
             ck = ChunkSum(work.src, offset=work.offset, length=work.length,
                           digest=m.hexdigest())
@@ -631,7 +631,7 @@ def fcp_start():
     fcp = FCP(circle, src, dest,
               treewalk=treewalk,
               totalsize=G.totalsize,
-              do_checksum=args.checksum,
+              verify=args.verify,
               workq=workq,
               hostcnt=num_of_hosts)
 
@@ -855,8 +855,8 @@ def main():
     G.verbosity = args.verbosity
     G.am_root = True if os.geteuid() == 0 else False
 
-    if args.signature:  # with signature implies doing checksum as well
-        args.checksum = True
+    if args.signature:  # with signature implies doing verify as well
+        args.verify = True
 
     check_path(args.src, args.dest)
     dbname = get_workq_name()
@@ -881,7 +881,7 @@ def main():
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Num of Hosts:", num_of_hosts, "|",
             "Num of Processes:", comm.size))
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Overwrite:", "%r" % args.force, "|",
-            "Checksum verify:", "%r" % args.checksum))
+            "Copy Verification:", "%r" % args.verify))
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Dataset signature:", "%r" % args.signature, "|",
             "Stripe Preserve:", "%r" % G.preserve))
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
@@ -889,7 +889,7 @@ def main():
 
     fcp_start()
 
-    if args.pause and args.checksum:
+    if args.pause and args.verify:
         if circle.rank == 0:
             # raw_input("\n--> Press any key to continue ...\n")
             print("Pause, resume after %s seconds ..." % args.pause)
@@ -898,7 +898,7 @@ def main():
         circle.comm.Barrier()
 
     # do checksum verification
-    if args.checksum:
+    if args.verify:
         circle = Circle()
         pcheck = PVerify(circle, fcp, G.totalsize)
         circle.begin(pcheck)

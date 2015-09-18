@@ -18,12 +18,6 @@ conditions can not be met. In the most general case, **fcp** works in two stages
 first it analyzes the workload by parallel walking the tree; second it
 parallelize the job of data copy. The following options are available:
 
-* `-c`, `--checksum`:
-  Perform checksum verification after the copy. 
-
-* `-s`, `--signature`:
-  Generate a single signature for the entire dataset. `-c` is a prerequisite
-  for this to work, otherwise, this option will be ignored.
 
 * `-p`, `--preserve`:
   This option will preserve the metadata attributes. In the case of Lustre,
@@ -32,6 +26,13 @@ parallelize the job of data copy. The following options are available:
 * `-f`, `--force`:
   With this option, **fcp** will overwrite the destination. The default is
   off.
+
+* `--verify`:
+  Perform checksum-based verification after the copy. 
+
+* `-s`, `--signature`:
+  Generate a single checksum signature for the entire dataset. This option currently 
+  implies `--verify` for post-copy verification.
 
 * `--reduce-interval`:
   **fcp** by default will provide progress report. This option controls the

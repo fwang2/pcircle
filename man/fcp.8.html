@@ -80,21 +80,23 @@ mpirun -np 8 fcp ...
 <h2 id="DESCRIPTION">DESCRIPTION</h2>
 
 <p><strong>fcp</strong> is a program designed to do large-scale parallel data transfer from
-source to destination. One <em>crucial</em> difference from regular <strong>cp</strong>, is that
-the required arguments of source and destination must be directories. <strong>fcp</strong>
-does do sanity check and will fail if these conditions can not be met. Roughly
-speaking, <strong>fcp</strong> works in two stages: first it analyzes the workload by
-parallel walking the tree; second it parallelize the job of data copy. The
-following options are available:</p>
+source directory to destination directory across <em>locally</em> mounted file
+systems. It is not designed for wide area data transfer such as ftp, bbcp, or
+globus-ftp. In that sense, it is closer to <strong>cp</strong>. One crucial difference
+from regular <strong>cp</strong>, is that the required arguments of source and destination
+must be directories. <strong>fcp</strong> does do sanity check and will fail if these
+conditions can not be met. In the most general case, <strong>fcp</strong> works in two stages:
+first it analyzes the workload by parallel walking the tree; second it
+parallelize the job of data copy. The following options are available:</p>
 
 <dl>
-<dt><code>-c</code>, <code>--checksum</code></dt><dd><p>Perform checksum verification after the copy.</p></dd>
-<dt><code>-s</code>, <code>--signature</code></dt><dd><p>Generate a single signature for the entire dataset. <code>-c</code> is a prerequisite
-for this to work, otherwise, this option will be ignored.</p></dd>
 <dt><code>-p</code>, <code>--preserve</code></dt><dd><p>This option will preserve the metadata attributes. In the case of Lustre,
 the striping information is kept.</p></dd>
 <dt><code>-f</code>, <code>--force</code></dt><dd><p>With this option, <strong>fcp</strong> will overwrite the destination. The default is
 off.</p></dd>
+<dt><code>--verify</code></dt><dd><p>Perform checksum-based verification after the copy.</p></dd>
+<dt><code>-s</code>, <code>--signature</code></dt><dd><p>Generate a single checksum signature for the entire dataset. This option currently
+implies <code>--verify</code> for post-copy verification.</p></dd>
 <dt><code>--reduce-interval</code></dt><dd><p><strong>fcp</strong> by default will provide progress report. This option controls the
 frequency. The default is 10 seconds.</p></dd>
 <dt><code>--chunksize sz</code></dt><dd><p><strong>fcp</strong> will break up large files into pieces to increase parallelism. This
@@ -105,8 +107,15 @@ chunk size based on the overall size of the workload.</p></dd>
 
 <h2 id="PERFORMANCE-CONSIDERATIONS">PERFORMANCE CONSIDERATIONS</h2>
 
+<p><strong>fcp</strong> performance is subject to the bandwidth and conditions of source file
+system, storage area network, and destination file system, as well as number
+of process and nodes involved in the transfer. More processes per node is not
+necessarily better due to metadata performance and potential contentions. A
+rule of thumb is to match or halve the number of physical cores per transfer
+node.</p>
+
 <p>Both checksum and dataset signature options have performance implications. It
-requires fcp to calculate the checksums of each chunk/file for both source
+requires <strong>fcp</strong> to calculate the checksums of each chunk/file for both source
 and destination. It also involves read-back from destination. The bookkeepings
 increases the memory usage as well. Therefore, for large scale data transfer,
 a <em>fat</em> node is often needed.</p>

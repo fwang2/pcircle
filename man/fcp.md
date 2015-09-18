@@ -9,56 +9,60 @@ fcp(8) - A Scalable Parallel Data Copy Tool
 ## DESCRIPTION
 
 **fcp** is a program designed to do large-scale parallel data transfer from
-source directory to destination directory across _locally_ mounted file
-systems. It is not designed for wide area data transfer such as ftp, bbcp, or
+a source directory to a destination directory across _locally_ mounted file
+systems. It is not for wide area data transfers such as ftp, bbcp, or
 globus-ftp. In that sense, it is closer to **cp**. One crucial difference
-from regular **cp**, is that the required arguments of source and destination
-must be directories. **fcp** does do sanity check and will fail if these
-conditions can not be met. In the most general case, **fcp** works in two stages:
-first it analyzes the workload by parallel walking the tree; second it
-parallelize the job of data copy. The following options are available:
+from regular **cp**, is that **fcp** requires the source and
+destination to be directories.  **fcp** will fail if these conditions are not
+met.  In the most general case, **fcp** works in two stages: first it analyzes
+the workload by walking the tree in parallel; and then it parallelizes the data
+copy operation.  **fcp** supports the following options:
 
 
 * `-p`, `--preserve`:
-  This option will preserve the metadata attributes. In the case of Lustre,
+  Preserve metadata attributes. In the case of Lustre,
   the striping information is kept.
 
 * `-f`, `--force`:
-  With this option, **fcp** will overwrite the destination. The default is
+  Overwrite the destination directory. The default is
   off.
 
 * `--verify`:
   Perform checksum-based verification after the copy. 
 
 * `-s`, `--signature`:
-  Generate a single checksum signature for the entire dataset. This option currently 
+  Generate a single sha1 signature for the entire dataset. This option also 
   implies `--verify` for post-copy verification.
 
-* `--reduce-interval`:
-  **fcp** by default will provide progress report. This option controls the
-  frequency. The default is 10 seconds.
 
 * `--chunksize sz`:
-  **fcp** will break up large files into pieces to increase parallelism. This
-  option can force upon a certain size. By default, **fcp** adaptively set the
-  chunk size based on the overall size of the workload.
+   **fcp** will break up large files into pieces to increase parallelism. By
+   default, **fcp** adaptively sets the chunk size based on the overall size of
+   the workload. Use this option to specify a particular chunk size in KB, MB. 
+   For example, `--chunksize 128MB`.
+
+* `--reduce-interval`:
+  Controls progress report frequency. The default is 10 seconds.
 
 
 
 ## PERFORMANCE CONSIDERATIONS
 
-**fcp** performance is subject to the bandwidth and conditions of source file
-system, storage area network, and destination file system, as well as number
-of process and nodes involved in the transfer. More processes per node is not
-necessarily better due to metadata performance and potential contentions. A
-rule of thumb is to match or halve the number of physical cores per transfer
-node. 
 
-Both checksum and dataset signature options have performance implications. It
-requires **fcp** to calculate the checksums of each chunk/file for both source
-and destination. It also involves read-back from destination. The bookkeepings
-increases the memory usage as well. Therefore, for large scale data transfer,
-a _fat_ node is often needed.
+**fcp** performance is subject to the bandwidth and conditions of the source file
+system, the storage area network, the destination file system, and
+the number of processes and nodes involved in the transfer. Using more
+processes per node does not necessarily result in better performance due to an
+increase in the number of metadata operations as well as additional contention
+generated from a larger number of processes. A rule of thumb is to match or
+halve the number of physical cores per transfer node.
+
+Both post copy verification (`--verify`) and dataset signature (`--signature`)
+options have performance implications. When turned on, **fcp** calculates the
+checksums of each chunk/file for both source and destination, in addition to
+reading back from destination. This increases both the amount of bookkeeping
+and memory usage. Therefore, for large scale data transfers, a large memory
+node is recommended.
 
 
 ## AUTHOR

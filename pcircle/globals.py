@@ -36,11 +36,12 @@ class G:
     preserve = False
     DB_BUFSIZE = 10000
     totalsize = 0
-    real_src = None
-    real_dest = None
+    src = None
+    dest = None
     args_src = None
     args_dest = None
     resume = None
     reduce_interval = 10
     verbosity = 0
     am_root = False
+    copytype = 'dir2dir'

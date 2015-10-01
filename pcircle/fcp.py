@@ -19,7 +19,6 @@ import cPickle as pickle
 from collections import Counter
 from lru import LRU
 from threading import Thread
-
 from mpi4py import MPI
 
 import utils
@@ -35,6 +34,7 @@ from globals import G
 from dbstore import DbStore
 from dbsum import MemSum
 from fsum import export_checksum2
+from fdef import FileItem
 from _version import get_versions
 from mpihelper import ThrowingArgumentParser, parse_and_bcast
 
@@ -52,9 +52,9 @@ dmsg = {"rank": "rank %s" % comm.rank}
 log = utils.getLogger(__name__)
 
 
-def err_and_exit(msg, code):
+def err_and_exit(msg, code=0):
     if comm.rank == 0:
-        print("\n%s" % msg)
+        print("\n%s\n" % msg)
     MPI.Finalize()
     sys.exit(0)
 
@@ -78,7 +78,7 @@ def gen_parser():
     parser.add_argument("-i", "--cpid", metavar="ID", default=None, help="checkpoint file id, default: timestamp")
     parser.add_argument("-r", "--rid", dest="rid", metavar="ID", help="resume ID, required in resume mode")
     parser.add_argument("--pause", metavar="s", type=int, help="pause a delay (seconds) after copy, test only")
-    parser.add_argument("src", help="copy from")
+    parser.add_argument("src", nargs='+', help="copy from")
     parser.add_argument("dest", help="copy to")
 
     return parser
@@ -107,8 +107,7 @@ class FCP(BaseTask):
         self.workq = workq
         self.resume = resume
         self.checkpoint_file = None
-        self.src = os.path.abspath(src)
-        self.srcbase = os.path.basename(src)
+        self.src = src
         self.dest = os.path.abspath(dest)
 
         # cache, keep the size conservative
@@ -192,14 +191,14 @@ class FCP(BaseTask):
         if os.path.exists(fwalk):
             os.remove(fwalk)
 
-    def new_fchunk(self, f):
+    def new_fchunk(self, fitem):
         fchunk = FileChunk()  # default cmd = copy
-        fchunk.src = f.path
-        fchunk.dest = destpath(self.src, self.dest, f.path)
+        fchunk.src = fitem.path
+        fchunk.dest = destpath(fitem, self.dest)
         return fchunk
 
     def enq_file(self, fi):
-        """ Process a single file, represented by "fi" - file item
+        """ Process a single file, represented by "fi" - FileItem
         It involves chunking this file and equeue all chunks. """
 
         chunks = fi.st_size / self.chunksize
@@ -237,7 +236,7 @@ class FCP(BaseTask):
 
     def handle_fitem(self, fi):
         if os.path.islink(fi.path):
-            dest = destpath(self.src, self.dest, fi.path)
+            dest = destpath(fi, self.dest)
             linkto = os.readlink(fi.path)
             try:
                 os.symlink(linkto, dest)
@@ -522,30 +521,86 @@ def check_dbstore_resume_condition(rid):
     return chk_full, db_full
 
 
-def check_path(isrc, idest):
-    """ verify and return target destination"""
-    isrc = os.path.abspath(isrc)
+def check_source_and_target(isrc, idest):
+    """ verify and return target destination, isrc is iterable, idest is not.
+    """
+    checked_src = []
+    checked_dup = set()
+
+    is_dest_exist, is_dest_dir, is_dest_file, is_dest_parent_ok = False, False, False, False
+
     idest = os.path.abspath(idest)
 
-    if os.path.exists(isrc) and os.path.isfile(isrc):
-        err_and_exit("Error: source [%s] is a file, directory required" % isrc, 0)
+    if os.path.exists(idest):
+        if not os.access(idest, os.W_OK):
+            err_and_exit("Destination is not accessible", 0)
+        is_dest_exist = True
+        if os.path.isfile(idest):
+            is_dest_file = True
+        elif os.path.isdir(idest):
+            is_dest_dir = True
+    else:
+        # idest doesn't exits at this point
+        # we check if its parent exists
+        dest_parent = os.path.dirname(idest)
 
-    if os.path.exists(idest) and os.path.isfile(idest):
-        err_and_exit("Error: destination [%s] is a file, directory required" % idest, 0)
+        if not (os.path.exists(dest_parent) and os.access(dest_parent, os.W_OK)):
+            err_and_exit("Error: destination [%s] is not accessible" % dest_parent, 0)
+        is_dest_parent_ok = True
 
-    if not os.path.exists(isrc) or not os.access(isrc, os.R_OK):
-        err_and_exit("source directory %s is not readable" % isrc, 0)
+    for ele in isrc:
+        elepath = os.path.abspath(ele)
+        elefi = FileItem(elepath)
+        elefi.dirname = os.path.dirname(elepath) # save dirname for proper dest construction
+        elebase = os.path.basename(elepath)
+        if elebase in checked_dup:
+            err_and_exit("Error: source name conflict detected: [%s]" % elepath)
+        checked_dup.add(elebase)
 
-    if os.path.exists(idest) and not (args.force or args.rid):
-        err_and_exit("Destination [%s] exists, will not overwrite!" % idest, 0)
+        if os.path.exists(elepath) and os.access(elepath, os.R_OK):
+            checked_src.append(elefi)
+        else:
+            err_and_exit("Error: source [%s] doesn't exist or not accessible." % ele, 0)
 
-    # idest doesn't exits at this point
-    # we check if its parent exists
-    dest_parent = os.path.dirname(idest)
+    if len(checked_src) == 0:
+        err_and_exit("Error, no valid input", 0)
+    elif len(checked_src) == 1 and os.path.isfile(checked_src[0].path):
+        if is_dest_exist:
+            if is_dest_file and args.force:
+                try:
+                    os.remove(idest)
+                except OSError as e:
+                    err_and_exit("Error: can't overwrite %s" % idest, 0)
+                else:
+                    G.copytype = 'file2file'
+            elif is_dest_dir:
+                G.copytype = "file2dir"
+        elif is_dest_parent_ok:
+            G.copytype = 'file2file'
+        else:
+            err_and_exit("Error: can't detect correct copy type!", 0)
+    elif len(checked_src) == 1 and not is_dest_exist:
+        G.copytype = "dir2dir"
+    elif len(checked_src) == 1 and is_dest_dir:
+        if not args.force:
+            err_and_exit("Error: destination [%s] exists, will not overwrite!" % idest)
+        else:
+            G.copytype = "dir2dir"
+    else:
+        # multiple sources, destination must be directory
 
-    if not (os.path.exists(dest_parent) and os.access(dest_parent, os.W_OK)):
-        err_and_exit("Error: destination [%s] is not accessible" % dest_parent, 0)
+        if not os.path.exists(idest):
+            err_and_exit("Error: target directory %s doesn't exist!" % idest)
 
+        if os.path.exists(idest) and os.path.isfile(idest):
+            err_and_exit("Error: destination [%s] is a file, directory required" % idest, 0)
+
+        # if is_dest_exist and not (args.force or args.rid):
+        #     err_and_exit("Destination [%s] exists, will not overwrite!" % idest, 0)
+
+        G.copytype = "file2dir"
+
+    return checked_src, idest
 
 def set_chunksize(pcp, tsz):
     if args.adaptive:
@@ -603,11 +658,9 @@ def fcp_start():
     global circle, fcp, treewalk
 
     workq = None  # if fresh start, workq is None
-    src = os.path.realpath(os.path.abspath(args.src))
-    dest = os.path.abspath(args.dest)
 
     if not args.rid: # if not in recovery
-        treewalk = FWalk(circle, src, dest, force=args.force)
+        treewalk = FWalk(circle, G.src, G.dest, force=args.force)
         circle.begin(treewalk)
         circle.finalize()
         G.totalsize = treewalk.epilogue()
@@ -615,7 +668,7 @@ def fcp_start():
         workq = prep_recovery()
 
     circle = Circle()
-    fcp = FCP(circle, src, dest,
+    fcp = FCP(circle, G.src, G.dest,
               treewalk=treewalk,
               totalsize=G.totalsize,
               verify=args.verify,
@@ -845,7 +898,7 @@ def main():
     if args.signature:  # with signature implies doing verify as well
         args.verify = True
 
-    check_path(args.src, args.dest)
+    G.src, G.dest = check_source_and_target(args.src, args.dest)
     dbname = get_workq_name()
 
     circle = Circle()
@@ -863,7 +916,7 @@ def main():
         print("Running Parameters:\n")
         print("\t{:<25}{:<20}".format("Starting at:", utils.current_time()))
         print("\t{:<25}{:<20}".format("FCP version:", __version__))
-        print("\t{:<25}{:<20}".format("Source:", os.path.abspath(args.src)))
+        print("\t{:<25}{:<20}".format("Source:", utils.choplist(G.src)))
         print("\t{:<25}{:<20}".format("Destination:", os.path.abspath(args.dest)))
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Num of Hosts:", num_of_hosts, "|",
             "Num of Processes:", comm.size))
@@ -873,6 +926,11 @@ def main():
             "Stripe Preserve:", "%r" % G.preserve))
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
             "Checkpoint ID:", "%s" % args.cpid))
+
+        #
+        if args.verbosity > 0:
+            print("\t{:<25}{:<20}".format("Copy Mode:", G.copytype))
+
 
     fcp_start()
 

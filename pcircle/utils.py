@@ -10,6 +10,7 @@ import datetime
 import argparse
 
 from pcircle.globals import G
+from pcircle.fdef import FileItem
 
 __author__ = 'Feiyi Wang'
 
@@ -38,21 +39,34 @@ def current_time():
     return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
 
 
-def destpath(srcdir, destdir, srcfile):
+def destpath(fitem, dest):
     """
-    srcdir -> source path
-    destdir -> destination path
-    srcfile -> full source file path
     return the destination file path
     """
-    destbase = os.path.basename(destdir)
-    rpath = os.path.relpath(srcfile, start=srcdir)
+    full_dest_path = None
 
-    if rpath == ".":
-        return destdir
+    if G.copytype == "dir2dir":
+        # We use original source path as the relative start
+        rpath = os.path.relpath(fitem.path, start=G.src[0].path)
+        if rpath == ".":
+            full_dest_path = dest
+        else:
+            full_dest_path = dest + "/" + rpath
+
+    elif G.copytype == "file2file":
+        full_dest_path = dest
+    elif G.copytype == "file2dir":
+        if fitem.dirname:
+            rpath = os.path.relpath(fitem.path, start=fitem.dirname)
+        else:
+            rpath = os.path.basename(fitem.path)
+
+        full_dest_path = dest + "/" + rpath
+
     else:
-        return destdir + "/" + rpath
+        raise ValueError("Can't handle copy type: %s" % G.copytype)
 
+    return full_dest_path
 
 def conv_unit(s):
     """ convert a unit to number """
@@ -245,3 +259,40 @@ def calc_chunksize(totalsz):
         chunksize = 512 * MB
 
     return chunksize
+
+
+def check_src(infiles, mode=os.R_OK):
+    """ check validity of infiles iterable, throw ValueException
+    """
+    ret = []
+    for ele in infiles:
+        # set up "dirname" for FileItem, so later we know how to construct
+        # destination path when in "file2dir" mode
+        elepath = os.path.abspath(ele)
+        elefi = FileItem(elepath)
+        elefi.dirname = os.path.dirname(elepath)
+
+        if os.path.exists(elepath) and os.access(elepath, mode):
+            ret.append(elefi)
+        else:
+            raise ValueError(ele)
+
+    return ret
+
+
+def choplist(alist, num=2):
+    """ alist: a list of FileItem(s)
+    chop and return a string for proper display
+    """
+    if len(alist) > num:
+        chop = alist[:num]
+    else:
+        chop = alist
+
+    buf =  ", ".join([fi.path for fi in alist])
+
+    if len(alist) > num:
+        buf += " ..."
+
+    return buf
+

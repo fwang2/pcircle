@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from __future__ import print_function
+
+# Disable auto init
+# from mpi4py import rc
+# rc.initialize = False
 from mpi4py import MPI
+
 from scandir import scandir
 import stat
 import os
@@ -29,11 +34,19 @@ taskloads = []
 bins = None
 comm = MPI.COMM_WORLD
 
+
+def err_and_exit(msg, code=0):
+    if comm.rank == 0:
+        print("\n%s" % msg)
+    MPI.Finalize()
+    sys.exit(0)
+
+
 def gen_parser():
     parser = ThrowingArgumentParser(description="fwalk")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--loglevel", default="ERROR", help="log level")
-    parser.add_argument("path", default=".", help="path")
+    parser.add_argument("path", nargs='+', default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     parser.add_argument("-s", "--stats", action="store_true", help="collects stats")
@@ -106,7 +119,7 @@ class FWalk(BaseTask):
             self.flist = DbStore(self.dbname)
             self.flist_buf = []
         else:
-            self.flist = []  # element is (filepath, filemode, filesize, uid, gid)
+            self.flist = []
         self.src_flist = self.flist
 
         # hold unlinkable dest directories
@@ -128,7 +141,8 @@ class FWalk(BaseTask):
 
     def create(self):
         if self.circle.rank == 0:
-            self.circle.enq(FileItem(self.src))
+            for ele in self.src:
+                self.circle.enq(ele)
             print("\nAnalyzing workload ...")
 
     def copy_xattr(self, src, dest):
@@ -144,14 +158,16 @@ class FWalk(BaseTask):
         if len(self.flist_buf) != 0:
             self.flist.mput(self.flist_buf)
 
-    def process_dir(self, i_dir, st):
+    def process_dir(self, fitem, st):
         """ i_dir should be absolute path
         st is the stat object associated with the directory
         """
+        i_dir = fitem.path
+
         if self.dest:
             # we create destination directory
             # but first we check if we need to change mode for it to work
-            o_dir = destpath(self.src, self.dest, i_dir)
+            o_dir = destpath(fitem, self.dest)
             mode = st.st_mode
             if not (st.st_mode & stat.S_IWUSR):
                 mode = st.st_mode | stat.S_IWUSR
@@ -173,9 +189,11 @@ class FWalk(BaseTask):
             self.skipped += 1
         else:
             for entry in entries:
-                # entry.path should be equivalent to:
-                # self.circle.enq(FileItem(os.path.join(i_dir, entry.name)))
-                self.circle.enq(FileItem(entry.path))
+                elefi = FileItem(entry.path)
+                if fitem.dirname:
+                    elefi.dirname = fitem.dirname
+                self.circle.enq(elefi)
+
                 count += 1
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, i_dir, count))
@@ -254,9 +272,7 @@ class FWalk(BaseTask):
                 self.skipped += 1
                 return False
 
-            fitem = FileItem(spath, st_mode=st.st_mode,
-                             st_size=st.st_size, st_uid=st.st_uid, st_gid=st.st_gid)
-
+            fitem.st_mode, fitem.st_size, fitem.st_uid, fitem.st_gid = st.st_mode, st.st_size, st.st_uid, st.st_gid
             self.reduce_items += 1
 
             if os.path.islink(spath):
@@ -273,7 +289,7 @@ class FWalk(BaseTask):
                     self.append_fitem(fitem)
                 else:
                     # self.dest specified, need to check if it is there
-                    dpath = destpath(self.src, self.dest, spath)
+                    dpath = destpath(fitem, self.dest)
                     flag = self.check_dest_exists(spath, dpath)
                     if flag:
                         return
@@ -288,7 +304,7 @@ class FWalk(BaseTask):
 
             elif stat.S_ISDIR(st.st_mode):
                 self.cnt_dirs += 1
-                self.process_dir(spath, st)
+                self.process_dir(fitem, st)
                 # END OF if spath
 
     def tally(self, t):
@@ -367,16 +383,14 @@ class FWalk(BaseTask):
 def main():
     global comm, args
     args = parse_and_bcast(comm, gen_parser)
+
+    try:
+        G.src = utils.check_src(args.path)
+    except ValueError as e:
+        err_and_exit("Error: %s not accessible" % e)
+
     G.use_store = args.use_store
     G.loglevel = args.loglevel
-    root = os.path.abspath(args.path)
-    root = os.path.realpath(root)
-
-    if not os.path.exists(root):
-        if comm.rank == 0:
-            print("Root path: %s doesn't exist!" % root)
-        MPI.Finalize()
-        sys.exit(0)
 
     hosts_cnt = tally_hosts()
 
@@ -385,10 +399,10 @@ def main():
         print("\t{:<20}{:<20}".format("FWALK version:", __version__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
-        print("\t{:<20}{:<20}".format("Root path:", root))
+        print("\t{:<20}{:<20}".format("Root path:", utils.choplist(G.src)))
 
     circle = Circle()
-    treewalk = FWalk(circle, root)
+    treewalk = FWalk(circle, G.src)
     circle.begin(treewalk)
 
     if G.use_store:

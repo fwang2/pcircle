@@ -32,16 +32,24 @@ __version__ = get_versions()['version']
 args = None
 comm = MPI.COMM_WORLD
 
+
 def sig_handler(signum, sigstack):
     print("\tUser cancelled ... cleaning up")
     sys.exit(1)
+
+
+def err_and_exit(msg, code=0):
+    if comm.rank == 0:
+        print("\n%s" % msg)
+    MPI.Finalize()
+    sys.exit(0)
 
 
 def gen_parser():
     parser = ThrowingArgumentParser(description="fsum")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--loglevel", default="error", help="log level, default: ERROR")
-    parser.add_argument("path", default=".", help="path")
+    parser.add_argument("path", nargs='+', default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
     parser.add_argument("--chunksize", help="chunk size (K, M, G, T)")
@@ -281,12 +289,16 @@ def main():
     signal.signal(signal.SIGINT, sig_handler)
     args = parse_and_bcast(comm, gen_parser)
 
+    try:
+        G.src = utils.check_src(args.path)
+    except ValueError as e:
+        err_and_exit("Error: %s not accessible" % e)
+
     G.loglevel = args.loglevel
     G.use_store = args.use_store
     G.reduce_interval = args.interval
 
-    root = os.path.abspath(args.path)
-    root = os.path.realpath(root)
+
 
     hosts_cnt = tally_hosts()
     circle = Circle()
@@ -296,9 +308,9 @@ def main():
         print("\t{:<20}{:<20}".format("FSUM version:", __version__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
-        print("\t{:<20}{:<20}".format("Root path:", root))
+        print("\t{:<20}{:<20}".format("Root path:", utils.choplist(G.src)))
 
-    fwalk = FWalk(circle, root)
+    fwalk = FWalk(circle, G.src)
     circle.begin(fwalk)
     if G.use_store:
         fwalk.flushdb()
@@ -333,7 +345,7 @@ def main():
             f.write("sha1: %s\n" % sha1val)
             f.write("chunksize: %s\n" % chunksize)
             f.write("fwalk version: %s\n" % __version__)
-            f.write("src: %s\n" % root)
+            f.write("src: %s\n" % utils.choplist(G.src))
             f.write("date: %s\n" % utils.current_time())
             f.write("totalsize: %s\n" % totalsize)
 

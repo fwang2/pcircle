@@ -17,12 +17,10 @@ class FileItem(CommonEqualityMixin):
         self.st_size = st_size
         self.st_uid = st_uid
         self.st_gid = st_gid
-
-    def __str__(self):
-        return ",".join([self.path, str(self.st_mode), str(self.st_size)])
+        self.dirname = None
 
     def __repr__(self):
-        return "FileItem: " + self.__str__()
+        return "FileItem:" + ",".join([self.path, str(self.st_mode), str(self.st_size)])
 
     def key(self):
         return self.path

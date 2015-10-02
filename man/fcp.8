@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "FCP" "8" "September 2015" "" ""
+.TH "FCP" "8" "October 2015" "" ""
 .
 .SH "NAME"
 \fBfcp\fR \- A Scalable Parallel Data Copy Tool
@@ -10,21 +10,24 @@
 .
 .nf
 
-fcp [\-\-version] [\-c] [\-s] [\-p] [\-f] src_dir dest_dir
+fcp file1 file2
+fcp file1 file2 file3 \.\.\. target_directory
+fcp src_dir dest_dir
+
 mpirun \-np 8 fcp \.\.\.
 .
 .fi
 .
 .SH "DESCRIPTION"
-\fBfcp\fR is a program designed to do large\-scale parallel data transfer from source directory to destination directory across \fIlocally\fR mounted file systems\. It is not designed for wide area data transfer such as ftp, bbcp, or globus\-ftp\. In that sense, it is closer to \fBcp\fR\. One crucial difference from regular \fBcp\fR, is that the required arguments of source and destination must be directories\. \fBfcp\fR does do sanity check and will fail if these conditions can not be met\. In the most general case, \fBfcp\fR works in two stages: first it analyzes the workload by parallel walking the tree; second it parallelize the job of data copy\. The following options are available:
+\fBfcp\fR is a program designed to do large\-scale parallel data transfer across \fIlocally\fR mounted file systems\. It is not for wide area data transfers such as ftp, bbcp, or grid\-ftp\. In that sense, it is closer to \fBcp\fR\. Generally speaking, \fBfcp\fR works in two stages: first it analyzes the workload by walking the tree in parallel; and then it parallelizes the data copy operation, all based on a highly efficient and self\-balanced parallelization engine\. \fBfcp\fR supports the following options:
 .
 .TP
 \fB\-p\fR, \fB\-\-preserve\fR
-This option will preserve the metadata attributes\. In the case of Lustre, the striping information is kept\.
+Preserve metadata attributes\. In the case of Lustre, the striping information is kept\.
 .
 .TP
 \fB\-f\fR, \fB\-\-force\fR
-With this option, \fBfcp\fR will overwrite the destination\. The default is off\.
+Overwrite the destination directory\. The default is off\.
 .
 .TP
 \fB\-\-verify\fR
@@ -32,21 +35,21 @@ Perform checksum\-based verification after the copy\.
 .
 .TP
 \fB\-s\fR, \fB\-\-signature\fR
-Generate a single checksum signature for the entire dataset\. This option currently implies \fB\-\-verify\fR for post\-copy verification\.
-.
-.TP
-\fB\-\-reduce\-interval\fR
-\fBfcp\fR by default will provide progress report\. This option controls the frequency\. The default is 10 seconds\.
+Generate a single sha1 signature for the entire dataset\. This option also implies \fB\-\-verify\fR for post\-copy verification\.
 .
 .TP
 \fB\-\-chunksize sz\fR
-\fBfcp\fR will break up large files into pieces to increase parallelism\. This option can force upon a certain size\. By default, \fBfcp\fR adaptively set the chunk size based on the overall size of the workload\.
+\fBfcp\fR will break up large files into pieces to increase parallelism\. By default, \fBfcp\fR adaptively sets the chunk size based on the overall size of the workload\. Use this option to specify a particular chunk size in KB, MB\. For example, \fB\-\-chunksize 128MB\fR\.
+.
+.TP
+\fB\-\-reduce\-interval\fR
+Controls progress report frequency\. The default is 10 seconds\.
 .
 .SH "PERFORMANCE CONSIDERATIONS"
-\fBfcp\fR performance is subject to the bandwidth and conditions of source file system, storage area network, and destination file system, as well as number of process and nodes involved in the transfer\. More processes per node is not necessarily better due to metadata performance and potential contentions\. A rule of thumb is to match or halve the number of physical cores per transfer node\.
+\fBfcp\fR performance is subject to the bandwidth and conditions of the source file system, the storage area network, the destination file system, and the number of processes and nodes involved in the transfer\. Using more processes per node does not necessarily result in better performance due to an increase in the number of metadata operations as well as additional contention generated from a larger number of processes\. A rule of thumb is to match or halve the number of physical cores per transfer node\.
 .
 .P
-Both checksum and dataset signature options have performance implications\. It requires \fBfcp\fR to calculate the checksums of each chunk/file for both source and destination\. It also involves read\-back from destination\. The bookkeepings increases the memory usage as well\. Therefore, for large scale data transfer, a \fIfat\fR node is often needed\.
+Both post copy verification (\fB\-\-verify\fR) and dataset signature (\fB\-\-signature\fR) options have performance implications\. When turned on, \fBfcp\fR calculates the checksums of each chunk/file for both source and destination, in addition to reading back from destination\. This increases both the amount of bookkeeping and memory usage\. Therefore, for large scale data transfers, a large memory node is recommended\.
 .
 .SH "AUTHOR"
 Feiyi Wang (fwang2@ornl\.gov)

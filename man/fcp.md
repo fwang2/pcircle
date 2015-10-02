@@ -2,21 +2,21 @@ fcp(8) - A Scalable Parallel Data Copy Tool
 ================================================================
 
 ## SYNOPSIS
-
-    fcp [--version] [-c] [-s] [-p] [-f] src_dir dest_dir
+    fcp file1 file2
+    fcp file1 file2 file3 ... target_directory
+    fcp src_dir dest_dir
+    
     mpirun -np 8 fcp ...
 
 ## DESCRIPTION
 
-**fcp** is a program designed to do large-scale parallel data transfer from
-a source directory to a destination directory across _locally_ mounted file
-systems. It is not for wide area data transfers such as ftp, bbcp, or
-globus-ftp. In that sense, it is closer to **cp**. One crucial difference
-from regular **cp**, is that **fcp** requires the source and
-destination to be directories.  **fcp** will fail if these conditions are not
-met.  In the most general case, **fcp** works in two stages: first it analyzes
-the workload by walking the tree in parallel; and then it parallelizes the data
-copy operation.  **fcp** supports the following options:
+**fcp** is a program designed to do large-scale parallel data transfer across
+_locally_ mounted file systems. It is not for wide area data transfers such as
+ftp, bbcp, or grid-ftp. In that sense, it is closer to **cp**. Generally
+speaking, **fcp** works in two stages: first it analyzes the workload by
+walking the tree in parallel; and then it parallelizes the data copy
+operation, all based on a highly efficient and self-balanced parallelization
+engine.  **fcp** supports the following options:
 
 
 * `-p`, `--preserve`:

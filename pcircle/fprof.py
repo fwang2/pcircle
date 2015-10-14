@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from __future__ import print_function
+"""
+fprof: a specialized version of parallel tree walk
+designed to profile file size distribution at extreme scale.
+"""
+
+__author__ = "Feiyi Wang"
+__email__ = "fwang2@ornl.gov"
+
 
 # Disable auto init
 # from mpi4py import rc
@@ -15,6 +23,7 @@ import sys
 import argparse
 import xattr
 import numpy as np
+import bisect
 
 from task import BaseTask
 from circle import Circle
@@ -31,7 +40,7 @@ __version__ = get_versions()['version']
 args = None
 log = getLogger(__name__)
 taskloads = []
-bins = None
+hist = [0] * (len(G.bins) + 1)
 comm = MPI.COMM_WORLD
 
 
@@ -43,63 +52,40 @@ def err_and_exit(msg, code=0):
 
 
 def gen_parser():
-    parser = ThrowingArgumentParser(description="fwalk")
+    parser = ThrowingArgumentParser(description="fprof - a parallel file system profiler")
     parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("path", nargs='+', default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
-    parser.add_argument("--use-store", action="store_true", help="Use persistent store")
-    parser.add_argument("-s", "--stats", action="store_true", help="collects stats")
-    parser.add_argument("-t", "--top", type=int, default=10, help="Top files (10)")
-
+    parser.add_argument("--perfile", action="store_true", help="Save perfile file size")
     return parser
 
 
-def local_histogram(flist):
-    """ A list FileItems, build np array  """
-    global bins
-    b4k = 4 * 1024
-    b64k = 64 * 1024
-    b512k = 512 * 1024
-    b1m = 1024 *1024
-    b4m = 4 * b1m
-    b16m = 16 * b1m
-    b512m = 512 * b1m
-    b1g = 2 * b512m
-    b100g = 100 * b1g
-    b512g = 512 * b1g
-    b1tb = 1024 * b1g
-    bins = [ 0, b4k, b64k,b512k, b1m, b4m, b16m, b512m, b1g, b512g, b1tb]
-    fsizes = [f.st_size for f in flist]
-    arr = np.array(fsizes)
-    hist, _ = np.histogram(arr, bins)
-    return hist
+def incr_local_histogram(fsz):
+    """ incremental histogram  """
+    global hist
+    idx = bisect.bisect_right(G.bins, fsz) # (left, right)
+    hist[idx] += 1
 
 
 def global_histogram(treewalk):
-    all_hist = None
-    local_hist = local_histogram(treewalk.flist)
-    all_hist = comm.gather(local_hist)
+    global hist
+    hist = np.array(hist)  # switch to array format
+    all_hist = comm.gather(hist)
     if comm.rank == 0:
-        local_hist = sum(all_hist)
-    return local_hist
+        hist = sum(all_hist)
 
 
-class FWalk(BaseTask):
+class ProfileWalk(BaseTask):
 
-    def __init__(self, circle, src, dest=None, preserve=False, force=False):
+    def __init__(self, circle, src, perfile=True):
         BaseTask.__init__(self, circle)
 
         self.d = {"rank": "rank %s" % circle.rank}
         self.circle = circle
         self.src = src
-        self.dest = dest
-        self.force = force
         self.interval = 10  # progress report
 
-        # For now, I am setting the option
-        # TODO: should user allowed to meddle this?
-        self.sizeonly = False
         self.checksum = False
 
         # to be fixed
@@ -109,22 +95,10 @@ class FWalk(BaseTask):
         self.sym_links = 0
         self.follow_sym_links = False
 
-        self.workdir = os.getcwd()
-        self.tempdir = os.path.join(self.workdir, ".pcircle")
-        if not os.path.exists(self.tempdir):
-            os.mkdir(self.tempdir)
-
-        if G.use_store:
-            self.dbname = "%s/fwalk.%s" % (self.tempdir, circle.rank)
-            self.flist = DbStore(self.dbname)
-            self.flist_buf = []
-        else:
-            self.flist = []
-        self.src_flist = self.flist
-
-        # hold unlinkable dest directories
-        # we have to do the --fix-opt at the end
-        self.dest_dirs = []
+        self.outfile = None
+        if perfile:
+            tmpfile = os.path.join(os.getcwd(), "fprof-perfile.%s" % circle.rank)
+            self.outfile = open(tmpfile, "w+")
 
         self.cnt_dirs = 0
         self.cnt_files = 0
@@ -143,43 +117,14 @@ class FWalk(BaseTask):
         if self.circle.rank == 0:
             for ele in self.src:
                 self.circle.enq(ele)
-            print("\nAnalyzing workload ...")
+            print("\nStart profiling ...")
 
-    def copy_xattr(self, src, dest):
-        attrs = xattr.listxattr(src)
-        for k in attrs:
-            try:
-                val = xattr.getxattr(src, k)
-                xattr.setxattr(dest, k, val)
-            except IOError as e:
-                log.warn(e, extra=self.d)
-
-    def flushdb(self):
-        if len(self.flist_buf) != 0:
-            self.flist.mput(self.flist_buf)
 
     def process_dir(self, fitem, st):
         """ i_dir should be absolute path
         st is the stat object associated with the directory
         """
         i_dir = fitem.path
-
-        if self.dest:
-            # we create destination directory
-            # but first we check if we need to change mode for it to work
-            o_dir = destpath(fitem, self.dest)
-            mode = st.st_mode
-            if not (st.st_mode & stat.S_IWUSR):
-                mode = st.st_mode | stat.S_IWUSR
-                self.opt_dir_list.append((o_dir, st))
-            try:
-                os.mkdir(o_dir, mode)
-            except OSError as e:
-                log.debug("mkdir(): %s" % e, extra=self.d)
-
-            if G.preserve:
-                self.copy_xattr(i_dir, o_dir)
-
         last_report = MPI.Wtime()
         count = 0
         try:
@@ -200,63 +145,6 @@ class FWalk(BaseTask):
                     last_report = MPI.Wtime()
             log.info("Finish scan of [%s], count=%s" % (i_dir, count), extra=self.d)
 
-    def do_metadata_preserve(self, src_file, dest_file, st):
-        """ create file node, copy attribute if needed."""
-        if sys.platform == "darwin":  # Mac OS mknod() not permitted
-            return
-
-        try:
-            mode = st.st_mode
-            if not (st.st_mode & stat.S_IWUSR):
-                # owner can't write, we will change mode first
-                # then put it in optlist to fix
-                mode = st.st_mode | stat.S_IWUSR
-                self.optlist.append((dest_file,st))
-            os.mknod(dest_file, mode)  # -r-r-r special
-        except OSError as e:
-            log.warn("mknod(): for %s, %s" % (dest_file, e), extra=self.d)
-            return
-
-        if G.preserve:
-            self.copy_xattr(src_file, dest_file)
-
-    def check_dest_exists(self, src_file, dest_file):
-        """ return True if dest exists and checksum verified correct
-            return False if (1) no overwrite (2) destination doesn't exist
-        """
-        if not self.force:
-            return False
-
-        if not os.path.exists(dest_file):
-            return False
-
-        # well, destination exists, now we have to check
-        if self.sizeonly:
-            if os.path.getsize(src_file) == os.path.getsize(dest_file):
-                log.warn("Check sizeonly Okay: src: %s, dest=%s" % (src_file, dest_file),
-                                 extra=self.d)
-                return True
-        elif self.checksum:
-            raise NotImplementedError("Checksum comparison")
-
-        try:
-            os.unlink(dest_file)
-        except OSError as e:
-            log.warn("Can't unlink %s" % dest_file, extra=self.d)
-        else:
-            log.info("Retransfer: %s" % src_file, extra=self.d)
-
-        return False
-
-    def append_fitem(self, fitem):
-        if G.use_store:
-            self.flist_buf.append(fitem)
-            if len(self.flist_buf) == G.DB_BUFSIZE:
-                self.flist.mput(self.flist_buf)
-                del self.flist_buf[:]
-
-        else:
-            self.flist.append(fitem)
 
     def process(self):
         """ process a work unit, spath, dpath refers to
@@ -272,33 +160,18 @@ class FWalk(BaseTask):
                 self.skipped += 1
                 return False
 
-            fitem.st_mode, fitem.st_size, fitem.st_uid, fitem.st_gid = st.st_mode, st.st_size, st.st_uid, st.st_gid
+            fitem.st_size = st.st_size
             self.reduce_items += 1
 
             if os.path.islink(spath):
-                self.append_fitem(fitem)
                 self.sym_links += 1
-                # if not self.follow_sym_links:
                 # NOT TO FOLLOW SYM LINKS SHOULD BE THE DEFAULT
                 return
 
             if stat.S_ISREG(st.st_mode):
-
-                if not self.dest:
-                    # fwalk without destination, simply add to process list
-                    self.append_fitem(fitem)
-                else:
-                    # self.dest specified, need to check if it is there
-                    dpath = destpath(fitem, self.dest)
-                    flag = self.check_dest_exists(spath, dpath)
-                    if flag:
-                        return
-                    else:
-                        # if src and dest not the same
-                        # including the case dest is not there
-                        # then we do the following
-                        self.append_fitem(fitem)
-                        self.do_metadata_preserve(spath, dpath, st)
+                incr_local_histogram(st.st_size)
+                if self.outfile:
+                    self.outfile.write("%d\n" % st.st_size)
                 self.cnt_files += 1
                 self.cnt_filesize += fitem.st_size
 
@@ -315,8 +188,6 @@ class FWalk(BaseTask):
             self.cnt_files += 1
             self.cnt_filesize += t[2]
 
-    def summarize(self):
-        map(self.tally, self.flist)
 
     def reduce_init(self, buf):
         buf['cnt_files'] = self.cnt_files
@@ -338,7 +209,7 @@ class FWalk(BaseTask):
         # self.last_cnt = buf['cnt_files']
 
         rate = (buf['reduce_items'] - self.last_cnt) / (MPI.Wtime() - self.last_reduce_time)
-        print("Processed objects: %s, estimated processing rate: %d/s" % (buf['reduce_items'], rate))
+        print("Scanned files: %s, estimated processing rate: %d/s" % (buf['reduce_items'], rate))
         self.last_cnt = buf['reduce_items']
         self.last_reduce_time = MPI.Wtime()
 
@@ -361,7 +232,7 @@ class FWalk(BaseTask):
         self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
-            print("\nFWALK Epilogue:\n")
+            print("\nFprof epilogue:\n")
             print("\t{:<20}{:<20}".format("Directory count:", total_dirs))
             print("\t{:<20}{:<20}".format("Sym Links count:", total_symlinks))
             print("\t{:<20}{:<20}".format("File count:", total_files))
@@ -370,14 +241,14 @@ class FWalk(BaseTask):
             if total_files != 0:
                 print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
             print("\t{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
-            print("\tFWALK Loads: %s" % taskloads)
+            print("\tFprof loads: %s" % taskloads)
             print("")
 
         return total_filesize
 
     def cleanup(self):
-        if G.use_store:
-            self.flist.cleanup()
+        if self.outfile:
+            self.outfile.close()
 
 
 def main():
@@ -389,51 +260,43 @@ def main():
     except ValueError as e:
         err_and_exit("Error: %s not accessible" % e)
 
-    G.use_store = args.use_store
     G.loglevel = args.loglevel
 
     hosts_cnt = tally_hosts()
 
     if comm.rank == 0:
         print("Running Parameters:\n")
-        print("\t{:<20}{:<20}".format("FWALK version:", __version__))
+        print("\t{:<20}{:<20}".format("fprof version:", __version__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", utils.choplist(G.src)))
 
     circle = Circle()
-    treewalk = FWalk(circle, G.src)
+    treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 
-    if G.use_store:
-        treewalk.flushdb()
+    global_histogram(treewalk)
+    total = hist.sum()
+    bucket_scale = 0.5
+    if comm.rank == 0:
+        if total == 0:
+            err_and_exit("No histogram generated.\n")
 
-    if args.stats:
-        hist = global_histogram(treewalk)
-        total = hist.sum()
-        bucket_scale = 0.5
-        if comm.rank == 0:
-            print("\nFileset histograms:\n")
-            for idx, rightbound in enumerate(bins[1:]):
-                percent = 100 * hist[idx] / float(total)
-                star_count = int(bucket_scale * percent)
-                print("\t{:<3}{:<15}{:<8}{:<8}{:<50}".format("< ",
-                    utils.bytes_fmt(rightbound), hist[idx],
-                    "%0.2f%%" % percent, '∎' * star_count))
+        print("\nFileset histograms:\n")
+        for idx, rightbound in enumerate(G.bins):
+            percent = 100 * hist[idx] / float(total)
+            star_count = int(bucket_scale * percent)
+            print("\t{:<3}{:<15}{:<8}{:<8}{:<50}".format("< ",
+                utils.bytes_fmt(rightbound), hist[idx],
+                "%0.2f%%" % percent, '∎' * star_count))
 
-    if args.stats:
-        treewalk.flist.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
-        globaltops = comm.gather(treewalk.flist[:args.top])
-        if comm.rank == 0:
-            globaltops = [item for sublist in globaltops for item in sublist]
-            globaltops.sort(lambda f1, f2: cmp(f1.st_size, f2.st_size), reverse=True)
-            if len(globaltops) < args.top:
-                args.top = len(globaltops)
-            print("\nStats, top %s files\n" % args.top)
-            for i in xrange(args.top):
-                print("\t{:15}{:<30}".format(utils.bytes_fmt(globaltops[i].st_size),
-                      globaltops[i].path))
+        # special processing of last row
 
+        percent = 100 * hist[-1] / float(total)
+        star_count = int(bucket_scale * percent)
+        print("\t{:<3}{:<15}{:<8}{:<8}{:<50}".format(">= ",
+            utils.bytes_fmt(rightbound), hist[idx],
+            "%0.2f%%" % percent, '∎' * star_count))
     treewalk.epilogue()
     treewalk.cleanup()
     circle.finalize()

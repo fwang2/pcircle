@@ -45,3 +45,16 @@ class G:
     verbosity = 0
     am_root = False
     copytype = 'dir2dir'
+
+    b4k = 4 * 1024
+    b64k = 64 * 1024
+    b512k = 512 * 1024
+    b1m = 1024 *1024
+    b4m = 4 * b1m
+    b16m = 16 * b1m
+    b512m = 512 * b1m
+    b1g = 2 * b512m
+    b100g = 100 * b1g
+    b512g = 512 * b1g
+    b1tb = 1024 * b1g
+    bins = [b4k, b64k,b512k, b1m, b4m, b16m, b512m, b1g, b512g, b1tb]

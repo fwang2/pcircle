@@ -113,6 +113,9 @@ class ProfileWalk(BaseTask):
         self.time_started = MPI.Wtime()
         self.time_ended = None
 
+        # flush periodically
+        self.last_flush = MPI.Wtime()
+
     def create(self):
         if self.circle.rank == 0:
             for ele in self.src:
@@ -172,6 +175,9 @@ class ProfileWalk(BaseTask):
                 incr_local_histogram(st.st_size)
                 if self.outfile:
                     self.outfile.write("%d\n" % st.st_size)
+                    if (MPI.Wtime() - self.last_flush) > self.interval:
+                        self.outfile.flush()
+
                 self.cnt_files += 1
                 self.cnt_filesize += fitem.st_size
 

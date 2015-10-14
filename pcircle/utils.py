@@ -268,7 +268,7 @@ def check_src(infiles, mode=os.R_OK):
     for ele in infiles:
         # set up "dirname" for FileItem, so later we know how to construct
         # destination path when in "file2dir" mode
-        elepath = os.path.abspath(ele)
+        elepath = os.path.realpath(os.path.abspath(ele))
         elefi = FileItem(elepath)
         elefi.dirname = os.path.dirname(elepath)
 

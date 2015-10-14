@@ -38,6 +38,7 @@ import utils
 from _version import get_versions
 __version__ = get_versions()['version']
 args = None
+gpfs_blocks = None
 log = getLogger(__name__)
 taskloads = []
 hist = [0] * (len(G.bins) + 1)
@@ -58,6 +59,7 @@ def gen_parser():
     parser.add_argument("path", nargs='+', default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("--perfile", action="store_true", help="Save perfile file size")
+    parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
     return parser
 
 
@@ -75,6 +77,20 @@ def gather_histogram():
     if comm.rank == 0:
         hist = sum(all_hist)
 
+
+def gpfs_block_update(fsz, inodesz = 4096):
+    if fsz > (inodesz - 128):
+        for idx, sub in enumerate(G.gpfs_subs):
+            blocks = fsz / sub + 1
+            G.gpfs_block_cnt[idx] += blocks
+
+
+def gather_gpfs_blocks():
+    global gpfs_blocks
+    local_blocks = np.array(G.gpfs_block_cnt)
+    all_blocks = comm.gather(local_blocks)
+    if comm.rank == 0:
+        gpfs_blocks = sum(all_blocks)
 
 class ProfileWalk(BaseTask):
 
@@ -173,6 +189,9 @@ class ProfileWalk(BaseTask):
 
             if stat.S_ISREG(st.st_mode):
                 incr_local_histogram(st.st_size)
+                if args.gpfs_block_alloc:
+                    gpfs_block_update(st.st_size)
+
                 if self.outfile:
                     self.outfile.write("%d\n" % st.st_size)
                     if (MPI.Wtime() - self.last_flush) > self.interval:
@@ -303,6 +322,16 @@ def main():
         print("\t{:<3}{:<15}{:<8}{:<8}{:<50}".format(">= ",
             utils.bytes_fmt(rightbound), hist[idx],
             "%0.2f%%" % percent, '∎' * star_count))
+
+    if args.gpfs_block_alloc:
+        gather_gpfs_blocks()
+        if comm.rank == 0:
+            print("\nGPFS Block Alloc Report:\n")
+            for idx, bsz in enumerate(G.gpfs_block_size):
+                totalsize = gpfs_blocks[idx] * G.gpfs_subs[idx]
+                print("\tBlocksize: {:<5} SubBlocks: {:10,} Estimated Space: {:<15s}".
+                      format(bsz, gpfs_blocks[idx],bytes_fmt(totalsize)))
+
     treewalk.epilogue()
     treewalk.cleanup()
     circle.finalize()

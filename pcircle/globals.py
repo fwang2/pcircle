@@ -66,3 +66,9 @@ class G:
     b512g = 512 * b1g
     b1tb = 1024 * b1g
     bins = [b4k, b8k, b16k, b32k, b64k, b256k, b512k, b1m, b4m, b16m, b512m, b1g, b100g, b256g, b512g, b1tb]
+
+    # GPFS
+    gpfs_block_size = ("256k", "512k", "b1m", "b4m", "b8m")
+    gpfs_block_cnt = [0, 0, 0, 0, 0]
+    gpfs_subs = (b256k/32, b512k/32, b1m/32, b4m/32, b8m/32)
+

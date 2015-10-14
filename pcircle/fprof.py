@@ -24,6 +24,7 @@ import argparse
 import xattr
 import numpy as np
 import bisect
+import resource
 
 from task import BaseTask
 from circle import Circle
@@ -134,6 +135,10 @@ class ProfileWalk(BaseTask):
         # flush periodically
         self.last_flush = MPI.Wtime()
 
+        # memory
+        self.mem_snapshot = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+
     def create(self):
         if self.circle.rank == 0:
             for ele in self.src:
@@ -224,12 +229,15 @@ class ProfileWalk(BaseTask):
         buf['cnt_dirs'] = self.cnt_dirs
         buf['cnt_filesize'] = self.cnt_filesize
         buf['reduce_items'] = self.reduce_items
+        buf['mem_snapshot'] = self.mem_snapshot
 
     def reduce(self, buf1, buf2):
         buf1['cnt_dirs'] += buf2['cnt_dirs']
         buf1['cnt_files'] += buf2['cnt_files']
         buf1['cnt_filesize'] += buf2['cnt_filesize']
         buf1['reduce_items'] += buf2['reduce_items']
+        buf1['mem_snapshot'] += buf2['mem_snapshot']
+
         return buf1
 
     def reduce_report(self, buf):
@@ -239,8 +247,10 @@ class ProfileWalk(BaseTask):
         # self.last_cnt = buf['cnt_files']
 
         rate = (buf['reduce_items'] - self.last_cnt) / (MPI.Wtime() - self.last_reduce_time)
-        print("Scanned files {:,}, estimated processing rate {:d}/s".format(buf['reduce_items'], int(rate)))
+        print("Scanned files {:,}, estimated processing rate {:d}/s, mem_snapshot: {}".format(buf['reduce_items'],
+                                                                int(rate), bytes_fmt(buf['mem_snapshot'])))
         self.last_cnt = buf['reduce_items']
+        self.mem_snapshot = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         self.last_reduce_time = MPI.Wtime()
 
     def reduce_finish(self, buf):

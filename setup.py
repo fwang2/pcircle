@@ -47,7 +47,8 @@ setuptools.setup(name='pcircle',
                          'fsum=pcircle.fsum:main',
                          'fcorruptor=pcircle.fcorruptor:main',
                          'fdiff=pcircle.fdiff:main',
-                         'fgen=pcircle.fgen:main'
+                         'fgen=pcircle.fgen:main',
+                         'fprof=pcircle.fprof.main'
                      ]
                  },
                  classifiers=[

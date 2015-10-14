@@ -215,7 +215,7 @@ class ProfileWalk(BaseTask):
         # self.last_cnt = buf['cnt_files']
 
         rate = (buf['reduce_items'] - self.last_cnt) / (MPI.Wtime() - self.last_reduce_time)
-        print("Scanned files: %s, estimated processing rate: %d/s" % (buf['reduce_items'], rate))
+        print("Scanned files {:,}, estimated processing rate {:d}/s".format(buf['reduce_items'], int(rate)))
         self.last_cnt = buf['reduce_items']
         self.last_reduce_time = MPI.Wtime()
 

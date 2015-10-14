@@ -81,7 +81,9 @@ def gather_histogram():
 def gpfs_block_update(fsz, inodesz = 4096):
     if fsz > (inodesz - 128):
         for idx, sub in enumerate(G.gpfs_subs):
-            blocks = fsz / sub + 1
+            blocks = fsz / sub
+            if fsz % sub != 0:
+                blocks += 1
             G.gpfs_block_cnt[idx] += blocks
 
 

@@ -10,7 +10,23 @@ class CommonEqualityMixin(object):
         return not self.__eq__(other)
 
 
+# class FileItem0(CommonEqualityMixin):
+#     def __init__(self, path, st_mode=0, st_size=0, st_uid=0, st_gid=0):
+#         self.path = path
+#         self.st_mode = st_mode
+#         self.st_size = st_size
+#         self.st_uid = st_uid
+#         self.st_gid = st_gid
+#         self.dirname = None
+#
+#     def __repr__(self):
+#         return "FileItem:" + ",".join([self.path, str(self.st_mode), str(self.st_size)])
+#
+#     def key(self):
+#         return self.path
+
 class FileItem(CommonEqualityMixin):
+    __slots__ = ('path', 'st_mode', 'st_size', 'st_uid', 'st_gid', 'dirname')
     def __init__(self, path, st_mode=0, st_size=0, st_uid=0, st_gid=0):
         self.path = path
         self.st_mode = st_mode

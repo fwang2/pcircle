@@ -230,7 +230,7 @@ class Circle:
 
     def deq(self):
         if len(self.workq) > 0:
-            return self.workq.pop()
+            return self.workq.pop(0)
         else:
             return None
 

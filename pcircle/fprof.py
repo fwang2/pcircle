@@ -43,7 +43,7 @@ log = getLogger(__name__)
 taskloads = []
 hist = [0] * (len(G.bins) + 1)
 comm = MPI.COMM_WORLD
-
+MAX_QUEUE_SIZE = 10000
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -203,8 +203,11 @@ class ProfileWalk(BaseTask):
                 self.cnt_filesize += fitem.st_size
 
             elif stat.S_ISDIR(st.st_mode):
-                self.cnt_dirs += 1
-                self.process_dir(fitem, st)
+                if len(self.circle.workq) > MAX_QUEUE_SIZE:
+                    self.circle.enq(fitem)
+                else:
+                    self.cnt_dirs += 1
+                    self.process_dir(fitem, st)
                 # END OF if spath
 
     def tally(self, t):

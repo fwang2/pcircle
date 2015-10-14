@@ -47,14 +47,22 @@ class G:
     copytype = 'dir2dir'
 
     b4k = 4 * 1024
+    b8k = 8 * 1024
+    b16k = 16 * 1024
+    b32k = 32 * 1024
     b64k = 64 * 1024
+    b256k = 256 * 1024
     b512k = 512 * 1024
-    b1m = 1024 *1024
+    b1m = 1024 * 1024
     b4m = 4 * b1m
+    b8m = 8 * b1m
     b16m = 16 * b1m
+    b128m = 128 * b1m
+    b256m = 256 * b1m
     b512m = 512 * b1m
-    b1g = 2 * b512m
+    b1g = 1024 * b1m
     b100g = 100 * b1g
+    b256g = 256 * b1g
     b512g = 512 * b1g
     b1tb = 1024 * b1g
-    bins = [b4k, b64k,b512k, b1m, b4m, b16m, b512m, b1g, b512g, b1tb]
+    bins = [b4k, b8k, b16k, b32k, b64k, b256k, b512k, b1m, b4m, b16m, b512m, b1g, b100g, b256g, b512g, b1tb]

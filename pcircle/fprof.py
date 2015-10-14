@@ -68,7 +68,7 @@ def incr_local_histogram(fsz):
     hist[idx] += 1
 
 
-def global_histogram(treewalk):
+def gather_histogram():
     global hist
     hist = np.array(hist)  # switch to array format
     all_hist = comm.gather(hist)
@@ -281,10 +281,10 @@ def main():
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 
-    global_histogram(treewalk)
-    total = hist.sum()
-    bucket_scale = 0.5
+    gather_histogram()
     if comm.rank == 0:
+        total = hist.sum()
+        bucket_scale = 0.5
         if total == 0:
             err_and_exit("No histogram generated.\n")
 

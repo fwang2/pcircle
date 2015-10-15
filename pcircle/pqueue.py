@@ -1,32 +1,35 @@
-from abc import ABCMeta, abstractmethod
+from Queue import PriorityQueue
 
 
-class BaseQueue:
-    __metaclass__ = ABCMeta
+class LazyQueue:
 
     def __init__(self):
-        pass
+        self._queue = PriorityQueue()
 
-    @abstractmethod
-    def size(self):
-        pass
+    def enq(self, item):
+        self._queue.put(item)
 
-    @abstractmethod
-    def pushn(self, obj):
-        pass
+    def deq(self):
+        if self._queue.empty():
+            return None
+        else:
+            return self._queue.get()
 
-    @abstractmethod
-    def popn(self, n):
-        pass
+    def __len__(self):
+        return self._queue.qsize()
 
-    @abstractmethod
-    def pop(self):
-        pass
+    def mget(self, n):
+        if n > self._queue.qsize():
+            n = self._queue.qsize()
+        lst = []
+        for _ in xrange(n):
+            lst.append(self._queue.get())
 
-    @abstractmethod
-    def __getitem__(self, idx):
-        pass
+        return lst
 
-    @abstractmethod
-    def cleanup(self):
-        pass
+    def extend(self, iterable):
+        for ele in iterable:
+            self.enq(ele)
+
+    def append(self, item):
+        self.enq(item)

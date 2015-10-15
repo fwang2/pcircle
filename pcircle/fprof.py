@@ -177,24 +177,28 @@ class ProfileWalk:
                 # NOT TO FOLLOW SYM LINKS SHOULD BE THE DEFAULT
                 return
 
-            if stat.S_ISREG(st.st_mode):
-                incr_local_histogram(st.st_size)
-                if args.gpfs_block_alloc:
-                    gpfs_block_update(st.st_size)
-
-                if self.outfile:
-                    self.outfile.write("%d\n" % st.st_size)
-                    if (MPI.Wtime() - self.last_flush) > self.interval:
-                        self.outfile.flush()
-
-                self.cnt_files += 1
-                self.cnt_filesize += st.st_size
-
-            elif stat.S_ISDIR(st.st_mode):
-                self.cnt_dirs += 1
-                self.process_dir(spath, st)
-                # END OF if spath
+            self.handle_file_or_dir(spath, st)
             del spath
+
+    def handle_file_or_dir(self, spath, st):
+        if stat.S_ISREG(st.st_mode):
+            incr_local_histogram(st.st_size)
+            if args.gpfs_block_alloc:
+                gpfs_block_update(st.st_size)
+
+            if self.outfile:
+                self.outfile.write("%d\n" % st.st_size)
+                if (MPI.Wtime() - self.last_flush) > self.interval:
+                    self.outfile.flush()
+                    self.last_flush = MPI.Wtime()
+
+            self.cnt_files += 1
+            self.cnt_filesize += st.st_size
+
+        elif stat.S_ISDIR(st.st_mode):
+            self.cnt_dirs += 1
+            self.process_dir(spath, st)
+
     def tally(self, t):
         """ t is a tuple element of flist """
         if stat.S_ISDIR(t[1]):

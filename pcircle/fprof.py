@@ -150,7 +150,13 @@ class ProfileWalk:
             self.skipped += 1
         else:
             for entry in entries:
-                self.circle.enq(entry.path)
+                if entry.is_symlink():
+                    self.sym_links += 1
+                elif entry.is_file():
+                    self.circle.enq(entry.path)
+                else:
+                    self.circle.preq(entry.path)
+
                 count += 1
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, path, count))

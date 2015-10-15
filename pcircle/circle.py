@@ -225,6 +225,9 @@ class Circle:
             return
         self.workq.append(work)
 
+    def preq(self, work):
+        self.workq.insert(0, work)
+
     def setq(self, q):
         self.workq = q
 

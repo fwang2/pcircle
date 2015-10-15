@@ -194,7 +194,7 @@ class ProfileWalk:
                 self.cnt_dirs += 1
                 self.process_dir(spath, st)
                 # END OF if spath
-
+            del spath
     def tally(self, t):
         """ t is a tuple element of flist """
         if stat.S_ISDIR(t[1]):

@@ -188,7 +188,7 @@ class ProfileWalk:
 
             if self.outfile:
                 self.outfile.write("%d\n" % st.st_size)
-                if (MPI.Wtime() - self.last_flush) > self.interval:
+                if (MPI.Wtime() - self.last_flush) > 60*self.interval:
                     self.outfile.flush()
                     self.last_flush = MPI.Wtime()
 

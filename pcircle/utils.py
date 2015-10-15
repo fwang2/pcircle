@@ -280,6 +280,23 @@ def check_src(infiles, mode=os.R_OK):
     return ret
 
 
+def check_src2(infiles, mode=os.R_OK):
+    """ check validity of infiles iterable, throw ValueException
+    """
+    ret = []
+    for ele in infiles:
+        # set up "dirname" for FileItem, so later we know how to construct
+        # destination path when in "file2dir" mode
+        elepath = os.path.realpath(os.path.expanduser(ele))
+
+        if os.path.exists(elepath) and os.access(elepath, mode):
+            ret.append(elepath)
+        else:
+            raise ValueError(ele)
+
+    return ret
+
+
 def choplist(alist, num=2):
     """ alist: a list of FileItem(s)
     chop and return a string for proper display

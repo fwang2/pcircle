@@ -1,5 +1,6 @@
 __author__ = 'f7b'
 
+import collections
 
 class CommonEqualityMixin(object):
     def __eq__(self, other):

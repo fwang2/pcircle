@@ -20,18 +20,15 @@ import stat
 import os
 import os.path
 import sys
-import argparse
-import xattr
 import numpy as np
 import bisect
 import resource
+
 
 from task import BaseTask
 from circle import Circle
 from globals import G
 from utils import getLogger, bytes_fmt, destpath
-from dbstore import DbStore
-from fdef import FileItem
 from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
 import utils
@@ -44,7 +41,6 @@ log = getLogger(__name__)
 taskloads = []
 hist = [0] * (len(G.bins) + 1)
 comm = MPI.COMM_WORLD
-MAX_QUEUE_SIZE = 10000
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -95,10 +91,10 @@ def gather_gpfs_blocks():
     if comm.rank == 0:
         gpfs_blocks = sum(all_blocks)
 
-class ProfileWalk(BaseTask):
+
+class ProfileWalk:
 
     def __init__(self, circle, src, perfile=True):
-        BaseTask.__init__(self, circle)
 
         self.d = {"rank": "rank %s" % circle.rank}
         self.circle = circle
@@ -135,49 +131,37 @@ class ProfileWalk(BaseTask):
         # flush periodically
         self.last_flush = MPI.Wtime()
 
-        # memory
-        self.mem_snapshot = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-
-
     def create(self):
         if self.circle.rank == 0:
             for ele in self.src:
                 self.circle.enq(ele)
             print("\nStart profiling ...")
 
-
-    def process_dir(self, fitem, st):
+    def process_dir(self, path, st):
         """ i_dir should be absolute path
         st is the stat object associated with the directory
         """
-        i_dir = fitem.path
         last_report = MPI.Wtime()
         count = 0
         try:
-            entries = scandir(i_dir)
+            entries = scandir(path)
         except OSError as e:
             log.warn(e, extra=self.d)
             self.skipped += 1
         else:
             for entry in entries:
-                elefi = FileItem(entry.path)
-                if fitem.dirname:
-                    elefi.dirname = fitem.dirname
-                self.circle.enq(elefi)
-
+                self.circle.enq(entry.path)
                 count += 1
                 if (MPI.Wtime() - last_report) > self.interval:
-                    print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, i_dir, count))
+                    print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, path, count))
                     last_report = MPI.Wtime()
-            log.info("Finish scan of [%s], count=%s" % (i_dir, count), extra=self.d)
-
+            log.info("Finish scan of [%s], count=%s" % (path, count), extra=self.d)
 
     def process(self):
         """ process a work unit, spath, dpath refers to
             source and destination respectively """
 
-        fitem = self.circle.deq()
-        spath = fitem.path
+        spath = self.circle.deq()
         if spath:
             try:
                 st = os.lstat(spath)
@@ -186,7 +170,6 @@ class ProfileWalk(BaseTask):
                 self.skipped += 1
                 return False
 
-            fitem.st_size = st.st_size
             self.reduce_items += 1
 
             if os.path.islink(spath):
@@ -205,14 +188,11 @@ class ProfileWalk(BaseTask):
                         self.outfile.flush()
 
                 self.cnt_files += 1
-                self.cnt_filesize += fitem.st_size
+                self.cnt_filesize += st.st_size
 
             elif stat.S_ISDIR(st.st_mode):
-                if len(self.circle.workq) > MAX_QUEUE_SIZE:
-                    self.circle.enq(fitem)
-                else:
-                    self.cnt_dirs += 1
-                    self.process_dir(fitem, st)
+                self.cnt_dirs += 1
+                self.process_dir(spath, st)
                 # END OF if spath
 
     def tally(self, t):
@@ -223,19 +203,20 @@ class ProfileWalk(BaseTask):
             self.cnt_files += 1
             self.cnt_filesize += t[2]
 
-
     def reduce_init(self, buf):
         buf['cnt_files'] = self.cnt_files
         buf['cnt_dirs'] = self.cnt_dirs
         buf['cnt_filesize'] = self.cnt_filesize
         buf['reduce_items'] = self.reduce_items
-        buf['mem_snapshot'] = self.mem_snapshot
+        buf['work_qsize'] = len(self.circle.workq)
+        buf['mem_snapshot'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
     def reduce(self, buf1, buf2):
         buf1['cnt_dirs'] += buf2['cnt_dirs']
         buf1['cnt_files'] += buf2['cnt_files']
         buf1['cnt_filesize'] += buf2['cnt_filesize']
         buf1['reduce_items'] += buf2['reduce_items']
+        buf1['work_qsize'] += buf2['work_qsize']
         buf1['mem_snapshot'] += buf2['mem_snapshot']
 
         return buf1
@@ -247,10 +228,10 @@ class ProfileWalk(BaseTask):
         # self.last_cnt = buf['cnt_files']
 
         rate = (buf['reduce_items'] - self.last_cnt) / (MPI.Wtime() - self.last_reduce_time)
-        print("Scanned files {:,}, estimated processing rate {:d}/s, mem_snapshot: {}".format(buf['reduce_items'],
-                                                                int(rate), bytes_fmt(buf['mem_snapshot'])))
+        print("Scanned files {:,}, estimated processing rate {:d}/s, "
+              "mem_snapshot {}, workq {:,}".format(buf['reduce_items'], int(rate), bytes_fmt(buf['mem_snapshot']),
+                                                 buf['work_qsize']))
         self.last_cnt = buf['reduce_items']
-        self.mem_snapshot = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         self.last_reduce_time = MPI.Wtime()
 
     def reduce_finish(self, buf):
@@ -296,7 +277,7 @@ def main():
     args = parse_and_bcast(comm, gen_parser)
 
     try:
-        G.src = utils.check_src(args.path)
+        G.src = utils.check_src2(args.path)
     except ValueError as e:
         err_and_exit("Error: %s not accessible" % e)
 
@@ -309,7 +290,7 @@ def main():
         print("\t{:<20}{:<20}".format("fprof version:", __version__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
-        print("\t{:<20}{:<20}".format("Root path:", utils.choplist(G.src)))
+        print("\t{:<20}{:<20}".format("Root path:", G.src))
 
     circle = Circle()
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)

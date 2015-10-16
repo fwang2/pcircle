@@ -144,7 +144,7 @@ class ProfileWalk:
         last_report = MPI.Wtime()
         count = 0
         try:
-            with timeout(seconds=10):
+            with timeout(seconds=30):
                 entries = scandir(path)
         except OSError as e:
             log.warn(e, extra=self.d)
@@ -174,7 +174,7 @@ class ProfileWalk:
         spath = self.circle.deq()
         if spath:
             try:
-                with timeout(seconds=10):
+                with timeout(seconds=15):
                     st = os.lstat(spath)
             except OSError as e:
                 log.warn(e, extra=self.d)

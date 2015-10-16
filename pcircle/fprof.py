@@ -25,7 +25,7 @@ import bisect
 import resource
 
 
-from task import BaseTask
+from timeout import timeout, TimeoutError
 from circle import Circle
 from globals import G
 from utils import getLogger, bytes_fmt, destpath
@@ -144,9 +144,13 @@ class ProfileWalk:
         last_report = MPI.Wtime()
         count = 0
         try:
-            entries = scandir(path)
+            with timeout(seconds=10):
+                entries = scandir(path)
         except OSError as e:
             log.warn(e, extra=self.d)
+            self.skipped += 1
+        except TimeoutError as e:
+            log.error("%s when scandir() on %s" % (e, path), extra=self.d)
             self.skipped += 1
         else:
             for entry in entries:
@@ -170,11 +174,16 @@ class ProfileWalk:
         spath = self.circle.deq()
         if spath:
             try:
-                st = os.lstat(spath)
+                with timeout(seconds=10):
+                    st = os.lstat(spath)
             except OSError as e:
                 log.warn(e, extra=self.d)
                 self.skipped += 1
                 return False
+            except TimeoutError as e:
+                log.error("%s when stat() on %s" % (e, spath), extra=self.d)
+                self.skipped += 1
+                return
 
             self.reduce_items += 1
 
@@ -264,9 +273,9 @@ class ProfileWalk:
 
         if self.circle.rank == 0:
             print("\nFprof epilogue:\n")
-            print("\t{:<20}{:<20}".format("Directory count:", total_dirs))
+            print("\t{:<20}{:<20,}".format("Directory count:", total_dirs))
             print("\t{:<20}{:<20}".format("Sym Links count:", total_symlinks))
-            print("\t{:<20}{:<20}".format("File count:", total_files))
+            print("\t{:<20}{:<20,}".format("File count:", total_files))
             print("\t{:<20}{:<20}".format("Skipped count:", total_skipped))
             print("\t{:<20}{:<20}".format("Total file size:", bytes_fmt(total_filesize)))
             if total_files != 0:

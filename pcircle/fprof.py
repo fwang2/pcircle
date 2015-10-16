@@ -283,7 +283,7 @@ class ProfileWalk:
         if self.outfile:
             if len(self.fszlst) > 0:
                 for ele in self.fszlst:
-                    self.outfile.write("%s\n" % ele)
+                    self.outfile.write("%d\n" % ele)
             self.outfile.close()
 
 
@@ -311,28 +311,7 @@ def main():
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 
-    gather_histogram()
-    if comm.rank == 0:
-        total = hist.sum()
-        bucket_scale = 0.5
-        if total == 0:
-            err_and_exit("No histogram generated.\n")
-
-        print("\nFileset histograms:\n")
-        for idx, rightbound in enumerate(G.bins):
-            percent = 100 * hist[idx] / float(total)
-            star_count = int(bucket_scale * percent)
-            print("\t{:<3}{:<15}{:<8}{:<8}{:<50}".format("< ",
-                utils.bytes_fmt(rightbound), hist[idx],
-                "%0.2f%%" % percent, '∎' * star_count))
-
-        # special processing of last row
-
-        percent = 100 * hist[-1] / float(total)
-        star_count = int(bucket_scale * percent)
-        print("\t{:<3}{:<15}{:<8}{:<8}{:<50}".format(">= ",
-            utils.bytes_fmt(rightbound), hist[idx],
-            "%0.2f%%" % percent, '∎' * star_count))
+    gen_histogram()
 
     if args.gpfs_block_alloc:
         gather_gpfs_blocks()
@@ -346,6 +325,30 @@ def main():
     treewalk.epilogue()
     treewalk.cleanup()
     circle.finalize()
+
+
+def gen_histogram():
+    gather_histogram()
+    if comm.rank == 0:
+        total = hist.sum()
+        bucket_scale = 0.5
+        if total == 0:
+            err_and_exit("No histogram generated.\n")
+
+        print("\nFileset histograms:\n")
+        msg = "\t{:<3}{:<15}{:<8}{:<8}{:<50}"
+
+        for idx, rightbound in enumerate(G.bins):
+            percent = 100 * hist[idx] / float(total)
+            star_count = int(bucket_scale * percent)
+            print(msg.format("< ", utils.bytes_fmt(rightbound),
+                             hist[idx], "%0.2f%%" % percent, '∎' * star_count))
+
+        # special processing of last row
+        percent = 100 * hist[-1] / float(total)
+        star_count = int(bucket_scale * percent)
+        print(msg.format(">= ", utils.bytes_fmt(rightbound), hist[idx],
+                         "%0.2f%%" % percent, '∎' * star_count))
 
 
 if __name__ == "__main__":

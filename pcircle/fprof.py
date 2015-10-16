@@ -41,6 +41,7 @@ log = getLogger(__name__)
 taskloads = []
 hist = [0] * (len(G.bins) + 1)
 comm = MPI.COMM_WORLD
+FSZMAX = 30000
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -101,19 +102,14 @@ class ProfileWalk:
         self.src = src
         self.interval = 10  # progress report
 
-        self.checksum = False
-
-        # to be fixed
-        self.optlist = []  # files
-        self.opt_dir_list = []  # dirs
-
+        self.fszlst = []    # store perfile size
         self.sym_links = 0
         self.follow_sym_links = False
 
         self.outfile = None
         if perfile:
             tmpfile = os.path.join(os.getcwd(), "fprof-perfile.%s" % circle.rank)
-            self.outfile = open(tmpfile, "w+")
+            self.outfile = open(tmpfile, "w")
 
         self.cnt_dirs = 0
         self.cnt_files = 0
@@ -127,9 +123,6 @@ class ProfileWalk:
 
         self.time_started = MPI.Wtime()
         self.time_ended = None
-
-        # flush periodically
-        self.last_flush = MPI.Wtime()
 
     def create(self):
         if self.circle.rank == 0:
@@ -160,7 +153,6 @@ class ProfileWalk:
                     self.circle.enq(entry.path)
                 else:
                     self.circle.preq(entry.path)
-
                 count += 1
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, path, count))
@@ -201,11 +193,12 @@ class ProfileWalk:
             if args.gpfs_block_alloc:
                 gpfs_block_update(st.st_size)
 
-            if self.outfile:
-                self.outfile.write("%d\n" % st.st_size)
-                if (MPI.Wtime() - self.last_flush) > 60*self.interval:
-                    self.outfile.flush()
-                    self.last_flush = MPI.Wtime()
+            self.fszlst.append(st.st_size)
+
+            if self.outfile and len(self.fszlst) >= FSZMAX:
+                for ele in self.fszlst:
+                    self.outfile.write("%d\n" % ele)
+                self.fszlst = []
 
             self.cnt_files += 1
             self.cnt_filesize += st.st_size
@@ -288,6 +281,9 @@ class ProfileWalk:
 
     def cleanup(self):
         if self.outfile:
+            if len(self.fszlst) > 0:
+                for ele in self.fszlst:
+                    self.outfile.write("%s\n" % ele)
             self.outfile.close()
 
 

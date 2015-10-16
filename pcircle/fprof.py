@@ -24,7 +24,6 @@ import numpy as np
 import bisect
 import resource
 
-
 from timeout import timeout, TimeoutError
 from circle import Circle
 from globals import G
@@ -42,6 +41,7 @@ taskloads = []
 hist = [0] * (len(G.bins) + 1)
 comm = MPI.COMM_WORLD
 FSZMAX = 30000
+
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -102,14 +102,15 @@ class ProfileWalk:
         self.src = src
         self.interval = 10  # progress report
 
-        self.fszlst = []    # store perfile size
         self.sym_links = 0
         self.follow_sym_links = False
 
-        self.outfile = None
         if perfile:
             tmpfile = os.path.join(os.getcwd(), "fprof-perfile.%s" % circle.rank)
             self.outfile = open(tmpfile, "w")
+            self.fszlst = []    # store perfile size
+        else:
+            self.outfile = None
 
         self.cnt_dirs = 0
         self.cnt_files = 0
@@ -193,12 +194,12 @@ class ProfileWalk:
             if args.gpfs_block_alloc:
                 gpfs_block_update(st.st_size)
 
-            self.fszlst.append(st.st_size)
-
-            if self.outfile and len(self.fszlst) >= FSZMAX:
-                for ele in self.fszlst:
-                    self.outfile.write("%d\n" % ele)
-                self.fszlst = []
+            if self.outfile:
+                self.fszlst.append(st.st_size)
+                if len(self.fszlst) >= FSZMAX:
+                    for ele in self.fszlst:
+                        self.outfile.write("%d\n" % ele)
+                    self.fszlst = []
 
             self.cnt_files += 1
             self.cnt_filesize += st.st_size
@@ -280,7 +281,7 @@ class ProfileWalk:
         return total_filesize
 
     def cleanup(self):
-        if self.outfile:
+        if self.outfile:  # flush the leftover
             if len(self.fszlst) > 0:
                 for ele in self.fszlst:
                     self.outfile.write("%d\n" % ele)

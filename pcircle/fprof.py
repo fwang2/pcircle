@@ -337,7 +337,7 @@ def gen_histogram():
             err_and_exit("No histogram generated.\n")
 
         print("\nFileset histograms:\n")
-        msg = "\t{:<3}{:<15}{:<8}{:<8}{:<50}"
+        msg = "\t{:<3}{:<15}{:<13}{:<8}{:<50}"
 
         for idx, rightbound in enumerate(G.bins):
             percent = 100 * hist[idx] / float(total)

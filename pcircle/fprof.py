@@ -64,7 +64,7 @@ def gen_parser():
 def incr_local_histogram(fsz):
     """ incremental histogram  """
     global hist
-    idx = bisect.bisect_right(G.bins, fsz) # (left, right)
+    idx = bisect.bisect_left(G.bins, fsz)  # (left, right)
     hist[idx] += 1
 
 
@@ -320,7 +320,7 @@ def main():
             print("\nGPFS Block Alloc Report:\n")
             for idx, bsz in enumerate(G.gpfs_block_size):
                 totalsize = gpfs_blocks[idx] * G.gpfs_subs[idx]
-                print("\tBlocksize: {:<5} SubBlocks: {:10,} Estimated Space: {:<15s}".
+                print("\tBlocksize: {:<6} Subblocks: {:11,} Estimated Space: {:<15s}".
                       format(bsz, gpfs_blocks[idx],bytes_fmt(totalsize)))
 
     treewalk.epilogue()
@@ -337,7 +337,7 @@ def gen_histogram():
             err_and_exit("No histogram generated.\n")
 
         print("\nFileset histograms:\n")
-        msg = "\t{:<3}{:<15}{:<13}{:<8}{:<50}"
+        msg = "\t{:<3}{:<15}{:<13}{:>12}    {:<50}"
 
         for idx, rightbound in enumerate(G.bins):
             percent = 100 * hist[idx] / float(total)

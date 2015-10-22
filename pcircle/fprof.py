@@ -222,7 +222,10 @@ class ProfileWalk:
         buf['cnt_filesize'] = self.cnt_filesize
         buf['reduce_items'] = self.reduce_items
         buf['work_qsize'] = len(self.circle.workq)
-        buf['mem_snapshot'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == 'darwin':
+            buf['mem_snapshot'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        else:
+            buf['mem_snapshot'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
 
     def reduce(self, buf1, buf2):
         buf1['cnt_dirs'] += buf2['cnt_dirs']

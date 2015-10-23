@@ -365,7 +365,7 @@ def gen_histogram():
         # special processing of last row
         percent = 100 * hist[-1] / float(total)
         star_count = int(bucket_scale * percent)
-        print(msg.format(">= ", utils.bytes_fmt(rightbound), hist[-1],
+        print(msg.format("> ", utils.bytes_fmt(rightbound), hist[-1],
                          "%0.2f%%" % percent, '∎' * star_count))
 
 

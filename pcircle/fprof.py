@@ -117,6 +117,8 @@ class ProfileWalk:
         self.cnt_filesize = 0
         self.last_cnt = 0
         self.skipped = 0
+        self.maxfiles = 0
+        self.maxfiles_dir = None
         self.last_reduce_time = MPI.Wtime()
 
         # reduce
@@ -159,6 +161,10 @@ class ProfileWalk:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, path, count))
                     last_report = MPI.Wtime()
             log.info("Finish scan of [%s], count=%s" % (path, count), extra=self.d)
+
+        if count > self.maxfiles:
+            self.maxfiles = count
+            self.maxfiles_dir = path
 
     def process(self):
         """ process a work unit, spath, dpath refers to
@@ -244,9 +250,12 @@ class ProfileWalk:
         # self.last_cnt = buf['cnt_files']
 
         rate = (buf['reduce_items'] - self.last_cnt) / (MPI.Wtime() - self.last_reduce_time)
-        print("Scanned files {:,}, estimated processing rate {:d}/s, "
-              "mem_snapshot {}, workq {:,}".format(buf['reduce_items'], int(rate), bytes_fmt(buf['mem_snapshot']),
-                                                 buf['work_qsize']))
+        fmt_msg = "Scanned files: {:<12,}   Processing rate: {:<6,}/s   HWM mem: {:<12}   Work Queue: {:<12,}"
+        print(fmt_msg.format(
+            buf['reduce_items'],
+            int(rate),
+            bytes_fmt(buf['mem_snapshot']),
+            buf['work_qsize']))
         self.last_cnt = buf['reduce_items']
         self.last_reduce_time = MPI.Wtime()
 
@@ -262,23 +271,28 @@ class ProfileWalk:
         total_symlinks = self.circle.comm.reduce(self.sym_links, op=MPI.SUM)
         total_skipped = self.circle.comm.reduce(self.skipped, op=MPI.SUM)
         taskloads = self.circle.comm.gather(self.reduce_items)
-        return total_dirs, total_files, total_filesize, total_symlinks, total_skipped
+        max_files = self.circle.comm.reduce(self.maxfiles, op=MPI.MAX)
+        return total_dirs, total_files, total_filesize, total_symlinks, total_skipped, max_files
 
     def epilogue(self):
-        total_dirs, total_files, total_filesize, total_symlinks, total_skipped = self.total_tally()
+        total_dirs, total_files, total_filesize, total_symlinks, total_skipped, maxfiles = self.total_tally()
         self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
             print("\nFprof epilogue:\n")
-            print("\t{:<20}{:<20,}".format("Directory count:", total_dirs))
-            print("\t{:<20}{:<20}".format("Sym Links count:", total_symlinks))
-            print("\t{:<20}{:<20,}".format("File count:", total_files))
-            print("\t{:<20}{:<20}".format("Skipped count:", total_skipped))
-            print("\t{:<20}{:<20}".format("Total file size:", bytes_fmt(total_filesize)))
+            fmt_msg1 = "\t{:<25}{:<20,}"    # numeric
+            fmt_msg2 = "\t{:<25}{:<20}"     # string
+
+            print(fmt_msg1.format("Directory count:", total_dirs))
+            print(fmt_msg1.format("Sym Links count:", total_symlinks))
+            print(fmt_msg1.format("File count:", total_files))
+            print(fmt_msg1.format("Skipped count:", total_skipped))
+            print(fmt_msg2.format("Total file size:", bytes_fmt(total_filesize)))
             if total_files != 0:
-                print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
-            print("\t{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
-            print("\tFprof loads: %s" % taskloads)
+                print(fmt_msg2.format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
+            print(fmt_msg1.format("Max files within dir:", maxfiles))
+            print(fmt_msg2.format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
+            print(fmt_msg2.format("Fprof loads:", taskloads))
             print("")
 
         return total_filesize

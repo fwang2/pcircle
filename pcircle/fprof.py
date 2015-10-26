@@ -337,9 +337,11 @@ def main():
             print("\nGPFS Block Alloc Report:\n")
             for idx, bsz in enumerate(G.gpfs_block_size):
                 totalsize = gpfs_blocks[idx] * G.gpfs_subs[idx]
-                print("\tBlocksize: {:<6}   Estimated Space: {:<15s}   Efficiency: {:>6.0%}".
-                      format(bsz, bytes_fmt(totalsize), treewalk.cnt_filesize/float(totalsize)))
-
+                fmt_msg = "\tBlocksize: {:<6}   Estimated Space: {:<15s}   Efficiency: {:>6.0%}"
+                if totalsize != 0:
+                    print(fmt_msg.format(bsz, bytes_fmt(totalsize), treewalk.cnt_filesize/float(totalsize)))
+                else:
+                    print(fmt_msg.format(bsz, bytes_fmt(totalsize), 0))
     treewalk.epilogue()
     treewalk.cleanup()
     circle.finalize()

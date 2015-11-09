@@ -291,7 +291,7 @@ class ProfileWalk:
             if total_files != 0:
                 print(fmt_msg2.format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
             print(fmt_msg1.format("Max files within dir:", maxfiles))
-            print(fmt_msg2.format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
+            print(fmt_msg2.format("Tree walk time:", utils.conv_time(self.time_ended - self.time_started)))
             print(fmt_msg2.format("Fprof loads:", taskloads))
             print("")
 

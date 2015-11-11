@@ -35,7 +35,6 @@ import utils
 from _version import get_versions
 __version__ = get_versions()['version']
 args = None
-gpfs_blocks = None
 log = getLogger(__name__)
 taskloads = []
 hist = [0] * (len(G.bins) + 1)
@@ -76,7 +75,7 @@ def gather_histogram():
         hist = sum(all_hist)
 
 
-def gpfs_block_update(fsz, inodesz = 4096):
+def gpfs_block_update(fsz, inodesz=4096):
     if fsz > (inodesz - 128):
         for idx, sub in enumerate(G.gpfs_subs):
             blocks = fsz / sub
@@ -86,12 +85,14 @@ def gpfs_block_update(fsz, inodesz = 4096):
 
 
 def gather_gpfs_blocks():
-    global gpfs_blocks
     local_blocks = np.array(G.gpfs_block_cnt)
     all_blocks = comm.gather(local_blocks)
     if comm.rank == 0:
         gpfs_blocks = sum(all_blocks)
+    else:
+        gpfs_blocks = None
 
+    return gpfs_blocks
 
 class ProfileWalk:
 
@@ -334,18 +335,22 @@ def main():
 
     gen_histogram()
 
+    # we need the total file size to calculate GPFS efficiency
+    total_file_size = treewalk.epilogue()
+
     if args.gpfs_block_alloc:
-        gather_gpfs_blocks()
+        gpfs_blocks = gather_gpfs_blocks()
         if comm.rank == 0:
             print("\nGPFS Block Alloc Report:\n")
+            print("\tSubblocks: %s\n" % gpfs_blocks)
             for idx, bsz in enumerate(G.gpfs_block_size):
-                totalsize = gpfs_blocks[idx] * G.gpfs_subs[idx]
-                fmt_msg = "\tBlocksize: {:<6}   Estimated Space: {:<15s}   Efficiency: {:>6.0%}"
-                if totalsize != 0:
-                    print(fmt_msg.format(bsz, bytes_fmt(totalsize), treewalk.cnt_filesize/float(totalsize)))
+                gpfs_file_size = gpfs_blocks[idx] * G.gpfs_subs[idx]
+                fmt_msg = "\tBlocksize: {:<6}   Estimated Space: {:<20s}   Efficiency: {:>6.0%}"
+                if gpfs_file_size != 0:
+                    print(fmt_msg.format(bsz, bytes_fmt(gpfs_file_size), total_file_size/float(gpfs_file_size)))
                 else:
-                    print(fmt_msg.format(bsz, bytes_fmt(totalsize), 0))
-    treewalk.epilogue()
+                    print(fmt_msg.format(bsz, bytes_fmt(gpfs_file_size), 0))
+
     treewalk.cleanup()
     circle.finalize()
 

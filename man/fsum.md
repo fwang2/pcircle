@@ -16,10 +16,9 @@ differences: (1) It is parallel; (2) It is dataset-based instead of
 file-based. **fsum** supports the following options:
 
 
-* '--output filename`:
+* `--output filename`:
   Rename signature file. By default, fsum generate signature file using
   current time stamp.
-
 
 * `--chunksize sz`:
    **fsum** will break up large files into pieces to increase parallelism. By

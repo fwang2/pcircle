@@ -39,7 +39,7 @@ file-based. **fsum** supports the following options:
 
    The final step of aggregating and sorting block checksums are not
    parallelized. The reduction is performed on a single node eventually. This step
-   will require large memory footprint as the number of files increases.
+   will require large memory footprint as the number of files increase.
 
 
 ## AUTHOR

@@ -62,8 +62,8 @@ For this command to work, you do need a working `libffi` as well.
 
 ## Manpage
 
-* [fcp.8](man/fcp.8.html)
-
+* Parallel Data Copy: [fcp.8](man/fcp.8.html)
+* Parallel Checksumming: [fsum.8](man/fsum.8.html)
 
 ## Author
 

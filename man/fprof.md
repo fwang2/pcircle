@@ -54,6 +54,23 @@ sample report on ORNL Atlas file system is as the following:
    file system to GPFS-based file system and reports the GPFS block usage
    characterization.
 
+An sample output of `--gpfs-block-alloc` is as the following, against a
+dataset with mostly small files. The report shows that if GPFS blocksize is
+8M, then the 1GB dataset will inflate 10x to 10.39GB, with a poor space
+efficiency of 10%. **However**, this trend should not generalize to other file
+systems. We observe that for file system with many large files, this space
+inefficiency issue can be largely neglected.
+
+    GPFS Block Alloc Report:
+
+            Subblocks: [162887  90033  64419  45701  42551]
+
+            Blocksize: 256k     Estimated Space: 1.24 GiB               Efficiency:    86%
+            Blocksize: 512k     Estimated Space: 1.37 GiB               Efficiency:    78%
+            Blocksize: b1m      Estimated Space: 1.97 GiB               Efficiency:    55%
+            Blocksize: b4m      Estimated Space: 5.58 GiB               Efficiency:    19%
+            Blocksize: b8m      Estimated Space: 10.39 GiB              Efficiency:    10%
+
 
 
 ## AUTHOR

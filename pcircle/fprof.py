@@ -23,6 +23,7 @@ import sys
 import numpy as np
 import bisect
 import resource
+import syslog
 
 from timeout import timeout, TimeoutError
 from circle import Circle
@@ -40,7 +41,6 @@ taskloads = []
 hist = [0] * (len(G.bins) + 1)
 comm = MPI.COMM_WORLD
 FSZMAX = 30000
-
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -299,6 +299,13 @@ class ProfileWalk:
             print(fmt_msg2.format("Fprof loads:", taskloads))
             print("")
 
+            sendto_syslog("fprof.dir_count", total_dirs)
+            sendto_syslog("fprof.sym_count", total_symlinks)
+            sendto_syslog("fprof.file_count", total_files)
+            sendto_syslog("fprof.avg_file_size", bytes_fmt(total_filesize))
+            sendto_syslog("fprof.walktime", utils.conv_time(elapsed_time))
+            sendto_syslog("fprof.scan_rate", processing_rate)
+
         return total_filesize
 
     def cleanup(self):
@@ -308,6 +315,13 @@ class ProfileWalk:
                     self.outfile.write("%d\n" % ele)
             self.outfile.close()
 
+
+def sendto_syslog(key, msg):
+    """ set up ident for syslog, and convert msg to string
+    """
+    syslog.openlog(ident=key)
+    syslog.syslog(str(msg))
+    syslog.closelog()
 
 def main():
     global comm, args
@@ -329,14 +343,21 @@ def main():
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", G.src))
 
+        sendto_syslog("fprof.info", "root path = %s" % ",".join(G.src))
+        sendto_syslog("fprof.info", "fprof version = %s" % __version__)
+
     circle = Circle()
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 
-    gen_histogram()
+    msg = gen_histogram()
+
+    if comm.rank == 0:
+        sendto_syslog("fprof.fsize.hist", msg)
 
     # we need the total file size to calculate GPFS efficiency
     total_file_size = treewalk.epilogue()
+
 
     if args.gpfs_block_alloc:
         gpfs_blocks = gather_gpfs_blocks()
@@ -356,28 +377,32 @@ def main():
 
 
 def gen_histogram():
+    syslog_msg = ""
     gather_histogram()
     if comm.rank == 0:
         total = hist.sum()
-        bucket_scale = 0.5
+        bucket_scale = 0.45
         if total == 0:
             err_and_exit("No histogram generated.\n")
 
         print("\nFileset histograms:\n")
-        msg = "\t{:<3}{:<15}{:<15,}  {:>8}  {:<50}"
+        msg = "\t{:<3}{:<15}{:<15,}{:>8}     {:<45}"
 
         for idx, rightbound in enumerate(G.bins):
             percent = 100 * hist[idx] / float(total)
             star_count = int(bucket_scale * percent)
             print(msg.format("< ", utils.bytes_fmt(rightbound),
                              hist[idx], "%0.2f%%" % percent, '∎' * star_count))
+            syslog_msg += "<%s = %s, " % (utils.bytes_fmt(rightbound), hist[idx])
 
         # special processing of last row
         percent = 100 * hist[-1] / float(total)
         star_count = int(bucket_scale * percent)
         print(msg.format("> ", utils.bytes_fmt(rightbound), hist[-1],
                          "%0.2f%%" % percent, '∎' * star_count))
+        syslog_msg += ">%s = %s" % (utils.bytes_fmt(rightbound), hist[-1])
 
+    return syslog_msg
 
 if __name__ == "__main__":
     main()

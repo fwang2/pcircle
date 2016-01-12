@@ -393,14 +393,14 @@ def gen_histogram():
             star_count = int(bucket_scale * percent)
             print(msg.format("< ", utils.bytes_fmt(rightbound),
                              hist[idx], "%0.2f%%" % percent, '∎' * star_count))
-            syslog_msg += "<%s = %s, " % (utils.bytes_fmt(rightbound), hist[idx])
+            syslog_msg += "%s = %s, " % (G.bins_fmt[idx], hist[idx])
 
         # special processing of last row
         percent = 100 * hist[-1] / float(total)
         star_count = int(bucket_scale * percent)
         print(msg.format("> ", utils.bytes_fmt(rightbound), hist[-1],
                          "%0.2f%%" % percent, '∎' * star_count))
-        syslog_msg += ">%s = %s" % (utils.bytes_fmt(rightbound), hist[-1])
+        syslog_msg += "%s = %s" % (G.bins_fmt[-1], hist[-1])
 
     return syslog_msg
 

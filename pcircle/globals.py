@@ -67,6 +67,14 @@ class G:
     b1tb = 1024 * b1g
     bins = [b4k, b8k, b16k, b32k, b64k, b256k, b512k, b1m, b4m, b16m, b512m, b1g, b100g, b256g, b512g, b1tb]
 
+    # 17 bins, the last bin is special
+    bins_fmt = ["B1_000k_004k", "B1_004k_008k", "B1_008k_016k", "B1_016k_032k", "B1_032k_064k", "B1_064k_256k",
+                "B1_256k_512k", "B1_512k_001m",
+                "B2_001m_004m", "B2_m004_016m", "B2_016m_512m", "B2_512m_001g",
+                "B3_001g_100g", "B3_100g_256g", "B3_256g_512g",
+                "B4_512g_001t",
+                "B5_001t_up"]
+
     # GPFS
     gpfs_block_size = ("256k", "512k", "b1m", "b4m", "b8m")
     gpfs_block_cnt = [0, 0, 0, 0, 0]

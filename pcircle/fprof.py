@@ -38,7 +38,12 @@ __version__ = get_versions()['version']
 args = None
 log = getLogger(__name__)
 taskloads = []
+
 hist = [0] * (len(G.bins) + 1)
+
+# tracking size
+fsize = [0] * (len(G.bins) + 1)
+
 comm = MPI.COMM_WORLD
 FSZMAX = 30000
 
@@ -62,18 +67,21 @@ def gen_parser():
 
 def incr_local_histogram(fsz):
     """ incremental histogram  """
-    global hist
-    idx = bisect.bisect_left(G.bins, fsz)  # (left, right)
+    global hist, fsize
+    idx = bisect.bisect_left(G.bins, fsz)  # <= (inclusive)
     hist[idx] += 1
-
+    fsize[idx] += fsz
 
 def gather_histogram():
-    global hist
+    global hist, fsize
     hist = np.array(hist)  # switch to array format
+    fsize = np.array(fsize)
     all_hist = comm.gather(hist)
+    all_fsize = comm.gather(fsize)
+
     if comm.rank == 0:
         hist = sum(all_hist)
-
+        fsize = sum(all_fsize)
 
 def gpfs_block_update(fsz, inodesz=4096):
     if fsz > (inodesz - 128):
@@ -381,24 +389,27 @@ def gen_histogram():
     gather_histogram()
     if comm.rank == 0:
         total = hist.sum()
-        bucket_scale = 0.45
+        bucket_scale = 0.30
         if total == 0:
             err_and_exit("No histogram generated.\n")
 
         print("\nFileset histograms:\n")
-        msg = "\t{:<3}{:<15}{:<15,}{:>8}     {:<45}"
+        msg = "\t{:<3}{:<15}{:<15,}{:>10}{:>8}     {:<30}"
 
         for idx, rightbound in enumerate(G.bins):
             percent = 100 * hist[idx] / float(total)
             star_count = int(bucket_scale * percent)
-            print(msg.format("< ", utils.bytes_fmt(rightbound),
-                             hist[idx], "%0.2f%%" % percent, '∎' * star_count))
+            print(msg.format("<= ", utils.bytes_fmt(rightbound),
+                             hist[idx],
+                             utils.bytes_fmt(fsize[idx]),
+                             "%0.2f%%" % percent, '∎' * star_count))
             syslog_msg += "%s = %s, " % (G.bins_fmt[idx], hist[idx])
 
         # special processing of last row
         percent = 100 * hist[-1] / float(total)
         star_count = int(bucket_scale * percent)
         print(msg.format("> ", utils.bytes_fmt(rightbound), hist[-1],
+                         utils.bytes_fmt(fsize[-1]),
                          "%0.2f%%" % percent, '∎' * star_count))
         syslog_msg += "%s = %s" % (G.bins_fmt[-1], hist[-1])
 

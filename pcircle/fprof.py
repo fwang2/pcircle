@@ -111,6 +111,10 @@ class ProfileWalk:
         self.src = src
         self.interval = 10  # progress report
 
+        # hard links
+        self.nlinks = 0
+        self.nlinked_files = 0
+
         self.sym_links = 0
         self.follow_sym_links = False
 
@@ -195,6 +199,7 @@ class ProfileWalk:
 
             self.reduce_items += 1
 
+            # islink() return True if it is symbolic link
             if os.path.islink(spath):
                 self.sym_links += 1
                 # NOT TO FOLLOW SYM LINKS SHOULD BE THE DEFAULT
@@ -218,6 +223,11 @@ class ProfileWalk:
 
             self.cnt_files += 1
             self.cnt_filesize += st.st_size
+
+            # check hard links
+            if st.st_nlink > 1:
+                self.nlinks += st.st_nlink
+                self.nlinked_files += 1
 
         elif stat.S_ISDIR(st.st_mode):
             self.cnt_dirs += 1
@@ -273,6 +283,8 @@ class ProfileWalk:
         pass
 
     def total_tally(self):
+        """ TODO: refactor it to a named tuple? or object
+        """
         global taskloads
         total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
         total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
@@ -281,10 +293,14 @@ class ProfileWalk:
         total_skipped = self.circle.comm.reduce(self.skipped, op=MPI.SUM)
         taskloads = self.circle.comm.gather(self.reduce_items)
         max_files = self.circle.comm.reduce(self.maxfiles, op=MPI.MAX)
-        return total_dirs, total_files, total_filesize, total_symlinks, total_skipped, max_files
+        total_nlinks = self.circle.comm.reduce(self.nlinks, op=MPI.SUM)
+        total_nlinked_files = self.circle.comm.reduce(self.nlinked_files, op=MPI.SUM)
+        return total_dirs, total_files, total_filesize, total_symlinks, \
+               total_skipped, max_files, total_nlinks, total_nlinked_files
 
     def epilogue(self):
-        total_dirs, total_files, total_filesize, total_symlinks, total_skipped, maxfiles = self.total_tally()
+        total_dirs, total_files, total_filesize, total_symlinks, total_skipped, \
+            maxfiles, total_nlinks, total_nlinked_files = self.total_tally()
         self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
@@ -293,7 +309,8 @@ class ProfileWalk:
             fmt_msg2 = "\t{:<25}{:<20}"     # string
 
             print(fmt_msg1.format("Directory count:", total_dirs))
-            print(fmt_msg1.format("Sym Links count:", total_symlinks))
+            print(fmt_msg1.format("Sym links count:", total_symlinks))
+            print(fmt_msg1.format("Hard linked files:", total_nlinked_files))
             print(fmt_msg1.format("File count:", total_files))
             print(fmt_msg1.format("Skipped count:", total_skipped))
             print(fmt_msg2.format("Total file size:", bytes_fmt(total_filesize)))

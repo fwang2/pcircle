@@ -62,6 +62,7 @@ def gen_parser():
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("--perfile", action="store_true", help="Save perfile file size")
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
+    # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
 
 
@@ -375,13 +376,14 @@ def main():
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 
-    msg = gen_histogram()
+    # we need the total file size to calculate GPFS efficiency
+    total_file_size = treewalk.epilogue()
+
+    msg = gen_histogram(total_file_size)
 
     if comm.rank == 0:
         sendto_syslog("fprof.fsize.hist", msg)
 
-    # we need the total file size to calculate GPFS efficiency
-    total_file_size = treewalk.epilogue()
 
 
     if args.gpfs_block_alloc:
@@ -401,33 +403,54 @@ def main():
     circle.finalize()
 
 
-def gen_histogram():
+def gen_histogram(total_file_size):
     syslog_msg = ""
     gather_histogram()
     if comm.rank == 0:
-        total = hist.sum()
-        bucket_scale = 0.30
-        if total == 0:
+        total_num_of_files = hist.sum()
+        if total_num_of_files == 0:
             err_and_exit("No histogram generated.\n")
 
-        print("\nFileset histograms:\n")
-        msg = "\t{:<3}{:<15}{:<15,}{:>10}{:>8}     {:<30}"
+        print("Fileset Histogram\n")
+        
+        msg = "\t{:<3}{:<15}{:<15,}{:>10}{:>15}{:>15}"
+        msg2 = "\t{:<3}{:<15}{:<15}{:>10}{:>15}{:>15}"
 
+        print(msg2.format("", "Buckets", "Num of Files", "Size",  "%(Files)", "%(Size)"))
+        print("")
         for idx, rightbound in enumerate(G.bins):
-            percent = 100 * hist[idx] / float(total)
-            star_count = int(bucket_scale * percent)
+            percent_files = 100 * hist[idx] / float(total_num_of_files)
+            percent_size = 100 * fsize[idx] / float(total_file_size)
+
             print(msg.format("<= ", utils.bytes_fmt(rightbound),
                              hist[idx],
                              utils.bytes_fmt(fsize[idx]),
-                             "%0.2f%%" % percent, '∎' * star_count))
+                             "%0.2f%%" % percent_files, "%0.2f%%" % percent_size))
+
+            # NO BLOCK HISTOGRAM
+            #
+            # bucket_scale = 0.30
+            # star_count = int(bucket_scale * percent)
+            # print(msg.format("<= ", utils.bytes_fmt(rightbound),
+            #                  hist[idx],
+            #                  utils.bytes_fmt(fsize[idx]),
+            #                  "%0.2f%%" % percent, '∎' * star_count))
+
             syslog_msg += "%s = %s, " % (G.bins_fmt[idx], hist[idx])
 
         # special processing of last row
-        percent = 100 * hist[-1] / float(total)
-        star_count = int(bucket_scale * percent)
-        print(msg.format("> ", utils.bytes_fmt(rightbound), hist[-1],
+        percent_files = 100 * hist[-1] / float(total_num_of_files)
+        percent_size = 100 * fsize[-1] / float(total_file_size)
+        print(msg.format("> ", utils.bytes_fmt(rightbound),
+                         hist[-1],
                          utils.bytes_fmt(fsize[-1]),
-                         "%0.2f%%" % percent, '∎' * star_count))
+                         "%0.2f%%" % percent_files,
+                         "%0.2f%%" % percent_size))
+
+        # star_count = int(bucket_scale * percent)
+        # print(msg.format("> ", utils.bytes_fmt(rightbound), hist[-1],
+        #                  utils.bytes_fmt(fsize[-1]),
+        #                  "%0.2f%%" % percent, '∎' * star_count))
         syslog_msg += "%s = %s" % (G.bins_fmt[-1], hist[-1])
 
     return syslog_msg

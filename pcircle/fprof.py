@@ -328,7 +328,8 @@ class ProfileWalk:
             sendto_syslog("fprof.dir_count", total_dirs)
             sendto_syslog("fprof.sym_count", total_symlinks)
             sendto_syslog("fprof.file_count", total_files)
-            sendto_syslog("fprof.avg_file_size", bytes_fmt(total_filesize))
+            sendto_syslog("fprof.total_file_size", bytes_fmt(total_filesize))
+            sendto_syslog("fprof.avg_file_size", bytes_fmt(total_filesize/float(total_files)))
             sendto_syslog("fprof.walktime", utils.conv_time(elapsed_time))
             sendto_syslog("fprof.scan_rate", processing_rate)
 
@@ -405,6 +406,7 @@ def main():
 
 def gen_histogram(total_file_size):
     syslog_msg = ""
+    bins_fmt = utils.bins_strs(G.bins)
     gather_histogram()
     if comm.rank == 0:
         total_num_of_files = hist.sum()
@@ -436,7 +438,8 @@ def gen_histogram(total_file_size):
             #                  utils.bytes_fmt(fsize[idx]),
             #                  "%0.2f%%" % percent, '∎' * star_count))
 
-            syslog_msg += "%s = %s, " % (G.bins_fmt[idx], hist[idx])
+
+            syslog_msg += "%s = %s, " % (bins_fmt[idx], hist[idx])
 
         # special processing of last row
         percent_files = 100 * hist[-1] / float(total_num_of_files)
@@ -451,7 +454,7 @@ def gen_histogram(total_file_size):
         # print(msg.format("> ", utils.bytes_fmt(rightbound), hist[-1],
         #                  utils.bytes_fmt(fsize[-1]),
         #                  "%0.2f%%" % percent, '∎' * star_count))
-        syslog_msg += "%s = %s" % (G.bins_fmt[-1], hist[-1])
+        syslog_msg += "%s = %s" % (bins_fmt[-1], hist[-1])
 
     return syslog_msg
 

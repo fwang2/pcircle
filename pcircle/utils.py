@@ -133,6 +133,18 @@ def bytes_fmt(n):
     return "%.2f TiB" % (float(n) / d['1tb'])
 
 
+def bins_strs(binlist):
+    """ each numeric value in the binlist are converted to a string representation
+    """
+    res = []
+    for b in binlist:
+        x = bytes_fmt(b).split()
+        res.append("Bin_" + "_".join(x))
+
+    last = bytes_fmt(binlist[-1]).split()
+    res.append("Bin_" + "_".join(last))
+    return res
+
 def spiner():
     # SO: http://stackoverflow.com/questions/13520622/python-script-to-show-progress
     for c in itertools.cycle('|/-\\'):

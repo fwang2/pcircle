@@ -142,7 +142,7 @@ def bins_strs(binlist):
         res.append("Bin_" + "_".join(x))
 
     last = bytes_fmt(binlist[-1]).split()
-    res.append("Bin_" + "_".join(last))
+    res.append("Bin>" + "_".join(last))
     return res
 
 def spiner():

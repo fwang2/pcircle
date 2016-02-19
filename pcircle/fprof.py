@@ -346,7 +346,7 @@ class ProfileWalk:
 def sendto_syslog(key, msg):
     """ set up ident for syslog, and convert msg to string
     """
-    syslog.openlog(ident=key)
+    syslog.openlog(ident=key, facility=syslog.LOG_DEBUG)
     syslog.syslog(str(msg))
     syslog.closelog()
 

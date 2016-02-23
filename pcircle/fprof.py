@@ -27,7 +27,7 @@ import syslog
 
 from timeout import timeout, TimeoutError
 from circle import Circle
-from globals import G
+from globals import G, Tally
 from utils import getLogger, bytes_fmt, destpath
 from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
@@ -133,6 +133,8 @@ class ProfileWalk:
         self.skipped = 0
         self.maxfiles = 0
         self.maxfiles_dir = None
+        self.devfile_cnt = 0        # track # of dev files
+        self.devfile_sz = 0         # track size of dev files
         self.last_reduce_time = MPI.Wtime()
 
         # reduce
@@ -225,6 +227,10 @@ class ProfileWalk:
             self.cnt_files += 1
             self.cnt_filesize += st.st_size
 
+            if utils.is_dev_file(spath):
+                self.devfile_cnt += 1
+                self.devfile_sz += st.st_size
+
             # check hard links
             if st.st_nlink > 1:
                 self.nlinks += st.st_nlink
@@ -287,21 +293,20 @@ class ProfileWalk:
         """ TODO: refactor it to a named tuple? or object
         """
         global taskloads
-        total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
-        total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
-        total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
-        total_symlinks = self.circle.comm.reduce(self.sym_links, op=MPI.SUM)
-        total_skipped = self.circle.comm.reduce(self.skipped, op=MPI.SUM)
-        taskloads = self.circle.comm.gather(self.reduce_items)
-        max_files = self.circle.comm.reduce(self.maxfiles, op=MPI.MAX)
-        total_nlinks = self.circle.comm.reduce(self.nlinks, op=MPI.SUM)
-        total_nlinked_files = self.circle.comm.reduce(self.nlinked_files, op=MPI.SUM)
-        return total_dirs, total_files, total_filesize, total_symlinks, \
-               total_skipped, max_files, total_nlinks, total_nlinked_files
+        Tally.total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
+        Tally.total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
+        Tally.total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
+        Tally.total_symlinks = self.circle.comm.reduce(self.sym_links, op=MPI.SUM)
+        Tally.total_skipped = self.circle.comm.reduce(self.skipped, op=MPI.SUM)
+        Tally.taskloads = self.circle.comm.gather(self.reduce_items)
+        Tally.max_files = self.circle.comm.reduce(self.maxfiles, op=MPI.MAX)
+        Tally.total_nlinks = self.circle.comm.reduce(self.nlinks, op=MPI.SUM)
+        Tally.total_nlinked_files = self.circle.comm.reduce(self.nlinked_files, op=MPI.SUM)
+        Tally.devfile_cnt = self.circle.comm.reduce(self.devfile_cnt, op=MPI.SUM)
+        Tally.devfile_sz = self.circle.comm.reduce(self.devfile_sz, op=MPI.SUM)
 
     def epilogue(self):
-        total_dirs, total_files, total_filesize, total_symlinks, total_skipped, \
-            maxfiles, total_nlinks, total_nlinked_files = self.total_tally()
+        self.total_tally()
         self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
@@ -309,31 +314,34 @@ class ProfileWalk:
             fmt_msg1 = "\t{:<25}{:<20,}"    # numeric
             fmt_msg2 = "\t{:<25}{:<20}"     # string
 
-            print(fmt_msg1.format("Directory count:", total_dirs))
-            print(fmt_msg1.format("Sym links count:", total_symlinks))
-            print(fmt_msg1.format("Hard linked files:", total_nlinked_files))
-            print(fmt_msg1.format("File count:", total_files))
-            print(fmt_msg1.format("Skipped count:", total_skipped))
-            print(fmt_msg2.format("Total file size:", bytes_fmt(total_filesize)))
-            if total_files != 0:
-                print(fmt_msg2.format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
-            print(fmt_msg1.format("Max files within dir:", maxfiles))
+            print(fmt_msg1.format("Directory count:", Tally.total_dirs))
+            print(fmt_msg1.format("Sym links count:", Tally.total_symlinks))
+            print(fmt_msg1.format("Hard linked files:", Tally.total_nlinked_files))
+            print(fmt_msg1.format("File count:", Tally.total_files))
+            print(fmt_msg1.format("Dev file count:", Tally.devfile_cnt))
+            print(fmt_msg2.format("Dev file size:", bytes_fmt(Tally.devfile_sz)))
+            print(fmt_msg1.format("Skipped count:", Tally.total_skipped))
+            print(fmt_msg2.format("Total file size:", bytes_fmt(Tally.total_filesize)))
+            if Tally.total_files != 0:
+                print(fmt_msg2.format("Avg file size:",
+                                      bytes_fmt(Tally.total_filesize/float(Tally.total_files))))
+            print(fmt_msg1.format("Max files within dir:", Tally.max_files))
             elapsed_time = self.time_ended - self.time_started
-            processing_rate = int((total_files + total_dirs + total_symlinks + total_skipped) / elapsed_time)
+            processing_rate = int((Tally.total_files + Tally.total_dirs + Tally.total_symlinks + Tally.total_skipped) / elapsed_time)
             print(fmt_msg2.format("Tree walk time:", utils.conv_time(elapsed_time)))
             print(fmt_msg2.format("Scanning rate:", str(processing_rate) + "/s"))
             print(fmt_msg2.format("Fprof loads:", taskloads))
             print("")
 
-            sendto_syslog("fprof.dir_count", total_dirs)
-            sendto_syslog("fprof.sym_count", total_symlinks)
-            sendto_syslog("fprof.file_count", total_files)
-            sendto_syslog("fprof.total_file_size", bytes_fmt(total_filesize))
-            sendto_syslog("fprof.avg_file_size", bytes_fmt(total_filesize/float(total_files)))
+            sendto_syslog("fprof.dir_count", Tally.total_dirs)
+            sendto_syslog("fprof.sym_count", Tally.total_symlinks)
+            sendto_syslog("fprof.file_count", Tally.total_files)
+            sendto_syslog("fprof.total_file_size", bytes_fmt(Tally.total_filesize))
+            sendto_syslog("fprof.avg_file_size", bytes_fmt(Tally.total_filesize/float(Tally.total_files)))
             sendto_syslog("fprof.walktime", utils.conv_time(elapsed_time))
             sendto_syslog("fprof.scan_rate", processing_rate)
 
-        return total_filesize
+        return Tally.total_filesize
 
     def cleanup(self):
         if self.outfile:  # flush the leftover

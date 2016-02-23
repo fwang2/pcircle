@@ -309,6 +309,16 @@ def check_src2(infiles, mode=os.R_OK):
     return ret
 
 
+def is_dev_file(infile):
+    """
+    check if the "infile" is dev file, return True or False
+    """
+    _, ext = os.path.splitext(infile)
+    if ext.upper() in G.dev_suffixes:
+        return True
+    else:
+        return False
+
 def choplist(alist, num=2):
     """ alist: a list of FileItem(s)
     chop and return a string for proper display

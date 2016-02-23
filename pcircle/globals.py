@@ -6,6 +6,18 @@ class T:
     TOKEN = 7
 
 
+class Tally:
+    total_dirs = 0
+    total_files = 0
+    total_filesize = 0
+    total_symlinks = 0
+    total_skipped = 0
+    max_files = 0
+    total_nlinks = 0
+    total_nlinked_files = 0
+    devfile_cnt = 0
+    devfile_sz = 0
+
 class G:
     ZERO = 0
     ABORT = -1
@@ -93,3 +105,7 @@ class G:
     gpfs_block_size = ("256k", "512k", "b1m", "b4m", "b8m")
     gpfs_block_cnt = [0, 0, 0, 0, 0]
     gpfs_subs = (b256k/32, b512k/32, b1m/32, b4m/32, b8m/32)
+
+    dev_suffixes = [".C", ".CC", ".CU", ".H", ".CPP", ".HPP", ".CXX", ".F", ".I", ".II",
+                    ".F90", ".F95", ".F03", ".FOR", ".O", ".A", ".SO", ".S",
+                    ".IN", ".M4", ".CACHE", ".PY", ".PYC"]

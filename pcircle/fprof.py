@@ -62,6 +62,7 @@ def gen_parser():
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("--perfile", action="store_true", help="Save perfile file size")
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
+    parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
 
@@ -227,7 +228,7 @@ class ProfileWalk:
             self.cnt_files += 1
             self.cnt_filesize += st.st_size
 
-            if utils.is_dev_file(spath):
+            if args.profdev and utils.is_dev_file(spath):
                 self.devfile_cnt += 1
                 self.devfile_sz += st.st_size
 
@@ -302,8 +303,9 @@ class ProfileWalk:
         Tally.max_files = self.circle.comm.reduce(self.maxfiles, op=MPI.MAX)
         Tally.total_nlinks = self.circle.comm.reduce(self.nlinks, op=MPI.SUM)
         Tally.total_nlinked_files = self.circle.comm.reduce(self.nlinked_files, op=MPI.SUM)
-        Tally.devfile_cnt = self.circle.comm.reduce(self.devfile_cnt, op=MPI.SUM)
-        Tally.devfile_sz = self.circle.comm.reduce(self.devfile_sz, op=MPI.SUM)
+        if args.profdev:
+            Tally.devfile_cnt = self.circle.comm.reduce(self.devfile_cnt, op=MPI.SUM)
+            Tally.devfile_sz = self.circle.comm.reduce(self.devfile_sz, op=MPI.SUM)
 
     def epilogue(self):
         self.total_tally()
@@ -318,8 +320,9 @@ class ProfileWalk:
             print(fmt_msg1.format("Sym links count:", Tally.total_symlinks))
             print(fmt_msg1.format("Hard linked files:", Tally.total_nlinked_files))
             print(fmt_msg1.format("File count:", Tally.total_files))
-            print(fmt_msg1.format("Dev file count:", Tally.devfile_cnt))
-            print(fmt_msg2.format("Dev file size:", bytes_fmt(Tally.devfile_sz)))
+            if args.profdev:
+                print(fmt_msg1.format("Dev file count:", Tally.devfile_cnt))
+                print(fmt_msg2.format("Dev file size:", bytes_fmt(Tally.devfile_sz)))
             print(fmt_msg1.format("Skipped count:", Tally.total_skipped))
             print(fmt_msg2.format("Total file size:", bytes_fmt(Tally.total_filesize)))
             if Tally.total_files != 0:
@@ -392,8 +395,6 @@ def main():
 
     if comm.rank == 0:
         sendto_syslog("fprof.fsize.hist", msg)
-
-
 
     if args.gpfs_block_alloc:
         gpfs_blocks = gather_gpfs_blocks()

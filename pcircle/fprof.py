@@ -336,6 +336,9 @@ class ProfileWalk:
             print(fmt_msg2.format("Fprof loads:", taskloads))
             print("")
 
+            sendto_syslog("fprof.rootpath", "%s" % ",".join(G.src))
+            sendto_syslog("fprof.version", "%s" % __version__)
+
             sendto_syslog("fprof.dir_count", Tally.total_dirs)
             sendto_syslog("fprof.sym_count", Tally.total_symlinks)
             sendto_syslog("fprof.file_count", Tally.total_files)
@@ -380,9 +383,6 @@ def main():
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", G.src))
-
-        sendto_syslog("fprof.info", "root path = %s" % ",".join(G.src))
-        sendto_syslog("fprof.info", "fprof version = %s" % __version__)
 
     circle = Circle()
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)

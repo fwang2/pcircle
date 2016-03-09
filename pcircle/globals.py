@@ -102,9 +102,9 @@ class G:
     #             "B5_001t_up"]
 
     # GPFS
-    gpfs_block_size = ("256k", "512k", "b1m", "b4m", "b8m")
-    gpfs_block_cnt = [0, 0, 0, 0, 0]
-    gpfs_subs = (b256k/32, b512k/32, b1m/32, b4m/32, b8m/32)
+    gpfs_block_size = ("256k", "512k", "b1m", "b4m", "b8m", "b16m")
+    gpfs_block_cnt = [0, 0, 0, 0, 0, 0]
+    gpfs_subs = (b256k/32, b512k/32, b1m/32, b4m/32, b8m/32, b16m/32)
 
     dev_suffixes = [".C", ".CC", ".CU", ".H", ".CPP", ".HPP", ".CXX", ".F", ".I", ".II",
                     ".F90", ".F95", ".F03", ".FOR", ".O", ".A", ".SO", ".S",

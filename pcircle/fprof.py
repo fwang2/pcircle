@@ -403,7 +403,7 @@ def main():
             print("\tSubblocks: %s\n" % gpfs_blocks)
             for idx, bsz in enumerate(G.gpfs_block_size):
                 gpfs_file_size = gpfs_blocks[idx] * G.gpfs_subs[idx]
-                fmt_msg = "\tBlocksize: {:<6}   Estimated Space: {:<20s}   Efficiency: {:>6.0%}"
+                fmt_msg = "\tBlocksize: {:<6}   Estimated Space: {:<20s}   Efficiency: {:>6.2%}"
                 if gpfs_file_size != 0:
                     print(fmt_msg.format(bsz, bytes_fmt(gpfs_file_size), total_file_size/float(gpfs_file_size)))
                 else:

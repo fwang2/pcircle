@@ -370,7 +370,8 @@ class ProfileWalk:
             sendto_syslog("fprof.sym_count", Tally.total_symlinks)
             sendto_syslog("fprof.file_count", Tally.total_files)
             sendto_syslog("fprof.total_file_size", bytes_fmt(Tally.total_filesize))
-            sendto_syslog("fprof.avg_file_size", bytes_fmt(Tally.total_filesize/float(Tally.total_files)))
+            if Tally.total_files > 0:
+                sendto_syslog("fprof.avg_file_size", bytes_fmt(Tally.total_filesize/float(Tally.total_files)))
             sendto_syslog("fprof.walktime", utils.conv_time(elapsed_time))
             sendto_syslog("fprof.scan_rate", processing_rate)
 
@@ -427,7 +428,9 @@ def main():
         topfiles = gather_topfiles()
         if comm.rank == 0:
             print("\nTop File Report:\n")
-            for index, _ in enumerate(xrange(args.top)):
+            # edge case: not enough files (< args.top)
+            totaln = args.top if len(topfiles) > args.top else len(topfiles)
+            for index, _ in enumerate(xrange(totaln)):
                 size, path = topfiles[index]
                 print("\t%s: %s (%s)" % (index + 1,
                                        path,

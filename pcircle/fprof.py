@@ -16,6 +16,7 @@ __email__ = "fwang2@ornl.gov"
 from mpi4py import MPI
 
 from scandir import scandir
+from collections import namedtuple
 import stat
 import os
 import os.path
@@ -24,6 +25,7 @@ import numpy as np
 import bisect
 import resource
 import syslog
+import heapq
 
 from timeout import timeout, TimeoutError
 from circle import Circle
@@ -38,7 +40,7 @@ __version__ = get_versions()['version']
 args = None
 log = getLogger(__name__)
 taskloads = []
-
+topn = []   # track top N files
 hist = [0] * (len(G.bins) + 1)
 
 # tracking size
@@ -46,6 +48,8 @@ fsize = [0] * (len(G.bins) + 1)
 
 comm = MPI.COMM_WORLD
 FSZMAX = 30000
+TopFile = namedtuple("TopFile", "size, path")
+
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -62,6 +66,7 @@ def gen_parser():
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("--perfile", action="store_true", help="Save perfile file size")
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
+    parser.add_argument("--top", type=int, default=None, help="Top N files, default is None (disabled)")
     parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
@@ -74,6 +79,7 @@ def incr_local_histogram(fsz):
     hist[idx] += 1
     fsize[idx] += fsz
 
+
 def gather_histogram():
     global hist, fsize
     hist = np.array(hist)  # switch to array format
@@ -84,6 +90,22 @@ def gather_histogram():
     if comm.rank == 0:
         hist = sum(all_hist)
         fsize = sum(all_fsize)
+
+
+def update_topn(item):
+    """ collect top N (as defined by args.topn) items """
+    global topn
+    if len(topn) >= args.top:
+        heapq.heappushpop(topn, item)
+    else:
+        heapq.heappush(topn, item)
+
+
+def gather_topfiles():
+    all_topfiles = comm.gather(topn) # [ [ top list from rank x] [ top list from rank y] ]
+    if comm.rank == 0:
+        flat_topfiles = [item for sublist in all_topfiles for item in sublist ]
+        return sorted(flat_topfiles, reverse=True)
 
 def gpfs_block_update(fsz, inodesz=4096):
     if fsz > (inodesz - 128):
@@ -103,6 +125,8 @@ def gather_gpfs_blocks():
         gpfs_blocks = None
 
     return gpfs_blocks
+
+
 
 class ProfileWalk:
 
@@ -217,6 +241,9 @@ class ProfileWalk:
             incr_local_histogram(st.st_size)
             if args.gpfs_block_alloc:
                 gpfs_block_update(st.st_size)
+
+            if args.top:
+                update_topn(TopFile(st.st_size, spath))
 
             if self.outfile:
                 self.fszlst.append(st.st_size)
@@ -396,6 +423,17 @@ def main():
     if comm.rank == 0:
         sendto_syslog("fprof.fsize.hist", msg)
 
+    if args.top:
+        topfiles = gather_topfiles()
+        if comm.rank == 0:
+            print("\nTop File Report:\n")
+            for index, _ in enumerate(xrange(args.top)):
+                size, path = topfiles[index]
+                print("\t%s: %s (%s)" % (index + 1,
+                                       path,
+                                       utils.bytes_fmt(size)))
+            print("")
+
     if args.gpfs_block_alloc:
         gpfs_blocks = gather_gpfs_blocks()
         if comm.rank == 0:
@@ -446,7 +484,6 @@ def gen_histogram(total_file_size):
             #                  hist[idx],
             #                  utils.bytes_fmt(fsize[idx]),
             #                  "%0.2f%%" % percent, '∎' * star_count))
-
 
             syslog_msg += "%s = %s, " % (bins_fmt[idx], hist[idx])
 

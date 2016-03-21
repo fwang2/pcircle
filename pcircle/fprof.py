@@ -420,10 +420,11 @@ def main():
     # we need the total file size to calculate GPFS efficiency
     total_file_size = treewalk.epilogue()
 
-    msg = gen_histogram(total_file_size)
+    msg1, msg2 = gen_histogram(total_file_size)
 
     if comm.rank == 0:
-        sendto_syslog("fprof.fsize.hist", msg)
+        sendto_syslog("fprof.filecount.hist", msg1)
+        sendto_syslog("fprof.fsize_perc.hist", msg2)
 
     if args.top:
         topfiles = gather_topfiles()
@@ -456,7 +457,8 @@ def main():
 
 
 def gen_histogram(total_file_size):
-    syslog_msg = ""
+    syslog_filecount_hist = ""
+    syslog_fsizeperc_hist = ""
     bins_fmt = utils.bins_strs(G.bins)
     gather_histogram()
     if comm.rank == 0:
@@ -489,7 +491,8 @@ def gen_histogram(total_file_size):
             #                  utils.bytes_fmt(fsize[idx]),
             #                  "%0.2f%%" % percent, '∎' * star_count))
 
-            syslog_msg += "%s = %s, " % (bins_fmt[idx], hist[idx])
+            syslog_filecount_hist += "%s = %s, " % (bins_fmt[idx], hist[idx])
+            syslog_fsizeperc_hist += "%s = %s, " % (bins_fmt[idx], percent_size)
 
         # special processing of last row
         percent_files = 100 * hist[-1] / float(total_num_of_files)
@@ -504,9 +507,10 @@ def gen_histogram(total_file_size):
         # print(msg.format("> ", utils.bytes_fmt(rightbound), hist[-1],
         #                  utils.bytes_fmt(fsize[-1]),
         #                  "%0.2f%%" % percent, '∎' * star_count))
-        syslog_msg += "%s = %s" % (bins_fmt[-1], hist[-1])
+        syslog_filecount_hist += "%s = %s" % (bins_fmt[-1], hist[-1])
+        syslog_fsizeperc_hist += "%s = %s" % (bins_fmt[-1], percent_size)
 
-    return syslog_msg
+    return syslog_filecount_hist, syslog_fsizeperc_hist
 
 if __name__ == "__main__":
     main()

@@ -139,10 +139,10 @@ def bins_strs(binlist):
     res = []
     for b in binlist:
         x = bytes_fmt(b).split()
-        res.append("Bin_" + "_".join(x))
+        res.append("Bin_LE_" + "_".join(x))
 
     last = bytes_fmt(binlist[-1]).split()
-    res.append("Bin>" + "_".join(last))
+    res.append("Bin_GT_" + "_".join(last))
     return res
 
 def spiner():

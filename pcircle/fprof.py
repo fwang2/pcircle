@@ -107,6 +107,7 @@ def gather_topfiles():
         flat_topfiles = [item for sublist in all_topfiles for item in sublist ]
         return sorted(flat_topfiles, reverse=True)
 
+
 def gpfs_block_update(fsz, inodesz=4096):
     if fsz > (inodesz - 128):
         for idx, sub in enumerate(G.gpfs_subs):

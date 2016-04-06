@@ -45,7 +45,7 @@ hist = [0] * (len(G.bins) + 1)
 
 # tracking size
 fsize = [0] * (len(G.bins) + 1)
-
+DII_COUNT = 0           # data-in-inode
 comm = MPI.COMM_WORLD
 FSZMAX = 30000
 TopFile = namedtuple("TopFile", "size, path")
@@ -109,12 +109,15 @@ def gather_topfiles():
 
 
 def gpfs_block_update(fsz, inodesz=4096):
+    global DII_COUNT
     if fsz > (inodesz - 128):
         for idx, sub in enumerate(G.gpfs_subs):
             blocks = fsz / sub
             if fsz % sub != 0:
                 blocks += 1
             G.gpfs_block_cnt[idx] += blocks
+    else:
+        DII_COUNT += 1
 
 
 def gather_gpfs_blocks():
@@ -443,6 +446,7 @@ def main():
         gpfs_blocks = gather_gpfs_blocks()
         if comm.rank == 0:
             print("\nGPFS Block Alloc Report:\n")
+            print("\tDII (data-in-inode) count: %s" % DII_COUNT)
             print("\tSubblocks: %s\n" % gpfs_blocks)
             for idx, bsz in enumerate(G.gpfs_block_size):
                 gpfs_file_size = gpfs_blocks[idx] * G.gpfs_subs[idx]

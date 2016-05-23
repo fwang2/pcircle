@@ -16,7 +16,9 @@ deb:
 	$(PYTHON) setup.py --command-packages=stdeb.command bdist_deb
 
 rpm:
-	$(PYTHON) setup.py bdist_rpm --post-install=rpm/postinstall --pre-uninstall=rpm/preuninstall
+
+	$(PYTHON) setup.py bdist_rpm --require \
+		"numpy python-scandir libattr-devel pyxattr python-argparse mpi4py-openmpi python-cffi lru-dict"
 
 
 install: deploy

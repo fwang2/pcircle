@@ -55,6 +55,7 @@ deploy:
 	rm -rf $(VENV)
 	virtualenv --no-site-packages $(VENV)
 	$(VENV)/bin/pip install $(SDIST)
+	virtualenv --relocatable $(VENV)
 
 dev-deploy:	
 	rm -rf dist

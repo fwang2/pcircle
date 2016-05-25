@@ -1,3 +1,5 @@
 include Makefile
+include pcircle.spec
 include versioneer.py
-include pcircle/*.pyinclude pcircle/_version.py
+include pcircle/*.py
+include pcircle/_version.py

@@ -18,6 +18,7 @@ License: Apache
 Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
 BuildRequires: python >= 2.7
+BuildRequires: python-virtualenv
 #BuildRequires: openmpi-devel
 #BuildRequires: python-cffi
 #BuildRequires: numpy

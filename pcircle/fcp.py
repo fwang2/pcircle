@@ -488,7 +488,7 @@ class FCP(BaseTask):
 
         if self.verify:
             # use src path here
-            ck = ChunkSum(work.src, offset=work.offset, length=work.length,
+            ck = ChunkSum(work.dest, offset=work.offset, length=work.length,
                           digest=m.hexdigest())
             self.chunksums.append(ck)
 

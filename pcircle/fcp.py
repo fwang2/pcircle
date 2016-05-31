@@ -78,7 +78,7 @@ def gen_parser():
     parser.add_argument("-i", "--cpid", metavar="ID", default=None, help="checkpoint file id, default: timestamp")
     parser.add_argument("-r", "--rid", dest="rid", metavar="ID", help="resume ID, required in resume mode")
     parser.add_argument("--pause", metavar="s", type=int, help="pause a delay (seconds) after copy, test only")
-    parser.add_argument("--use-store",action="store_true",help="Use backend storage, defaulut: off")
+    parser.add_argument("--use-store",action="store_true",help="Use backend storage, default: off")
     parser.add_argument("src", nargs='+', help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -264,8 +264,8 @@ class FCP(BaseTask):
                     extra=self.d)
 
         if G.use_store:
-            if len(self.flist_buf) > 0:
-                for fi in self.flist_buf:
+            if len(self.treewalk.flist_buf) > 0:
+                for fi in self.treewalk.flist_buf:
                     self.handle_fitem(fi)
             while self.treewalk.flist.qsize > 0:
                 fitems, _ = self.treewalk.flist.mget(G.DB_BUFSIZE)

@@ -65,6 +65,7 @@ def gen_parser():
     parser.add_argument("path", nargs='+', default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("--perfile", action="store_true", help="Save perfile file size")
+    parser.add_argument("--inodesz", default="4k", help="inode size, default 4k")
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
     parser.add_argument("--top", type=int, default=None, help="Top N files, default is None (disabled)")
     parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
@@ -244,7 +245,8 @@ class ProfileWalk:
         if stat.S_ISREG(st.st_mode):
             incr_local_histogram(st.st_size)
             if args.gpfs_block_alloc:
-                gpfs_block_update(st.st_size)
+                inodesz = utils.conv_unit(args.inodesz)
+                gpfs_block_update(st.st_size, inodesz)
 
             if args.top:
                 update_topn(TopFile(st.st_size, spath))
@@ -446,6 +448,7 @@ def main():
         gpfs_blocks = gather_gpfs_blocks()
         if comm.rank == 0:
             print("\nGPFS Block Alloc Report:\n")
+            print("\tinode size: %s" % args.inodesz)
             print("\tDII (data-in-inode) count: %s" % DII_COUNT)
             print("\tSubblocks: %s\n" % gpfs_blocks)
             for idx, bsz in enumerate(G.gpfs_block_size):

@@ -78,6 +78,7 @@ def gen_parser():
     parser.add_argument("-i", "--cpid", metavar="ID", default=None, help="checkpoint file id, default: timestamp")
     parser.add_argument("-r", "--rid", dest="rid", metavar="ID", help="resume ID, required in resume mode")
     parser.add_argument("--pause", metavar="s", type=int, help="pause a delay (seconds) after copy, test only")
+    parser.add_argument("--use-store",action="store_true",help="Use backend storage, default: off")
     parser.add_argument("src", nargs='+', help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -263,6 +264,9 @@ class FCP(BaseTask):
                     extra=self.d)
 
         if G.use_store:
+            if len(self.treewalk.flist_buf) > 0:
+                for fi in self.treewalk.flist_buf:
+                    self.handle_fitem(fi)
             while self.treewalk.flist.qsize > 0:
                 fitems, _ = self.treewalk.flist.mget(G.DB_BUFSIZE)
                 for fi in fitems:
@@ -894,6 +898,7 @@ def main():
     G.reduce_interval = args.reduce_interval
     G.verbosity = args.verbosity
     G.am_root = True if os.geteuid() == 0 else False
+    G.use_store = args.use_store
 
     if args.signature:  # with signature implies doing verify as well
         args.verify = True
@@ -927,6 +932,7 @@ def main():
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
             "Checkpoint ID:", "%s" % args.cpid))
 
+        print("\t{:<25}{:<10}".format("Use backend store:", "%r" % args.use_store))
         #
         if args.verbosity > 0:
             print("\t{:<25}{:<20}".format("Copy Mode:", G.copytype))

@@ -263,11 +263,11 @@ class FCP(BaseTask):
         log.info("create() starts, flist length = %s" % len(self.treewalk.flist),
                     extra=self.d)
 
-        print("Use store = ", self.treewalk.use_store)
-        print("len flist = ", len(self.treewalk.flist))
+        #print("Use store = ", self.treewalk.use_store)
+        #print("len flist = ", len(self.treewalk.flist))
         if self.treewalk.use_store:
             if len(self.treewalk.flist_buf) > 0:
-                print("len in flist_buf = ",len(self.treewalk.flist_buf))
+                #print("len in flist_buf = ",len(self.treewalk.flist_buf))
                 for fi in self.treewalk.flist_buf:
                     self.handle_fitem(fi)
             while self.treewalk.flist_db.qsize > 0:
@@ -676,6 +676,8 @@ def fcp_start():
     else:  # okay, let's do checkpoint recovery
         workq = prep_recovery()
 
+    #print("rank = ", treewalk.circle.rank, "atreewalk flist use store = ", treewalk.use_store)
+    #print("rank = ", treewalk.circle.rank, "treewalk circle use store = ", treewalk.circle.use_store)
     circle = Circle()
     fcp = FCP(circle, G.src, G.dest,
               treewalk=treewalk,
@@ -698,6 +700,7 @@ def fcp_start():
     circle.finalize()
     fcp.cleanup()
 
+    #print("rank = ", fcp.circle.rank, "fcp circle use store = ", fcp.circle.use_store)
 
 def get_workq_size(workq):
     """ workq is a list of FileChunks, we iterate each and summarize the size,

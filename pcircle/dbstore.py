@@ -173,6 +173,8 @@ class DbStore(object):
     def mget(self, n):
         objs = []
         size = 0
+        if n > self.qsize:
+            n = self.qsize
         with self.conn:
             for row in self.conn.execute("SELECT work FROM workq LIMIT (?) OFFSET 0", (n,)):
                 obj = pickle.loads(str(row[0]))
@@ -182,6 +184,8 @@ class DbStore(object):
         return objs, size
 
     def mdel(self, n, size=0):
+        if n > self.qsize:
+            n = self.qsize
         with self.conn:
             cur = self.conn.cursor()
             cur.execute("DELETE FROM workq WHERE id in (SELECT id FROM workq LIMIT (?) OFFSET 0)",

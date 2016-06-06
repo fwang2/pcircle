@@ -121,6 +121,12 @@ def gpfs_block_update(fsz, inodesz=4096):
         DII_COUNT += 1
 
 
+def gather_gpfs_dii():
+    """Aggregate DII count"""
+    global DII_COUNT
+    DII_COUNT = comm.reduce(DII_COUNT, op=MPI.SUM)
+
+
 def gather_gpfs_blocks():
     local_blocks = np.array(G.gpfs_block_cnt)
     all_blocks = comm.gather(local_blocks)
@@ -130,7 +136,6 @@ def gather_gpfs_blocks():
         gpfs_blocks = None
 
     return gpfs_blocks
-
 
 
 class ProfileWalk:
@@ -446,10 +451,11 @@ def main():
 
     if args.gpfs_block_alloc:
         gpfs_blocks = gather_gpfs_blocks()
+        gather_gpfs_dii()
         if comm.rank == 0:
             print("\nGPFS Block Alloc Report:\n")
-            print("\tinode size: %s" % args.inodesz)
-            print("\tDII (data-in-inode) count: %s" % DII_COUNT)
+            print("\t{:<15}{:<4}".format("inode size:", args.inodesz))
+            print("\t{:<25}{:>15,}".format("DII (data-in-inode) count:", DII_COUNT))
             print("\tSubblocks: %s\n" % gpfs_blocks)
             for idx, bsz in enumerate(G.gpfs_block_size):
                 gpfs_file_size = gpfs_blocks[idx] * G.gpfs_subs[idx]

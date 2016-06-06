@@ -167,7 +167,7 @@ class Circle:
         if dbname is None:
             self.dbname = os.path.join(self.tempdir, "workq-%s" % self.rank)
         else:
-            self.dbname = os.path.join(self.tempdir, "%s-%s" % (dbname, self.rank))
+            self.dbname = os.path.join(self.tempdir, "%s.workq-%s" % (dbname, self.rank))
 
         self.workq_db = DbStore(self.dbname, resume=resume)
 

@@ -4,6 +4,9 @@ import hashlib
 from mpi4py import MPI
 import utils
 from lru import LRU
+from dbstore import DbStore
+from dbsum import MemSum
+from globals import G
 
 
 class PVerify(BaseTask):
@@ -34,9 +37,19 @@ class PVerify(BaseTask):
             print("\nChecksum verification ...")
 
     def create(self):
-        self.logger.info("Chunk count: %s" % len(self.fcp.chunksums), extra=self.d)
-        for ck in self.fcp.chunksums:
+        self.logger.info("Chunk count: %s" % (self.fcp.chunksums_mem.size() + self.fcp.chunksums_buf.size() + self.fcp.chunksums_db.qsize), extra=self.d)
+        for ck in self.fcp.chunksums_mem.chunksums:
             self.enq(ck)
+        if self.fcp.chunksums_buf.size() > 0:
+            for ck in self.fcp.chunksums_buf.chunksums:
+                self.enq(ck)
+        while self.fcp.chunksums_db.qsize > 0:
+            chunksums_buf = MemSum()
+            chunksums_buf.chunksums, _ = self.fcp.chunksums_db.mget(G.DB_BUFSIZE)
+            for ck in chunksums_buf.chunksums:
+                self.enq(ck)
+            self.fcp.chunksums_db.mdel(G.DB_BUFSIZE)
+
 
     def process(self):
         chunk = self.deq()

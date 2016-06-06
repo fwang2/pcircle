@@ -147,7 +147,14 @@ class FCP(BaseTask):
 
         # verify
         self.verify = verify
-        self.chunksums = []
+        self.use_store = False
+        if self.verify:
+            self.chunksums_mem = MemSum()
+            self.chunksums_buf = MemSum()
+            self.workdir = os.getcwd()
+            self.tempdir = os.path.join(self.workdir, ".pcircle")
+            self.chunksums_dbname = "%s/chunksums.%s" % (self.tempdir, self.circle.rank)
+            self.chunksums_db = DbStore(dbname=self.chunksums_dbname)
 
         # checkpointing
         self.checkpoint_interval = sys.maxsize
@@ -183,6 +190,9 @@ class FCP(BaseTask):
         # remove checkpoint file
         if self.checkpoint_file and os.path.exists(self.checkpoint_file):
             os.remove(self.checkpoint_file)
+        
+        # remove chunksums file
+        self.chunksums_db.cleanup()
 
         # we need to do this because if last job didn't finish cleanly
         # the fwalk files can be found as leftovers
@@ -451,6 +461,8 @@ class FCP(BaseTask):
             print("\t{:<20}{:<20}".format("Ending at:", utils.current_time()))
             print("\t{:<20}{:<20}".format("Completed in:", utils.conv_time(tlapse)))
             print("\t{:<20}{:<20}".format("Transfer Rate:", "%s/s" % bytes_fmt(rate)))
+            print("\t{:<20}{:<20}".format("Use store chunksums:", "%s" % self.use_store))
+            print("\t{:<20}{:<20}".format("Use store workq:", "%s" % self.circle.use_store))
             print("\t{:<20}{:<20}".format("FCP Loads:", "%s" % taskloads))
 
     def read_then_write(self, rfd, wfd, work, num_of_bytes, m):
@@ -499,7 +511,16 @@ class FCP(BaseTask):
             # use src path here
             ck = ChunkSum(work.dest, offset=work.offset, length=work.length,
                           digest=m.hexdigest())
-            self.chunksums.append(ck)
+
+            if self.chunksums_mem.size() < G.memitem_threshold:
+                self.chunksums_mem.chunksums.append(ck)
+            else:
+                self.use_store = True
+                self.chunksums_buf.chunksums.append(ck)
+                if self.chunksums_buf.size() == G.DB_BUFSIZE:
+                    self.chunksums_db.mput(self.chunksums_buf.chunksums)
+                    # create a new buffer instead of deletion, could add delete method to Memsum
+                    self.chunksums_buf = MemSum()
 
 
 def check_dbstore_resume_condition(rid):
@@ -678,7 +699,7 @@ def fcp_start():
 
     #print("rank = ", treewalk.circle.rank, "atreewalk flist use store = ", treewalk.use_store)
     #print("rank = ", treewalk.circle.rank, "treewalk circle use store = ", treewalk.circle.use_store)
-    circle = Circle()
+    circle = Circle(dbname="fcp")
     fcp = FCP(circle, G.src, G.dest,
               treewalk=treewalk,
               totalsize=G.totalsize,
@@ -698,7 +719,7 @@ def fcp_start():
 
     circle.begin(fcp)
     circle.finalize()
-    fcp.cleanup()
+    #fcp.cleanup()
 
     #print("rank = ", fcp.circle.rank, "fcp circle use store = ", fcp.circle.use_store)
 
@@ -914,8 +935,8 @@ def main():
     G.src, G.dest = check_source_and_target(args.src, args.dest)
     dbname = get_workq_name()
 
-    circle = Circle()
-    circle.dbname = dbname
+    circle = Circle(dbname="fwalk")
+    #circle.dbname = dbname
 
     if args.rid:
         circle.resume = True
@@ -958,7 +979,7 @@ def main():
 
     # do checksum verification
     if args.verify:
-        circle = Circle()
+        circle = Circle(dbname="verify")
         pcheck = PVerify(circle, fcp, G.totalsize)
         circle.begin(pcheck)
         tally = pcheck.fail_tally()
@@ -989,12 +1010,12 @@ def main():
         fcp.epilogue()
         fcp.cleanup()
 
-    # if circle:
-    #     circle.finalize(cleanup=True)
+    if circle:
+         circle.finalize(cleanup=True)
     # TODO: a close file error can happen when circle.finalize()
     #
-    if isinstance(circle.workq, DbStore):
-        circle.workq.cleanup()
+    #if isinstance(circle.workq, DbStore):
+    #    circle.workq.cleanup()
 
 if __name__ == "__main__":
     main()

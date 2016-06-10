@@ -192,7 +192,8 @@ class FCP(BaseTask):
             os.remove(self.checkpoint_file)
         
         # remove chunksums file
-        self.chunksums_db.cleanup()
+        if self.verify:
+            self.chunksums_db.cleanup()
 
         # we need to do this because if last job didn't finish cleanly
         # the fwalk files can be found as leftovers
@@ -424,9 +425,14 @@ class FCP(BaseTask):
 
     def reduce_init(self, buf):
         buf['cnt_filesize'] = self.cnt_filesize
+        if sys.platform == 'darwin':
+            buf['mem_snapshot'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        else:
+            buf['mem_snapshot'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
 
     def reduce(self, buf1, buf2):
         buf1['cnt_filesize'] += buf2['cnt_filesize']
+        buf1['mem_snapshot'] += buf2['mem_snapshot']
         return buf1
 
     def reduce_report(self, buf):
@@ -441,6 +447,7 @@ class FCP(BaseTask):
             self.cnt_filesize_prior = buf['cnt_filesize']
             out += ", estimated transfer rate: %s/s" % bytes_fmt(rate)
 
+        out += ", memory usage: %s" % bytes_fmt(buf['mem_snapshot'])
         print(out)
 
     def reduce_finish(self, buf):

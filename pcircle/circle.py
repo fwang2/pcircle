@@ -5,6 +5,7 @@ import random
 import sys
 import os
 import os.path
+import shutil
 from collections import deque
 from pprint import pprint
 
@@ -88,7 +89,7 @@ class Circle:
 
         # reduction
         self.reduce_enabled = True
-        self.reduce_time_last = MPI.Wtime()
+        self.reduce_time_last = -self.reduce_time_interval
         self.reduce_outstanding = False
         self.reduce_replies = 0
         self.reduce_buf = {}
@@ -148,9 +149,8 @@ class Circle:
         """
         self.use_store = False
         self.workq = []
-	self.workq_buf = []
-        self.workq_init(dbname, resume)
-
+        self.workq_buf = []
+        self.workq_init(self.dbname, G.resume)
         self.logger.debug("Circle initialized", extra=self.d)
 
     def finalize(self, cleanup=True):
@@ -164,12 +164,15 @@ class Circle:
         # should not use dash ... the default is to use "." for sepration
         # Yes, this is very fragile, hopefully we will fix this later
 
-        if dbname is None:
-            self.dbname = os.path.join(self.tempdir, "workq-%s" % self.rank)
+        if G.resume == True:
+            self.dbname = os.path.join(self.workdir, ".pcp_workq.%s.%s.db" % (G.rid, self.rank))
         else:
-            self.dbname = os.path.join(self.tempdir, "%s.workq-%s" % (dbname, self.rank))
+            if dbname is None:
+                self.dbname = os.path.join(self.tempdir, "workq-%s" % self.rank)
+            else:
+                self.dbname = os.path.join(self.tempdir, "%s.workq-%s" % (dbname, self.rank))
 
-        self.workq_db = DbStore(self.dbname, resume=resume)
+        self.workq_db = DbStore(self.dbname, resume=G.resume)
 
     # after task(fcp) creation, push works in workq_buf into workq_db
     def push_remaining_buf(self):
@@ -260,9 +263,10 @@ class Circle:
             return self.workq_buf.pop()
         elif len(self.workq_db) > 0:
             #read a batch of works into memory
-            self.workq, _ = self.workq_db.mget(G.memitem_threshold)
-            self.workq_db.mdel(G.memitem_threshold)
-            return self.workq.pop()
+            self.workq, objs_size = self.workq_db.mget(G.memitem_threshold)
+            self.workq_db.mdel(G.memitem_threshold, objs_size)
+            if len(self.workq) > 0:
+               return self.workq.pop()
         else:
             return None
 
@@ -402,8 +406,8 @@ class Circle:
 
             # if in-memory workq is empty, get a batch of works from database
             if len(self.workq) == 0 and len(self.workq_db) > 0:
-                self.workq, _  = self.workq_db.mget(G.memitem_threshold)
-                self.workq_db.mdel(G.memitem_threshold)
+                self.workq, objs_size  = self.workq_db.mget(G.memitem_threshold)
+                self.workq_db.mdel(G.memitem_threshold, objs_size)
 
             self.logger.debug("have %s requesters, with %s work items in queue" %
                               (len(self.requestors), len(self.workq)), extra=self.d)

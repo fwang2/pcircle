@@ -10,11 +10,13 @@ from __future__ import print_function
 import time
 import stat
 import os
+import shutil
 import os.path
 import hashlib
 import sys
 import signal
 import resource
+import sqlite3
 import cPickle as pickle
 from collections import Counter
 from lru import LRU
@@ -108,6 +110,7 @@ class FCP(BaseTask):
         self.workq = workq
         self.resume = resume
         self.checkpoint_file = None
+        self.checkpoint_db = None
         self.src = src
         self.dest = os.path.abspath(dest)
 
@@ -190,7 +193,15 @@ class FCP(BaseTask):
         # remove checkpoint file
         if self.checkpoint_file and os.path.exists(self.checkpoint_file):
             os.remove(self.checkpoint_file)
-        
+        if self.checkpoint_db and os.path.exists(self.checkpoint_db):
+            os.remove(self.checkpoint_db)
+
+        # remove provided checkpoint file
+        if G.resume and G.chk_file and os.path.exists(G.chk_file):
+            os.remove(G.chk_file)
+        if G.resume and G.chk_file_db and os.path.exists(G.chk_file_db):
+            os.remove(G.chk_file_db)
+
         # remove chunksums file
         if self.verify:
             self.chunksums_db.cleanup()
@@ -302,10 +313,10 @@ class FCP(BaseTask):
             for fi in self.treewalk.flist:
                 self.handle_fitem(fi)
 
-            # memory-checkpoint
-            if self.checkpoint_file:
-                self.do_no_interrupt_checkpoint()
-                self.checkpoint_last = MPI.Wtime()
+        # both memory and databse checkpoint
+        if self.checkpoint_file:
+            self.do_no_interrupt_checkpoint()
+            self.checkpoint_last = MPI.Wtime()
 
     def do_open(self, k, d, flag, limit):
         """
@@ -389,8 +400,10 @@ class FCP(BaseTask):
         a.start()
         a.join()
         log.debug("checkpoint: %s" % self.checkpoint_file, extra=self.d)
+        print("\nMake checkpoint files: ", self.checkpoint_file)
 
     def do_checkpoint(self):
+        # when make checkpoint, first write workq and workq_buf into checkpoint file, then make a copy of workq_db if it exists
         for k in self.wfd_cache.keys():
             os.close(self.wfd_cache[k])
 
@@ -400,9 +413,21 @@ class FCP(BaseTask):
         tmp_file = self.checkpoint_file + ".part"
         with open(tmp_file, "wb") as f:
             cobj = Checkpoint(self.src, self.dest, self.get_workq(), self.totalsize)
+            cobj.workq.extend(self.circle.workq_buf)
             pickle.dump(cobj, f, pickle.HIGHEST_PROTOCOL)
         # POSIX requires rename to be atomic
         os.rename(tmp_file, self.checkpoint_file)
+
+        # copy workq_db database file
+        if len(self.circle.workq_db) > 0:
+            self.checkpoint_db = self.checkpoint_file + ".db"
+            if not G.resume:
+                shutil.copy2(self.circle.dbname, self.checkpoint_db)
+            else:
+                # in resume mode, make a copy of current workq db file, which is provided checkpoint db file
+                self.workdir = os.getcwd()
+                existingCheckpoint = os.path.join(self.workdir,".pcp_workq.%s.%s.db" % (G.rid, self.circle.rank))
+                shutil.copy2(existingCheckpoint,self.checkpoint_db)
 
     def process(self):
         """
@@ -422,6 +447,7 @@ class FCP(BaseTask):
             self.do_copy(work)
         else:
             log.warn("Unknown work object: %s" % work, extra=self.d)
+            err_and_exit("Not a correct workq format")
 
     def reduce_init(self, buf):
         buf['cnt_filesize'] = self.cnt_filesize
@@ -651,9 +677,13 @@ def prep_recovery():
     global args, circle
 
     oldsz, tsz, sz = 0, 0, 0
+    sz_db = 0
     cobj = None
     local_checkpoint_cnt = 0
     chk_file = ".pcp_workq.%s.%s" % (args.rid, circle.rank)
+    chk_file_db = ".pcp_workq.%s.%s.db" % (args.rid, circle.rank)
+    G.chk_file = chk_file
+    G.chk_file_db = chk_file_db
 
     if os.path.exists(chk_file):
         local_checkpoint_cnt = 1
@@ -668,6 +698,17 @@ def prep_recovery():
                 log.error("error reading %s" % chk_file, extra=dmsg)
                 circle.comm.Abort()
 
+    if os.path.exists(chk_file_db):
+        qsize_db = 0
+        local_checkpoint_cnt = 1
+        conn = sqlite3.connect(chk_file_db)
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT * FROM checkpoint")
+            qsize_db, sz_db = cur.fetchone()
+        except sqlite3.OperationalError as e:
+            pass
+
     log.debug("located chkpoint %s, sz=%s, local_cnt=%s" %
                  (chk_file, sz, local_checkpoint_cnt), extra=dmsg)
 
@@ -676,7 +717,9 @@ def prep_recovery():
     verify_checkpoint(chk_file, total_checkpoint_cnt)
 
     # acquire total size
-    G.totalsize = circle.comm.allreduce(sz)
+    total_sz_mem = circle.comm.allreduce(sz)
+    total_sz_db = circle.comm.allreduce(sz_db)
+    G.totalsize = total_sz_mem + total_sz_db
     if G.totalsize == 0:
         if circle.rank == 0:
             print("\nRecovery size is 0 bytes, can't proceed.")
@@ -704,8 +747,6 @@ def fcp_start():
     else:  # okay, let's do checkpoint recovery
         workq = prep_recovery()
 
-    #print("rank = ", treewalk.circle.rank, "atreewalk flist use store = ", treewalk.use_store)
-    #print("rank = ", treewalk.circle.rank, "treewalk circle use store = ", treewalk.circle.use_store)
     circle = Circle(dbname="fcp")
     fcp = FCP(circle, G.src, G.dest,
               treewalk=treewalk,
@@ -727,8 +768,6 @@ def fcp_start():
     circle.begin(fcp)
     circle.finalize()
     #fcp.cleanup()
-
-    #print("rank = ", fcp.circle.rank, "fcp circle use store = ", fcp.circle.use_store)
 
 def get_workq_size(workq):
     """ workq is a list of FileChunks, we iterate each and summarize the size,
@@ -946,7 +985,8 @@ def main():
     #circle.dbname = dbname
 
     if args.rid:
-        circle.resume = True
+        G.resume = True
+        G.rid = args.rid
         args.signature = False # when recovery, no signature
 
     if not args.cpid:

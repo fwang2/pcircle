@@ -37,18 +37,22 @@ class PVerify(BaseTask):
             print("\nChecksum verification ...")
 
     def create(self):
-        self.logger.info("Chunk count: %s" % (self.fcp.chunksums_mem.size() + self.fcp.chunksums_buf.size() + self.fcp.chunksums_db.qsize), extra=self.d)
+        chunk_count = self.fcp.chunksums_mem.size() + self.fcp.chunksums_buf.size()
+        if hasattr(self.fcp, "chunksums_db"):
+            chunk_count = self.fcp.chunksums_db.qsize
+        self.logger.info("Chunk count: %s" % chunk_count, extra=self.d)
         for ck in self.fcp.chunksums_mem.chunksums:
             self.enq(ck)
         if self.fcp.chunksums_buf.size() > 0:
             for ck in self.fcp.chunksums_buf.chunksums:
                 self.enq(ck)
-        while self.fcp.chunksums_db.qsize > 0:
-            chunksums_buf = MemSum()
-            chunksums_buf.chunksums, _ = self.fcp.chunksums_db.mget(G.DB_BUFSIZE)
-            for ck in chunksums_buf.chunksums:
-                self.enq(ck)
-            self.fcp.chunksums_db.mdel(G.DB_BUFSIZE)
+        if self.fcp.use_store:
+            while self.fcp.chunksums_db.qsize > 0:
+                chunksums_buf = MemSum()
+                chunksums_buf.chunksums, _ = self.fcp.chunksums_db.mget(G.DB_BUFSIZE)
+                for ck in chunksums_buf.chunksums:
+                    self.enq(ck)
+                self.fcp.chunksums_db.mdel(G.DB_BUFSIZE)
 
 
     def process(self):

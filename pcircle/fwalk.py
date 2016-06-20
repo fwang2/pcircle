@@ -115,13 +115,8 @@ class FWalk(BaseTask):
         if not os.path.exists(self.tempdir):
             os.mkdir(self.tempdir)
 
-        #if G.use_store:
-        self.dbname = "%s/fwalk.%s" % (self.tempdir, circle.rank)
-        self.flist_db = DbStore(self.dbname)
-        self.flist_buf = []
-        #else:
         self.flist = []
-        #self.src_flist = self.flist
+        self.flist_buf = []
 
         # hold unlinkable dest directories
         # we have to do the --fix-opt at the end
@@ -263,9 +258,12 @@ class FWalk(BaseTask):
         if len(self.flist) < G.memitem_threshold:
             self.flist.append(fitem)
         else:
-            self.use_store = True
             self.flist_buf.append(fitem)
             if len(self.flist_buf) == G.DB_BUFSIZE:
+                if self.use_store == False:
+                    self.dbname = "%s/fwalk.%s" % (self.tempdir, self.circle.rank)
+                    self.flist_db = DbStore(self.dbname)
+                    self.use_store = True
                 self.flist_db.mput(self.flist_buf)
                 del self.flist_buf[:]
 
@@ -389,8 +387,8 @@ class FWalk(BaseTask):
         return total_filesize
 
     def cleanup(self):
-        #if G.use_store:
-        self.flist_db.cleanup()
+        if hasattr(self, "flist_db"):
+            self.flist_db.cleanup()
 
 
 def main():

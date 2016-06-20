@@ -154,10 +154,6 @@ class FCP(BaseTask):
         if self.verify:
             self.chunksums_mem = MemSum()
             self.chunksums_buf = MemSum()
-            self.workdir = os.getcwd()
-            self.tempdir = os.path.join(self.workdir, ".pcircle")
-            self.chunksums_dbname = "%s/chunksums.%s" % (self.tempdir, self.circle.rank)
-            self.chunksums_db = DbStore(dbname=self.chunksums_dbname)
 
         # checkpointing
         self.checkpoint_interval = sys.maxsize
@@ -204,7 +200,8 @@ class FCP(BaseTask):
 
         # remove chunksums file
         if self.verify:
-            self.chunksums_db.cleanup()
+            if hasattr(self, "chunksums_db"):
+                self.chunksums_db.cleanup()
 
         # we need to do this because if last job didn't finish cleanly
         # the fwalk files can be found as leftovers
@@ -419,7 +416,7 @@ class FCP(BaseTask):
         os.rename(tmp_file, self.checkpoint_file)
 
         # copy workq_db database file
-        if len(self.circle.workq_db) > 0:
+        if hasattr(self.circle, "workq_db") and len(self.circle.workq_db) > 0:
             self.checkpoint_db = self.checkpoint_file + ".db"
             if not G.resume:
                 shutil.copy2(self.circle.dbname, self.checkpoint_db)
@@ -548,9 +545,14 @@ class FCP(BaseTask):
             if self.chunksums_mem.size() < G.memitem_threshold:
                 self.chunksums_mem.chunksums.append(ck)
             else:
-                self.use_store = True
                 self.chunksums_buf.chunksums.append(ck)
                 if self.chunksums_buf.size() == G.DB_BUFSIZE:
+                    if self.use_store == False:
+                        self.workdir = os.getcwd()
+                        self.tempdir = os.path.join(self.workdir, ".pcircle")
+                        self.chunksums_dbname = "%s/chunksums.%s" % (self.tempdir, self.circle.rank)
+                        self.chunksums_db = DbStore(dbname=self.chunksums_dbname)
+                        self.use_store = True
                     self.chunksums_db.mput(self.chunksums_buf.chunksums)
                     # create a new buffer instead of deletion, could add delete method to Memsum
                     self.chunksums_buf = MemSum()

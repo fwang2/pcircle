@@ -65,7 +65,7 @@ class Circle:
         self.logger = getLogger(__name__)
 
 
-        self.useStore = G.use_store
+        #self.useStore = G.use_store
         self.split = split
         self.dbname = dbname
         self.resume = resume
@@ -150,12 +150,13 @@ class Circle:
         self.use_store = False
         self.workq = []
         self.workq_buf = []
-        self.workq_init(self.dbname, G.resume)
+        if G.resume:
+            self.workq_init(self.dbname, G.resume)
         self.logger.debug("Circle initialized", extra=self.d)
 
     def finalize(self, cleanup=True):
-        #if cleanup and G.use_store:
-        self.workq_db.cleanup()
+        if cleanup and hasattr(self, "workq_db"):
+            self.workq_db.cleanup()
 
     def workq_init(self, dbname=None, resume=False):
 
@@ -166,13 +167,14 @@ class Circle:
 
         if G.resume == True:
             self.dbname = os.path.join(self.workdir, ".pcp_workq.%s.%s.db" % (G.rid, self.rank))
+            if os.path.exists(self.dbname):
+                self.workq_db = DbStore(self.dbname, G.resume)
         else:
             if dbname is None:
                 self.dbname = os.path.join(self.tempdir, "workq-%s" % self.rank)
             else:
                 self.dbname = os.path.join(self.tempdir, "%s.workq-%s" % (dbname, self.rank))
-
-        self.workq_db = DbStore(self.dbname, resume=G.resume)
+            self.workq_db = DbStore(self.dbname, resume=G.resume)
 
     # after task(fcp) creation, push works in workq_buf into workq_db
     def push_remaining_buf(self):
@@ -188,11 +190,14 @@ class Circle:
             return random.randint(0, self.size - 1)
 
     def workq_info(self):
-        s = "has %s items in work queue\n" % (len(self.workq) + len(self.workq_buf) + len(self.workq_db))
+        s = "has %s items in work queue\n" % self.qsize
         return s
 
     def qsize(self):
-        return (len(self.workq) + len(self.workq_buf) + len(self.workq_db))
+        qsize = len(self.workq) + len(self.workq_buf)
+        if hasattr(self, "workq_db"):
+            qsize += len(self.workq_db)
+        return qsize
 
     def begin(self, task):
         """ entry point to work """
@@ -243,9 +248,11 @@ class Circle:
             self.workq.append(work)
             return
         else:
-            self.use_store = True
             self.workq_buf.append(work)
             if len(self.workq_buf) == G.DB_BUFSIZE:
+                if self.use_store == False:
+                    self.workq_init(self.dbname, G.resume)
+                    self.use_store = True
                 self.workq_db.mput(self.workq_buf)
                 del self.workq_buf[:]
 
@@ -261,7 +268,7 @@ class Circle:
             return self.workq.pop()
 	elif len(self.workq_buf) > 0:
             return self.workq_buf.pop()
-        elif len(self.workq_db) > 0:
+        elif hasattr(self, "workq_db") and len(self.workq_db) > 0:
             #read a batch of works into memory
             self.workq, objs_size = self.workq_db.mget(G.memitem_threshold)
             self.workq_db.mdel(G.memitem_threshold, objs_size)
@@ -405,9 +412,10 @@ class Circle:
                 del self.workq_buf[:]
 
             # if in-memory workq is empty, get a batch of works from database
-            if len(self.workq) == 0 and len(self.workq_db) > 0:
-                self.workq, objs_size  = self.workq_db.mget(G.memitem_threshold)
-                self.workq_db.mdel(G.memitem_threshold, objs_size)
+            if len(self.workq) == 0 and hasattr(self, "workq_db"):
+                if len(self.workq_db) > 0:
+                    self.workq, objs_size  = self.workq_db.mget(G.memitem_threshold)
+                    self.workq_db.mdel(G.memitem_threshold, objs_size)
 
             self.logger.debug("have %s requesters, with %s work items in queue" %
                               (len(self.requestors), len(self.workq)), extra=self.d)

@@ -282,33 +282,23 @@ class FCP(BaseTask):
         log.info("create() starts, flist length = %s" % len(self.treewalk.flist),
                     extra=self.d)
 
-        #print("Use store = ", self.treewalk.use_store)
-        #print("len flist = ", len(self.treewalk.flist))
+        # flist in memory
+        if len(self.treewalk.flist) > 0:
+                for fi in self.treewalk.flist:
+                self.handle_fitem(fi)
+
+        # flist in buf
+        if len(self.treewalk.flist_buf) > 0:
+            for fi in self.treewalk.flist_buf:
+                self.handle_fitem(fi)
+
+        # flist in database
         if self.treewalk.use_store:
-            if len(self.treewalk.flist_buf) > 0:
-                #print("len in flist_buf = ",len(self.treewalk.flist_buf))
-                for fi in self.treewalk.flist_buf:
-                    self.handle_fitem(fi)
             while self.treewalk.flist_db.qsize > 0:
                 fitems, _ = self.treewalk.flist_db.mget(G.DB_BUFSIZE)
                 for fi in fitems:
                     self.handle_fitem(fi)
                 self.treewalk.flist_db.mdel(G.DB_BUFSIZE)
-            # ignore checkpoint for database first
-            """
-            # store checkpoint
-            log.debug("dbname = %s" % self.circle.dbname)
-            dirname = os.path.dirname(self.circle.dbname)
-            basename = os.path.basename(self.circle.dbname)
-            chkpointname = basename + ".CHECK_OK"
-            self.checkpoint_file = os.path.join(dirname, chkpointname)
-            with open(self.checkpoint_file, "w") as f:
-                f.write("%s" % self.totalsize)
-            """
-        #else:  # use memory
-        if len(self.treewalk.flist) > 0:    
-            for fi in self.treewalk.flist:
-                self.handle_fitem(fi)
 
         # both memory and databse checkpoint
         if self.checkpoint_file:
@@ -409,8 +399,9 @@ class FCP(BaseTask):
 
         tmp_file = self.checkpoint_file + ".part"
         with open(tmp_file, "wb") as f:
+            self.circle.workq.extend(self.circle.workq_buf)
+            del self.circle.workq_buf[:]
             cobj = Checkpoint(self.src, self.dest, self.get_workq(), self.totalsize)
-            cobj.workq.extend(self.circle.workq_buf)
             pickle.dump(cobj, f, pickle.HIGHEST_PROTOCOL)
         # POSIX requires rename to be atomic
         os.rename(tmp_file, self.checkpoint_file)

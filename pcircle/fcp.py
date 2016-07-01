@@ -17,6 +17,7 @@ import sys
 import signal
 import resource
 import sqlite3
+import math
 import cPickle as pickle
 from collections import Counter
 from lru import LRU
@@ -81,6 +82,7 @@ def gen_parser():
     parser.add_argument("-r", "--rid", dest="rid", metavar="ID", help="resume ID, required in resume mode")
     parser.add_argument("--pause", metavar="s", type=int, help="pause a delay (seconds) after copy, test only")
     parser.add_argument("--use-store",action="store_true",help="Use backend storage, default: off")
+    parser.add_argument("-m", "--memory", metavar="GB", type=int, help="available memory, default items in memory: 100000")
     parser.add_argument("src", nargs='+', help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -284,7 +286,7 @@ class FCP(BaseTask):
 
         # flist in memory
         if len(self.treewalk.flist) > 0:
-                for fi in self.treewalk.flist:
+            for fi in self.treewalk.flist:
                 self.handle_fitem(fi)
 
         # flist in buf
@@ -952,6 +954,12 @@ def gen_signature(fcp, totalsize):
             f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
         print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, args.output)))
 
+def calculate_item(avail_memory):
+    avail_memory = math.log10(avail_memory*1024)
+    num_items = -0.7576*(avail_memory**2) + 7.5852*avail_memory - 11.0889
+    num_items = 10**num_items
+    num_items = int(num_items)
+    return num_items
 
 def main():
     global args, log, circle, fcp, treewalk
@@ -967,6 +975,8 @@ def main():
     G.verbosity = args.verbosity
     G.am_root = True if os.geteuid() == 0 else False
     G.use_store = args.use_store
+    if args.memory:
+        G.memitem_threshold = calculate_item(args.memory)
 
     if args.signature:  # with signature implies doing verify as well
         args.verify = True
@@ -1001,7 +1011,7 @@ def main():
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
             "Checkpoint ID:", "%s" % args.cpid))
 
-        print("\t{:<25}{:<10}".format("Use backend store:", "%r" % args.use_store))
+        print("\t{:<25}{:<10}".format("Items in memory:", "%r" % G.memitem_threshold))
         #
         if args.verbosity > 0:
             print("\t{:<25}{:<20}".format("Copy Mode:", G.copytype))

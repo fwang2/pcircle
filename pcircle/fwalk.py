@@ -110,11 +110,6 @@ class FWalk(BaseTask):
         self.sym_links = 0
         self.follow_sym_links = False
 
-        self.workdir = os.getcwd()
-        self.tempdir = os.path.join(self.workdir, ".pcircle")
-        if not os.path.exists(self.tempdir):
-            os.mkdir(self.tempdir)
-
         self.flist = []
         self.flist_buf = []
 
@@ -261,7 +256,7 @@ class FWalk(BaseTask):
             self.flist_buf.append(fitem)
             if len(self.flist_buf) == G.DB_BUFSIZE:
                 if self.use_store == False:
-                    self.dbname = "%s/fwalk.%s" % (self.tempdir, self.circle.rank)
+                    self.dbname = "%s/fwalk.%s" % (G.tempdir, self.circle.rank)
                     self.flist_db = DbStore(self.dbname)
                     self.use_store = True
                 self.flist_db.mput(self.flist_buf)
@@ -383,6 +378,9 @@ class FWalk(BaseTask):
             print("\t{:<20}{:<20}".format("Use store workq:", "%s" % self.circle.use_store))
             print("\tFWALK Loads: %s" % taskloads)
             print("")
+
+        G.total_files = total_files
+        G.total_files = self.circle.comm.bcast(G.total_files)
 
         return total_filesize
 

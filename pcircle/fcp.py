@@ -40,6 +40,7 @@ from fsum import export_checksum2
 from fdef import FileItem
 from _version import get_versions
 from mpihelper import ThrowingArgumentParser, parse_and_bcast
+from bfsignature import BFsignature
 
 __version__ = get_versions()['version']
 del get_versions
@@ -154,8 +155,8 @@ class FCP(BaseTask):
         self.verify = verify
         self.use_store = False
         if self.verify:
-            self.chunksums_mem = MemSum()
-            self.chunksums_buf = MemSum()
+            self.chunksums_mem = []
+            self.chunksums_buf = []
 
         # checkpointing
         self.checkpoint_interval = sys.maxsize
@@ -209,7 +210,7 @@ class FCP(BaseTask):
         # the fwalk files can be found as leftovers
         # and if fcp cleanup has a chance, it should clean up that
 
-        fwalk = "%s/fwalk.%s" % (self.circle.tempdir, self.circle.rank)
+        fwalk = "%s/fwalk.%s" % (G.tempdir, self.circle.rank)
         if os.path.exists(fwalk):
             os.remove(fwalk)
 
@@ -535,20 +536,18 @@ class FCP(BaseTask):
             ck = ChunkSum(work.dest, offset=work.offset, length=work.length,
                           digest=m.hexdigest())
 
-            if self.chunksums_mem.size() < G.memitem_threshold:
-                self.chunksums_mem.chunksums.append(ck)
+            if len(self.chunksums_mem) < G.memitem_threshold:
+                self.chunksums_mem.append(ck)
             else:
-                self.chunksums_buf.chunksums.append(ck)
-                if self.chunksums_buf.size() == G.DB_BUFSIZE:
+                self.chunksums_buf.append(ck)
+                if len(self.chunksums_buf) == G.DB_BUFSIZE:
                     if self.use_store == False:
                         self.workdir = os.getcwd()
-                        self.tempdir = os.path.join(self.workdir, ".pcircle")
-                        self.chunksums_dbname = "%s/chunksums.%s" % (self.tempdir, self.circle.rank)
+                        self.chunksums_dbname = "%s/chunksums.%s" % (G.tempdir, self.circle.rank)
                         self.chunksums_db = DbStore(dbname=self.chunksums_dbname)
                         self.use_store = True
-                    self.chunksums_db.mput(self.chunksums_buf.chunksums)
-                    # create a new buffer instead of deletion, could add delete method to Memsum
-                    self.chunksums_buf = MemSum()
+                    self.chunksums_db.mput(self.chunksums_buf)
+                    del self.chunksums_buf[:]
 
 
 def check_dbstore_resume_condition(rid):
@@ -906,42 +905,34 @@ def tally_hosts():
     num_of_hosts = MPI.COMM_WORLD.bcast(num_of_hosts)
 
 
-def aggregate_checksums(localChunkSums, dbname="checksums.db"):
+def aggregate_checksums(bfsign):
     signature, size, chunksums = None, None, None
 
-    if comm.rank == 0:
-        db = MemSum()
-        for chksum in localChunkSums:
-            db.put(chksum)
-
-        # ask from the others
-        for p in xrange(1, comm.size):
-            chunksums = comm.recv(source=p)
-            for chksum in chunksums:
-                db.put(chksum)
+    if comm.rank > 0:
+        comm.send(bfsign.bitarray, dest=0)
     else:
-        comm.send(localChunkSums, dest=0)
+        for p in xrange(1, comm.size):
+            other_bitarray = comm.recv(source=p)
+            bfsign.or_bf(other_bitarray)
 
     comm.Barrier()
 
     if comm.rank == 0:
-        signature = db.fsum()
-        size = db.size()
-        chunksums = db.chunksums
+        signature = bfsign.gen_signature()
 
-    return size, signature, chunksums
+    return signature
 
 
-def gen_signature(fcp, totalsize):
+def gen_signature(bfsign, totalsize):
     """ Generate a signature for dataset, it assumes the checksum
        option is set and done """
     if comm.rank == 0:
         print("\nAggregating dataset signature ...\n")
     tbegin = MPI.Wtime()
-    size, sig, chunksums = aggregate_checksums(fcp.chunksums)
+    sig = aggregate_checksums(bfsign)
     tend = MPI.Wtime()
     if comm.rank == 0:
-        print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
+        #print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
         print("\t{:<20}{:<20}".format("Running time:", utils.conv_time(tend - tbegin)))
         print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
         with open(args.output, "w") as f:
@@ -952,11 +943,11 @@ def gen_signature(fcp, totalsize):
             f.write("destination: %s\n" % fcp.dest)
             f.write("date: %s\n" % utils.current_time())
             f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
-        print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, args.output)))
+        #print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, args.output)))
 
 def calculate_item(avail_memory):
     avail_memory = math.log10(avail_memory*1024)
-    num_items = -0.7576*(avail_memory**2) + 7.5852*avail_memory - 11.0889
+    num_items = 1.0113*(avail_memory**3) - 9.8454*(avail_memory**2) + 32.0405*avail_memory - 28.8437
     num_items = 10**num_items
     num_items = int(num_items)
     return num_items
@@ -975,6 +966,7 @@ def main():
     G.verbosity = args.verbosity
     G.am_root = True if os.geteuid() == 0 else False
     G.use_store = args.use_store
+
     if args.memory:
         G.memitem_threshold = calculate_item(args.memory)
 
@@ -996,6 +988,13 @@ def main():
         ts = utils.timestamp()
         args.cpid = circle.comm.bcast(ts)
 
+    G.tempdir = os.path.join(os.getcwd(),(".pcircle" + args.cpid))
+    if not os.path.exists(G.tempdir):
+        try:
+            os.mkdir(G.tempdir)
+        except OSError:
+            pass
+
     if circle.rank == 0:
         print("Running Parameters:\n")
         print("\t{:<25}{:<20}".format("Starting at:", utils.current_time()))
@@ -1016,7 +1015,6 @@ def main():
         if args.verbosity > 0:
             print("\t{:<25}{:<20}".format("Copy Mode:", G.copytype))
 
-
     fcp_start()
 
     if args.pause and args.verify:
@@ -1030,7 +1028,7 @@ def main():
     # do checksum verification
     if args.verify:
         circle = Circle(dbname="verify")
-        pcheck = PVerify(circle, fcp, G.totalsize)
+        pcheck = PVerify(circle, fcp, G.total_files, G.totalsize, args.signature)
         circle.begin(pcheck)
         tally = pcheck.fail_tally()
         tally = comm.bcast(tally)
@@ -1044,7 +1042,7 @@ def main():
         comm.Barrier()
 
         if args.signature and tally == 0:
-            gen_signature(fcp, G.totalsize)
+            gen_signature(pcheck.bfsign, G.totalsize)
 
     # fix permission
     comm.Barrier()
@@ -1062,6 +1060,9 @@ def main():
 
     if circle:
          circle.finalize(cleanup=True)
+
+    shutil.rmtree(G.tempdir, ignore_errors=True)
+
     # TODO: a close file error can happen when circle.finalize()
     #
     #if isinstance(circle.workq, DbStore):

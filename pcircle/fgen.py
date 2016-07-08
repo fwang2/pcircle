@@ -14,7 +14,7 @@ MAGIC = '8888'
 PREFIX = 'f.'
 
 
-def rand_str(size=1024 * 1024, chars=string.ascii_uppercase + string.digits):
+def rand_str(size=1024, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 
@@ -37,12 +37,14 @@ def conv_mb(size):
     if num == '' or unit == '':
         print("parse error: %s" % size)
         sys.exit(1)
-    if string.upper(unit[0]) == 'M':
+    if string.upper(unit[0]) == 'K':
         return int(num)
-    elif string.upper(unit[0]) == 'G':
+    if string.upper(unit[0]) == 'M':
         return int(num) * 1024
-    elif string.upper(unit[0]) == 'T':
+    elif string.upper(unit[0]) == 'G':
         return int(num) * 1024 * 1024
+    elif string.upper(unit[0]) == 'T':
+        return int(num) * 1024 * 1024 * 1024
     else:
         print("Unknown size: %s" % size)
         sys.exit(1)
@@ -78,7 +80,6 @@ def main():
     if args.stripe_count:
         setstripe(outdir)
 
-    buf = rand_str()
 
     for fount in range(args.fcount):
         fname = outdir + "/" + PREFIX + str(fount).zfill(8)
@@ -86,6 +87,7 @@ def main():
             print("Writing out %s" % fname)
         chunks = conv_mb(args.fsize)
         with open(fname, "w") as f:
+            buf = rand_str()
             for _ in range(chunks):
                 f.write(buf)
 

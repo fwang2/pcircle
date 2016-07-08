@@ -101,12 +101,6 @@ class Circle:
         self.barrier_replies = 0
 
         self.workdir = os.getcwd()
-        self.tempdir = os.path.join(self.workdir, ".pcircle")
-        if not os.path.exists(self.tempdir):
-            try:
-                os.mkdir(self.tempdir)
-            except OSError:
-                pass
 
         # token
         self.token = Token(self)
@@ -171,9 +165,9 @@ class Circle:
                 self.workq_db = DbStore(self.dbname, G.resume)
         else:
             if dbname is None:
-                self.dbname = os.path.join(self.tempdir, "workq-%s" % self.rank)
+                self.dbname = os.path.join(G.tempdir, "workq-%s" % self.rank)
             else:
-                self.dbname = os.path.join(self.tempdir, "%s.workq-%s" % (dbname, self.rank))
+                self.dbname = os.path.join(G.tempdir, "%s.workq-%s" % (dbname, self.rank))
             self.workq_db = DbStore(self.dbname, resume=G.resume)
 
     # after task(fcp) creation, push works in workq_buf into workq_db

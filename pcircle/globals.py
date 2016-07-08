@@ -46,8 +46,10 @@ class G:
     use_store = False
     fix_opt = False
     preserve = False
-    DB_BUFSIZE = 8000
-    memitem_threshold = 30000
+    DB_BUFSIZE = 30000
+    memitem_threshold = 300000
+    tempdir = None
+    total_files = 0
     rid = None
     chk_file = None
     chk_file_db = None

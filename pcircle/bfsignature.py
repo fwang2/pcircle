@@ -1,5 +1,4 @@
 import math
-import sqlite3
 import hashlib
 import zlib
 from bitarray import bitarray
@@ -8,7 +7,7 @@ from globals import G
 class BFsignature():
     def __init__(self, fcp, total_files):
         self.fcp = fcp
-        self.total_files = G.total_files
+        self.total_files = total_files
         if self.total_files > 0:
             self.cal_m()
         else:

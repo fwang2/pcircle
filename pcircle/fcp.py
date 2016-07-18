@@ -84,6 +84,7 @@ def gen_parser():
     parser.add_argument("--pause", metavar="s", type=int, help="pause a delay (seconds) after copy, test only")
     parser.add_argument("--use-store",action="store_true",help="Use backend storage, default: off")
     parser.add_argument("-m", "--memory", metavar="GB", type=int, help="available memory, default items in memory: 100000")
+    parser.add_argument("--item", type=int, default=100000, help="number of items stored in memory, default: 100000")
     parser.add_argument("src", nargs='+', help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -966,6 +967,7 @@ def main():
     G.verbosity = args.verbosity
     G.am_root = True if os.geteuid() == 0 else False
     G.use_store = args.use_store
+    G.memitem_threshold = args.item
 
     if args.memory:
         G.memitem_threshold = calculate_item(args.memory)

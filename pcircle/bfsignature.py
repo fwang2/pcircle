@@ -41,4 +41,4 @@ class BFsignature():
         for i in range (self.k):
             hashValue = zlib.crc32(key, i) % self.m
             positions.append(hashValue)
-        return positions        
+        return positions

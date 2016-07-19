@@ -95,6 +95,7 @@ class FWalk(BaseTask):
         self.src = src
         self.dest = dest
         self.force = force
+        self.use_store = False
         self.interval = 10  # progress report
 
         # For now, I am setting the option
@@ -109,18 +110,8 @@ class FWalk(BaseTask):
         self.sym_links = 0
         self.follow_sym_links = False
 
-        self.workdir = os.getcwd()
-        self.tempdir = os.path.join(self.workdir, ".pcircle")
-        if not os.path.exists(self.tempdir):
-            os.mkdir(self.tempdir)
-
-        if G.use_store:
-            self.dbname = "%s/fwalk.%s" % (self.tempdir, circle.rank)
-            self.flist = DbStore(self.dbname)
-            self.flist_buf = []
-        else:
-            self.flist = []
-        self.src_flist = self.flist
+        self.flist = []
+        self.flist_buf = []
 
         # hold unlinkable dest directories
         # we have to do the --fix-opt at the end
@@ -156,7 +147,7 @@ class FWalk(BaseTask):
 
     def flushdb(self):
         if len(self.flist_buf) != 0:
-            self.flist.mput(self.flist_buf)
+            self.flist_db.mput(self.flist_buf)
 
     def process_dir(self, fitem, st):
         """ i_dir should be absolute path
@@ -249,6 +240,7 @@ class FWalk(BaseTask):
         return False
 
     def append_fitem(self, fitem):
+        """
         if G.use_store:
             self.flist_buf.append(fitem)
             if len(self.flist_buf) == G.DB_BUFSIZE:
@@ -257,6 +249,18 @@ class FWalk(BaseTask):
 
         else:
             self.flist.append(fitem)
+        """
+        if len(self.flist) < G.memitem_threshold:
+            self.flist.append(fitem)
+        else:
+            self.flist_buf.append(fitem)
+            if len(self.flist_buf) == G.DB_BUFSIZE:
+                if self.use_store == False:
+                    self.dbname = "%s/fwalk.%s" % (G.tempdir, self.circle.rank)
+                    self.flist_db = DbStore(self.dbname)
+                    self.use_store = True
+                self.flist_db.mput(self.flist_buf)
+                del self.flist_buf[:]
 
     def process(self):
         """ process a work unit, spath, dpath refers to
@@ -370,14 +374,19 @@ class FWalk(BaseTask):
             if total_files != 0:
                 print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
             print("\t{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
+            print("\t{:<20}{:<20}".format("Use store flist:", "%s" % self.use_store))
+            print("\t{:<20}{:<20}".format("Use store workq:", "%s" % self.circle.use_store))
             print("\tFWALK Loads: %s" % taskloads)
             print("")
+
+        G.total_files = total_files
+        G.total_files = self.circle.comm.bcast(G.total_files)
 
         return total_filesize
 
     def cleanup(self):
-        if G.use_store:
-            self.flist.cleanup()
+        if hasattr(self, "flist_db"):
+            self.flist_db.cleanup()
 
 
 def main():

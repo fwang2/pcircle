@@ -4,14 +4,20 @@ import hashlib
 from mpi4py import MPI
 import utils
 from lru import LRU
-
+from dbstore import DbStore
+from dbsum import MemSum
+from globals import G
+from bfsignature import BFsignature
 
 class PVerify(BaseTask):
-    def __init__(self, circle, fcp, totalsize=0):
+    def __init__(self, circle, fcp, total_files, totalsize=0,signature=False):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.fcp = fcp
         self.totalsize = totalsize
+        self.signature = signature
+        if self.signature:
+            self.bfsign = BFsignature(fcp, total_files)
 
         # cache
         self.fd_cache = LRU(512)
@@ -34,9 +40,28 @@ class PVerify(BaseTask):
             print("\nChecksum verification ...")
 
     def create(self):
-        self.logger.info("Chunk count: %s" % len(self.fcp.chunksums), extra=self.d)
-        for ck in self.fcp.chunksums:
+        chunk_count = len(self.fcp.chunksums_mem) + len(self.fcp.chunksums_buf)
+        if hasattr(self.fcp, "chunksums_db"):
+            chunk_count = self.fcp.chunksums_db.qsize
+        self.logger.info("Chunk count: %s" % chunk_count, extra=self.d)
+        for ck in self.fcp.chunksums_mem:
             self.enq(ck)
+            if self.signature:
+                self.bfsign.insert_item(ck.digest)
+
+        if len(self.fcp.chunksums_buf) > 0:
+            for ck in self.fcp.chunksums_buf:
+                self.enq(ck)
+                if self.signature:
+                    self.bfsign.insert_item(ck.digest)
+        if self.fcp.use_store:
+            while self.fcp.chunksums_db.qsize > 0:
+                chunksums_buf, _ = self.fcp.chunksums_db.mget(G.DB_BUFSIZE)
+                for ck in chunksums_buf:
+                    self.enq(ck)
+                    if self.signature:
+                        self.bfsign.insert_item(ck.digest)
+                self.fcp.chunksums_db.mdel(G.DB_BUFSIZE)
 
     def process(self):
         chunk = self.deq()

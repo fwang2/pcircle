@@ -5,6 +5,7 @@ import random
 import sys
 import os
 import os.path
+import shutil
 from collections import deque
 from pprint import pprint
 
@@ -64,7 +65,7 @@ class Circle:
         self.logger = getLogger(__name__)
 
 
-        self.useStore = G.use_store
+        #self.useStore = G.use_store
         self.split = split
         self.dbname = dbname
         self.resume = resume
@@ -74,10 +75,11 @@ class Circle:
         self.abort = False
         self.requestors = []
 
+        """
         # workq buffer
         if self.useStore:
             self.workq_buf = deque()
-
+        """
         # counters
         self.work_requested = 0
         self.work_processed = 0
@@ -87,7 +89,7 @@ class Circle:
 
         # reduction
         self.reduce_enabled = True
-        self.reduce_time_last = MPI.Wtime()
+        self.reduce_time_last = -self.reduce_time_interval
         self.reduce_outstanding = False
         self.reduce_replies = 0
         self.reduce_buf = {}
@@ -99,12 +101,6 @@ class Circle:
         self.barrier_replies = 0
 
         self.workdir = os.getcwd()
-        self.tempdir = os.path.join(self.workdir, ".pcircle")
-        if not os.path.exists(self.tempdir):
-            try:
-                os.mkdir(self.tempdir)
-            except OSError:
-                pass
 
         # token
         self.token = Token(self)
@@ -139,16 +135,22 @@ class Circle:
 
         # workq init
         # TODO: compare list vs. deque
+        """
         if G.use_store:
             self.workq_init(dbname, resume)
         else:
             self.workq = []
-
+        """
+        self.use_store = False
+        self.workq = []
+        self.workq_buf = []
+        if G.resume:
+            self.workq_init(self.dbname, G.resume)
         self.logger.debug("Circle initialized", extra=self.d)
 
     def finalize(self, cleanup=True):
-        if cleanup and G.use_store:
-            self.workq.cleanup()
+        if cleanup and hasattr(self, "workq_db"):
+            self.workq_db.cleanup()
 
     def workq_init(self, dbname=None, resume=False):
 
@@ -157,12 +159,22 @@ class Circle:
         # should not use dash ... the default is to use "." for sepration
         # Yes, this is very fragile, hopefully we will fix this later
 
-        if dbname is None:
-            self.dbname = os.path.join(self.tempdir, "workq-%s" % self.rank)
+        if G.resume == True:
+            self.dbname = os.path.join(self.workdir, ".pcp_workq.%s.%s.db" % (G.rid, self.rank))
+            if os.path.exists(self.dbname):
+                self.workq_db = DbStore(self.dbname, G.resume)
         else:
-            self.dbname = os.path.join(self.tempdir, "%s-%s" % (dbname, self.rank))
+            if dbname is None:
+                self.dbname = os.path.join(G.tempdir, "workq-%s" % self.rank)
+            else:
+                self.dbname = os.path.join(G.tempdir, "%s.workq-%s" % (dbname, self.rank))
+            self.workq_db = DbStore(self.dbname, resume=G.resume)
 
-        self.workq = DbStore(self.dbname, resume=resume)
+    # after task(fcp) creation, push works in workq_buf into workq_db
+    def push_remaining_buf(self):
+        if len(self.workq_buf) > 0:
+            self.workq_db.mput(self.workq_buf)
+            del self.workq_buf[:]
 
     def next_proc(self):
         """ Note next proc could return rank of itself """
@@ -172,11 +184,14 @@ class Circle:
             return random.randint(0, self.size - 1)
 
     def workq_info(self):
-        s = "has %s items in work queue\n" % len(self.workq)
+        s = "has %s items in work queue\n" % self.qsize
         return s
 
     def qsize(self):
-        return len(self.workq)
+        qsize = len(self.workq) + len(self.workq_buf)
+        if hasattr(self, "workq_db"):
+            qsize += len(self.workq_db)
+        return qsize
 
     def begin(self, task):
         """ entry point to work """
@@ -191,7 +206,7 @@ class Circle:
         self.cleanup()
         self.comm.barrier()
 
-        if len(self.workq) != 0:
+        if self.qsize() != 0:
             pprint("Rank %s workq.len = %s" % (self.rank, self.qsize()))
             pprint(self.__dict__)
             sys.stdout.flush()
@@ -207,11 +222,11 @@ class Circle:
             if self.reduce_enabled:
                 self.reduce_check()
 
-            if len(self.workq) == 0:
+            if self.qsize() == 0:
                 self.request_work()
 
             # if I have work, and no abort signal, process one
-            if len(self.workq) > 0 and not self.abort:
+            if self.qsize() > 0 and not self.abort:
                 self.task.process()
                 self.work_processed += 1
             else:
@@ -223,7 +238,17 @@ class Circle:
         if work is None:
             self.logger.warn("enq work item is None", extra=self.d)
             return
-        self.workq.append(work)
+        if len(self.workq) < G.memitem_threshold:
+            self.workq.append(work)
+            return
+        else:
+            self.workq_buf.append(work)
+            if len(self.workq_buf) == G.DB_BUFSIZE:
+                if self.use_store == False:
+                    self.workq_init(self.dbname, G.resume)
+                    self.use_store = True
+                self.workq_db.mput(self.workq_buf)
+                del self.workq_buf[:]
 
     def preq(self, work):
         self.workq.insert(0, work)
@@ -232,8 +257,17 @@ class Circle:
         self.workq = q
 
     def deq(self):
+        # deque a work starting from workq, then from workq_buf, then from workq_db
         if len(self.workq) > 0:
             return self.workq.pop()
+	elif len(self.workq_buf) > 0:
+            return self.workq_buf.pop()
+        elif hasattr(self, "workq_db") and len(self.workq_db) > 0:
+            #read a batch of works into memory
+            self.workq, objs_size = self.workq_db.mget(G.memitem_threshold)
+            self.workq_db.mdel(G.memitem_threshold, objs_size)
+            if len(self.workq) > 0:
+               return self.workq.pop()
         else:
             return None
 
@@ -366,10 +400,21 @@ class Circle:
         if not self.requestors:
             return
         else:
+            # first combine workq and work_buf, both of them are in memory
+            if len(self.workq_buf) > 0:
+                self.workq.extend(self.workq_buf)
+                del self.workq_buf[:]
+
+            # if in-memory workq is empty, get a batch of works from database
+            if len(self.workq) == 0 and hasattr(self, "workq_db"):
+                if len(self.workq_db) > 0:
+                    self.workq, objs_size  = self.workq_db.mget(G.memitem_threshold)
+                    self.workq_db.mdel(G.memitem_threshold, objs_size)
+
             self.logger.debug("have %s requesters, with %s work items in queue" %
                               (len(self.requestors), len(self.workq)), extra=self.d)
             # have work requesters
-            if len(self.workq) == 0 or cleanup:
+            if self.qsize() == 0 or cleanup:
                 for rank in self.requestors:
                     self.send_no_work(rank)
             else:
@@ -398,7 +443,6 @@ class Circle:
 
         if self.split != "equal":
             raise NotImplementedError
-
         base = wcount / (rcount + 1)  # leave self a base number of works
         extra = wcount - base * (rcount + 1)
         assert extra <= rcount
@@ -442,11 +486,11 @@ class Circle:
 
         # based on if it is memory or store-based
         # we have different ways of constructing buf
-        if self.useStore:
-            objs, size = self.workq.mget(witems)
-            buf = {G.KEY: witems, G.VAL: objs}
-        else:
-            buf = {G.KEY: witems, G.VAL: self.workq[0:witems]}
+        #if self.useStore:
+        #   objs, size = self.workq.mget(witems)
+        #    buf = {G.KEY: witems, G.VAL: objs}
+        #else:
+        buf = {G.KEY: witems, G.VAL: self.workq[0:witems]}
 
         self.comm.send(buf, dest=rank, tag=T.WORK_REPLY)
         self.logger.debug("%s work items sent to rank %s" % (witems, rank), extra=self.d)
@@ -459,10 +503,10 @@ class Circle:
         # previous data and pass it back in to save us some time.
         #
 
-        if self.useStore:
-            self.workq.mdel(witems, size)
-        else:
-            del self.workq[0:witems]
+        #if self.useStore:
+        #   self.workq.mdel(witems, size)
+        #else:
+        del self.workq[0:witems]
 
     def request_work(self, cleanup=False):
         if self.workreq_outstanding:

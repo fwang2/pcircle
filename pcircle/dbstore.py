@@ -92,19 +92,26 @@ class DbStore(object):
         self.tracksize(self.cur, obj)
 
     def recalibrate(self):
-        self.cur.execute("SELECT * FROM checkpoint")
-        self.qsize, self.fsize = self.cur.fetchone()
-
         # FIXME: which one to use, from checkpoint or compute?
-        # self.cur.execute("SELECT COUNT(*) FROM workq")
-        # qsize = self.cur.fetchone()[0]
+        """
+        try:
+            self.cur.execute("SELECT COUNT(*) FROM workq")
+            self.qsize = self.cur.fetchone()[0]
+        except sqlite3.OperationalError as e:
+            self.qsize = 0
+        """
+        try:
+            self.cur.execute("SELECT * FROM checkpoint")
+            self.qsize, self.fsize = self.cur.fetchone()
+        except sqlite3.OperationalError as e:
+            self.qsize = 0
 
         # we do restore_db() after looking up the checkpoint table
         # as _restore_from_backup() will try to update checkpoint table
         # with qsize and fsize since we don't have that information at this point
         # do this at the beginning will mess up the count
 
-        self._restore_from_backup()
+        #self._restore_from_backup()
 
     def cleanup(self):
         if os.path.exists(self.dbname):
@@ -121,7 +128,7 @@ class DbStore(object):
             self.qsize -= 1
             self.fsize -= self._obj_size(obj)
 
-        cur.execute("UPDATE checkpoint SET qsize=?, fsize=?", (self.qsize, self.fsize))
+        #cur.execute("UPDATE checkpoint SET qsize=?, fsize=?", (self.qsize, self.fsize))
 
     def put(self, obj):
         # should it be a transaction?
@@ -129,6 +136,7 @@ class DbStore(object):
         with self.conn:
             self.conn.execute("INSERT INTO workq (work) VALUES (?)", (pdata,))
             self.tracksize(self.conn, obj)
+            cur.execute("UPDATE checkpoint SET qsize=?, fsize=?", (self.qsize, self.fsize))
 
     # alias append to match list
     append = put
@@ -145,6 +153,7 @@ class DbStore(object):
                 self.conn.execute("INSERT INTO workq (work) VALUES (?)", (pdata,))
                 self.tracksize(self.conn, obj)
 
+            self.cur.execute("UPDATE checkpoint SET qsize=?, fsize=?", (self.qsize, self.fsize))
         self.logger.debug("%s objs inserted to %s" % (len(objs), self.dbname), extra=self.d)
 
     # alias extend to match list
@@ -173,6 +182,8 @@ class DbStore(object):
     def mget(self, n):
         objs = []
         size = 0
+        if n > self.qsize:
+            n = self.qsize
         with self.conn:
             for row in self.conn.execute("SELECT work FROM workq LIMIT (?) OFFSET 0", (n,)):
                 obj = pickle.loads(str(row[0]))
@@ -182,12 +193,16 @@ class DbStore(object):
         return objs, size
 
     def mdel(self, n, size=0):
+        if n > self.qsize:
+            n = self.qsize
         with self.conn:
             cur = self.conn.cursor()
             cur.execute("DELETE FROM workq WHERE id in (SELECT id FROM workq LIMIT (?) OFFSET 0)",
                         (n,))
-            self.qsize -= cur.rowcount
+            self.qsize -= n
             self.fsize -= size
+            # update checkpoint table
+            cur.execute("UPDATE checkpoint SET qsize=?, fsize=?", (self.qsize, self.fsize))
 
     def __getitem__(self, idx):
         if idx > self.qsize:
@@ -213,6 +228,7 @@ class DbStore(object):
             self.cur.execute("DELETE FROM workq WHERE id = (SELECT id FROM workq LIMIT 1 OFFSET 0)")
             self.cur.execute("UPDATE backup SET work=? WHERE id=1", (rawobj,))
             self.tracksize(self.cur, obj, op="minus")
+            self.cur.execute("UPDATE checkpoint SET qsize=?, fsize=?", (self.qsize, self.fsize))
         return obj
 
     def __len__(self):

@@ -10,11 +10,14 @@ from __future__ import print_function
 import time
 import stat
 import os
+import shutil
 import os.path
 import hashlib
 import sys
 import signal
 import resource
+import sqlite3
+import math
 import cPickle as pickle
 from collections import Counter
 from lru import LRU
@@ -37,6 +40,7 @@ from fsum import export_checksum2
 from fdef import FileItem
 from _version import get_versions
 from mpihelper import ThrowingArgumentParser, parse_and_bcast
+from bfsignature import BFsignature
 
 __version__ = get_versions()['version']
 del get_versions
@@ -79,6 +83,8 @@ def gen_parser():
     parser.add_argument("-r", "--rid", dest="rid", metavar="ID", help="resume ID, required in resume mode")
     parser.add_argument("--pause", metavar="s", type=int, help="pause a delay (seconds) after copy, test only")
     parser.add_argument("--use-store",action="store_true",help="Use backend storage, default: off")
+    parser.add_argument("-m", "--memory", metavar="GB", type=int, help="available memory, default items in memory: 100000")
+    parser.add_argument("--item", type=int, default=100000, help="number of items stored in memory, default: 100000")
     parser.add_argument("src", nargs='+', help="copy from")
     parser.add_argument("dest", help="copy to")
 
@@ -108,6 +114,7 @@ class FCP(BaseTask):
         self.workq = workq
         self.resume = resume
         self.checkpoint_file = None
+        self.checkpoint_db = None
         self.src = src
         self.dest = os.path.abspath(dest)
 
@@ -147,7 +154,10 @@ class FCP(BaseTask):
 
         # verify
         self.verify = verify
-        self.chunksums = []
+        self.use_store = False
+        if self.verify:
+            self.chunksums_mem = []
+            self.chunksums_buf = []
 
         # checkpointing
         self.checkpoint_interval = sys.maxsize
@@ -183,12 +193,25 @@ class FCP(BaseTask):
         # remove checkpoint file
         if self.checkpoint_file and os.path.exists(self.checkpoint_file):
             os.remove(self.checkpoint_file)
+        if self.checkpoint_db and os.path.exists(self.checkpoint_db):
+            os.remove(self.checkpoint_db)
+
+        # remove provided checkpoint file
+        if G.resume and G.chk_file and os.path.exists(G.chk_file):
+            os.remove(G.chk_file)
+        if G.resume and G.chk_file_db and os.path.exists(G.chk_file_db):
+            os.remove(G.chk_file_db)
+
+        # remove chunksums file
+        if self.verify:
+            if hasattr(self, "chunksums_db"):
+                self.chunksums_db.cleanup()
 
         # we need to do this because if last job didn't finish cleanly
         # the fwalk files can be found as leftovers
         # and if fcp cleanup has a chance, it should clean up that
 
-        fwalk = "%s/fwalk.%s" % (self.circle.tempdir, self.circle.rank)
+        fwalk = "%s/fwalk.%s" % (G.tempdir, self.circle.rank)
         if os.path.exists(fwalk):
             os.remove(fwalk)
 
@@ -263,33 +286,28 @@ class FCP(BaseTask):
         log.info("create() starts, flist length = %s" % len(self.treewalk.flist),
                     extra=self.d)
 
-        if G.use_store:
-            if len(self.treewalk.flist_buf) > 0:
-                for fi in self.treewalk.flist_buf:
-                    self.handle_fitem(fi)
-            while self.treewalk.flist.qsize > 0:
-                fitems, _ = self.treewalk.flist.mget(G.DB_BUFSIZE)
-                for fi in fitems:
-                    self.handle_fitem(fi)
-                self.treewalk.flist.mdel(G.DB_BUFSIZE)
-
-            # store checkpoint
-            log.debug("dbname = %s" % self.circle.dbname)
-            dirname = os.path.dirname(self.circle.dbname)
-            basename = os.path.basename(self.circle.dbname)
-            chkpointname = basename + ".CHECK_OK"
-            self.checkpoint_file = os.path.join(dirname, chkpointname)
-            with open(self.checkpoint_file, "w") as f:
-                f.write("%s" % self.totalsize)
-
-        else:  # use memory
+        # flist in memory
+        if len(self.treewalk.flist) > 0:
             for fi in self.treewalk.flist:
                 self.handle_fitem(fi)
 
-            # memory-checkpoint
-            if self.checkpoint_file:
-                self.do_no_interrupt_checkpoint()
-                self.checkpoint_last = MPI.Wtime()
+        # flist in buf
+        if len(self.treewalk.flist_buf) > 0:
+            for fi in self.treewalk.flist_buf:
+                self.handle_fitem(fi)
+
+        # flist in database
+        if self.treewalk.use_store:
+            while self.treewalk.flist_db.qsize > 0:
+                fitems, _ = self.treewalk.flist_db.mget(G.DB_BUFSIZE)
+                for fi in fitems:
+                    self.handle_fitem(fi)
+                self.treewalk.flist_db.mdel(G.DB_BUFSIZE)
+
+        # both memory and databse checkpoint
+        if self.checkpoint_file:
+            self.do_no_interrupt_checkpoint()
+            self.checkpoint_last = MPI.Wtime()
 
     def do_open(self, k, d, flag, limit):
         """
@@ -373,8 +391,10 @@ class FCP(BaseTask):
         a.start()
         a.join()
         log.debug("checkpoint: %s" % self.checkpoint_file, extra=self.d)
+        print("\nMake checkpoint files: ", self.checkpoint_file)
 
     def do_checkpoint(self):
+        # when make checkpoint, first write workq and workq_buf into checkpoint file, then make a copy of workq_db if it exists
         for k in self.wfd_cache.keys():
             os.close(self.wfd_cache[k])
 
@@ -383,10 +403,23 @@ class FCP(BaseTask):
 
         tmp_file = self.checkpoint_file + ".part"
         with open(tmp_file, "wb") as f:
+            self.circle.workq.extend(self.circle.workq_buf)
+            del self.circle.workq_buf[:]
             cobj = Checkpoint(self.src, self.dest, self.get_workq(), self.totalsize)
             pickle.dump(cobj, f, pickle.HIGHEST_PROTOCOL)
         # POSIX requires rename to be atomic
         os.rename(tmp_file, self.checkpoint_file)
+
+        # copy workq_db database file
+        if hasattr(self.circle, "workq_db") and len(self.circle.workq_db) > 0:
+            self.checkpoint_db = self.checkpoint_file + ".db"
+            if not G.resume:
+                shutil.copy2(self.circle.dbname, self.checkpoint_db)
+            else:
+                # in resume mode, make a copy of current workq db file, which is provided checkpoint db file
+                self.workdir = os.getcwd()
+                existingCheckpoint = os.path.join(self.workdir,".pcp_workq.%s.%s.db" % (G.rid, self.circle.rank))
+                shutil.copy2(existingCheckpoint,self.checkpoint_db)
 
     def process(self):
         """
@@ -406,12 +439,18 @@ class FCP(BaseTask):
             self.do_copy(work)
         else:
             log.warn("Unknown work object: %s" % work, extra=self.d)
+            err_and_exit("Not a correct workq format")
 
     def reduce_init(self, buf):
         buf['cnt_filesize'] = self.cnt_filesize
+        if sys.platform == 'darwin':
+            buf['mem_snapshot'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        else:
+            buf['mem_snapshot'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
 
     def reduce(self, buf1, buf2):
         buf1['cnt_filesize'] += buf2['cnt_filesize']
+        buf1['mem_snapshot'] += buf2['mem_snapshot']
         return buf1
 
     def reduce_report(self, buf):
@@ -426,6 +465,7 @@ class FCP(BaseTask):
             self.cnt_filesize_prior = buf['cnt_filesize']
             out += ", estimated transfer rate: %s/s" % bytes_fmt(rate)
 
+        out += ", memory usage: %s" % bytes_fmt(buf['mem_snapshot'])
         print(out)
 
     def reduce_finish(self, buf):
@@ -446,6 +486,8 @@ class FCP(BaseTask):
             print("\t{:<20}{:<20}".format("Ending at:", utils.current_time()))
             print("\t{:<20}{:<20}".format("Completed in:", utils.conv_time(tlapse)))
             print("\t{:<20}{:<20}".format("Transfer Rate:", "%s/s" % bytes_fmt(rate)))
+            print("\t{:<20}{:<20}".format("Use store chunksums:", "%s" % self.use_store))
+            print("\t{:<20}{:<20}".format("Use store workq:", "%s" % self.circle.use_store))
             print("\t{:<20}{:<20}".format("FCP Loads:", "%s" % taskloads))
 
     def read_then_write(self, rfd, wfd, work, num_of_bytes, m):
@@ -494,7 +536,19 @@ class FCP(BaseTask):
             # use src path here
             ck = ChunkSum(work.dest, offset=work.offset, length=work.length,
                           digest=m.hexdigest())
-            self.chunksums.append(ck)
+
+            if len(self.chunksums_mem) < G.memitem_threshold:
+                self.chunksums_mem.append(ck)
+            else:
+                self.chunksums_buf.append(ck)
+                if len(self.chunksums_buf) == G.DB_BUFSIZE:
+                    if self.use_store == False:
+                        self.workdir = os.getcwd()
+                        self.chunksums_dbname = "%s/chunksums.%s" % (G.tempdir, self.circle.rank)
+                        self.chunksums_db = DbStore(dbname=self.chunksums_dbname)
+                        self.use_store = True
+                    self.chunksums_db.mput(self.chunksums_buf)
+                    del self.chunksums_buf[:]
 
 
 def check_dbstore_resume_condition(rid):
@@ -618,9 +672,13 @@ def prep_recovery():
     global args, circle
 
     oldsz, tsz, sz = 0, 0, 0
+    sz_db = 0
     cobj = None
     local_checkpoint_cnt = 0
     chk_file = ".pcp_workq.%s.%s" % (args.rid, circle.rank)
+    chk_file_db = ".pcp_workq.%s.%s.db" % (args.rid, circle.rank)
+    G.chk_file = chk_file
+    G.chk_file_db = chk_file_db
 
     if os.path.exists(chk_file):
         local_checkpoint_cnt = 1
@@ -635,6 +693,17 @@ def prep_recovery():
                 log.error("error reading %s" % chk_file, extra=dmsg)
                 circle.comm.Abort()
 
+    if os.path.exists(chk_file_db):
+        qsize_db = 0
+        local_checkpoint_cnt = 1
+        conn = sqlite3.connect(chk_file_db)
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT * FROM checkpoint")
+            qsize_db, sz_db = cur.fetchone()
+        except sqlite3.OperationalError as e:
+            pass
+
     log.debug("located chkpoint %s, sz=%s, local_cnt=%s" %
                  (chk_file, sz, local_checkpoint_cnt), extra=dmsg)
 
@@ -643,7 +712,9 @@ def prep_recovery():
     verify_checkpoint(chk_file, total_checkpoint_cnt)
 
     # acquire total size
-    G.totalsize = circle.comm.allreduce(sz)
+    total_sz_mem = circle.comm.allreduce(sz)
+    total_sz_db = circle.comm.allreduce(sz_db)
+    G.totalsize = total_sz_mem + total_sz_db
     if G.totalsize == 0:
         if circle.rank == 0:
             print("\nRecovery size is 0 bytes, can't proceed.")
@@ -671,7 +742,7 @@ def fcp_start():
     else:  # okay, let's do checkpoint recovery
         workq = prep_recovery()
 
-    circle = Circle()
+    circle = Circle(dbname="fcp")
     fcp = FCP(circle, G.src, G.dest,
               treewalk=treewalk,
               totalsize=G.totalsize,
@@ -691,8 +762,7 @@ def fcp_start():
 
     circle.begin(fcp)
     circle.finalize()
-    fcp.cleanup()
-
+    #fcp.cleanup()
 
 def get_workq_size(workq):
     """ workq is a list of FileChunks, we iterate each and summarize the size,
@@ -836,42 +906,34 @@ def tally_hosts():
     num_of_hosts = MPI.COMM_WORLD.bcast(num_of_hosts)
 
 
-def aggregate_checksums(localChunkSums, dbname="checksums.db"):
+def aggregate_checksums(bfsign):
     signature, size, chunksums = None, None, None
 
-    if comm.rank == 0:
-        db = MemSum()
-        for chksum in localChunkSums:
-            db.put(chksum)
-
-        # ask from the others
-        for p in xrange(1, comm.size):
-            chunksums = comm.recv(source=p)
-            for chksum in chunksums:
-                db.put(chksum)
+    if comm.rank > 0:
+        comm.send(bfsign.bitarray, dest=0)
     else:
-        comm.send(localChunkSums, dest=0)
+        for p in xrange(1, comm.size):
+            other_bitarray = comm.recv(source=p)
+            bfsign.or_bf(other_bitarray)
 
     comm.Barrier()
 
     if comm.rank == 0:
-        signature = db.fsum()
-        size = db.size()
-        chunksums = db.chunksums
+        signature = bfsign.gen_signature()
 
-    return size, signature, chunksums
+    return signature
 
 
-def gen_signature(fcp, totalsize):
+def gen_signature(bfsign, totalsize):
     """ Generate a signature for dataset, it assumes the checksum
        option is set and done """
     if comm.rank == 0:
         print("\nAggregating dataset signature ...\n")
     tbegin = MPI.Wtime()
-    size, sig, chunksums = aggregate_checksums(fcp.chunksums)
+    sig = aggregate_checksums(bfsign)
     tend = MPI.Wtime()
     if comm.rank == 0:
-        print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
+        #print("\t{:<20}{:<20}".format("Aggregated chunks:", size))
         print("\t{:<20}{:<20}".format("Running time:", utils.conv_time(tend - tbegin)))
         print("\t{:<20}{:<20}".format("SHA1 Signature:", sig))
         with open(args.output, "w") as f:
@@ -882,8 +944,14 @@ def gen_signature(fcp, totalsize):
             f.write("destination: %s\n" % fcp.dest)
             f.write("date: %s\n" % utils.current_time())
             f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
-        print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, args.output)))
+        #print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, args.output)))
 
+def calculate_item(avail_memory):
+    avail_memory = math.log10(avail_memory*1024)
+    num_items = 1.0113*(avail_memory**3) - 9.8454*(avail_memory**2) + 32.0405*avail_memory - 28.8437
+    num_items = 10**num_items
+    num_items = int(num_items)
+    return num_items
 
 def main():
     global args, log, circle, fcp, treewalk
@@ -899,6 +967,10 @@ def main():
     G.verbosity = args.verbosity
     G.am_root = True if os.geteuid() == 0 else False
     G.use_store = args.use_store
+    G.memitem_threshold = args.item
+
+    if args.memory:
+        G.memitem_threshold = calculate_item(args.memory)
 
     if args.signature:  # with signature implies doing verify as well
         args.verify = True
@@ -906,16 +978,24 @@ def main():
     G.src, G.dest = check_source_and_target(args.src, args.dest)
     dbname = get_workq_name()
 
-    circle = Circle()
-    circle.dbname = dbname
+    circle = Circle(dbname="fwalk")
+    #circle.dbname = dbname
 
     if args.rid:
-        circle.resume = True
+        G.resume = True
+        G.rid = args.rid
         args.signature = False # when recovery, no signature
 
     if not args.cpid:
         ts = utils.timestamp()
         args.cpid = circle.comm.bcast(ts)
+
+    G.tempdir = os.path.join(os.getcwd(),(".pcircle" + args.cpid))
+    if not os.path.exists(G.tempdir):
+        try:
+            os.mkdir(G.tempdir)
+        except OSError:
+            pass
 
     if circle.rank == 0:
         print("Running Parameters:\n")
@@ -932,11 +1012,10 @@ def main():
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
             "Checkpoint ID:", "%s" % args.cpid))
 
-        print("\t{:<25}{:<10}".format("Use backend store:", "%r" % args.use_store))
+        print("\t{:<25}{:<10}".format("Items in memory:", "%r" % G.memitem_threshold))
         #
         if args.verbosity > 0:
             print("\t{:<25}{:<20}".format("Copy Mode:", G.copytype))
-
 
     fcp_start()
 
@@ -950,8 +1029,8 @@ def main():
 
     # do checksum verification
     if args.verify:
-        circle = Circle()
-        pcheck = PVerify(circle, fcp, G.totalsize)
+        circle = Circle(dbname="verify")
+        pcheck = PVerify(circle, fcp, G.total_files, G.totalsize, args.signature)
         circle.begin(pcheck)
         tally = pcheck.fail_tally()
         tally = comm.bcast(tally)
@@ -965,7 +1044,7 @@ def main():
         comm.Barrier()
 
         if args.signature and tally == 0:
-            gen_signature(fcp, G.totalsize)
+            gen_signature(pcheck.bfsign, G.totalsize)
 
     # fix permission
     comm.Barrier()
@@ -981,12 +1060,15 @@ def main():
         fcp.epilogue()
         fcp.cleanup()
 
-    # if circle:
-    #     circle.finalize(cleanup=True)
+    if circle:
+         circle.finalize(cleanup=True)
+
+    shutil.rmtree(G.tempdir, ignore_errors=True)
+
     # TODO: a close file error can happen when circle.finalize()
     #
-    if isinstance(circle.workq, DbStore):
-        circle.workq.cleanup()
+    #if isinstance(circle.workq, DbStore):
+    #    circle.workq.cleanup()
 
 if __name__ == "__main__":
     main()

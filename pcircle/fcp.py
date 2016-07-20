@@ -76,14 +76,13 @@ def gen_parser():
     parser.add_argument("--verify", action="store_true", help="verify after copy, default: off")
     parser.add_argument("-s", "--signature", action="store_true", help="aggregate checksum for signature, default: off")
     parser.add_argument("-p", "--preserve", action="store_true", help="Preserving meta, default: off")
-    parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
+    # using bloom filter for signature genearation, all chunksums info not available at root process anymore
+    #parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
     parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("-t", "--cptime", metavar="s", type=int, default=3600, help="checkpoint interval, default: 1hr")
     parser.add_argument("-i", "--cpid", metavar="ID", default=None, help="checkpoint file id, default: timestamp")
     parser.add_argument("-r", "--rid", dest="rid", metavar="ID", help="resume ID, required in resume mode")
     parser.add_argument("--pause", metavar="s", type=int, help="pause a delay (seconds) after copy, test only")
-    parser.add_argument("--use-store",action="store_true",help="Use backend storage, default: off")
-    parser.add_argument("-m", "--memory", metavar="GB", type=int, help="available memory, default items in memory: 100000")
     parser.add_argument("--item", type=int, default=100000, help="number of items stored in memory, default: 100000")
     parser.add_argument("src", nargs='+', help="copy from")
     parser.add_argument("dest", help="copy to")
@@ -946,13 +945,6 @@ def gen_signature(bfsign, totalsize):
             f.write("totoalsize: %s\n" % utils.bytes_fmt(totalsize))
         #print("\t{:<20}{:<20}".format("Signature File:", export_checksum2(chunksums, args.output)))
 
-def calculate_item(avail_memory):
-    avail_memory = math.log10(avail_memory*1024)
-    num_items = 1.0113*(avail_memory**3) - 9.8454*(avail_memory**2) + 32.0405*avail_memory - 28.8437
-    num_items = 10**num_items
-    num_items = int(num_items)
-    return num_items
-
 def main():
     global args, log, circle, fcp, treewalk
     # This might be an overkill function
@@ -966,25 +958,22 @@ def main():
     G.reduce_interval = args.reduce_interval
     G.verbosity = args.verbosity
     G.am_root = True if os.geteuid() == 0 else False
-    G.use_store = args.use_store
     G.memitem_threshold = args.item
-
-    if args.memory:
-        G.memitem_threshold = calculate_item(args.memory)
 
     if args.signature:  # with signature implies doing verify as well
         args.verify = True
-
-    G.src, G.dest = check_source_and_target(args.src, args.dest)
-    dbname = get_workq_name()
 
     circle = Circle(dbname="fwalk")
     #circle.dbname = dbname
 
     if args.rid:
         G.resume = True
+        args.force = True
         G.rid = args.rid
         args.signature = False # when recovery, no signature
+
+    G.src, G.dest = check_source_and_target(args.src, args.dest)
+    dbname = get_workq_name()
 
     if not args.cpid:
         ts = utils.timestamp()

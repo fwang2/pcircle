@@ -6,6 +6,7 @@ import sys
 import os
 import os.path
 import shutil
+import utils
 from collections import deque
 from pprint import pprint
 
@@ -101,6 +102,15 @@ class Circle:
         self.barrier_replies = 0
 
         self.workdir = os.getcwd()
+        if not G.tempdir:
+            G.tempdir = os.path.join(os.getcwd(), (".pcircle" + utils.timestamp()))
+            G.tempdir = self.comm.bcast(G.tempdir)
+
+        if not os.path.exists(G.tempdir):
+            try:
+                os.mkdir(G.tempdir)
+            except OSError:
+                pass
 
         # token
         self.token = Token(self)

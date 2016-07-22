@@ -17,7 +17,7 @@ class PVerify(BaseTask):
         self.totalsize = totalsize
         self.signature = signature
         if self.signature:
-            self.bfsign = BFsignature(fcp, total_files)
+            self.bfsign = BFsignature(total_files)
 
         # cache
         self.fd_cache = LRU(512)

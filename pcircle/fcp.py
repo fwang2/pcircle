@@ -77,7 +77,7 @@ def gen_parser():
     parser.add_argument("-s", "--signature", action="store_true", help="aggregate checksum for signature, default: off")
     parser.add_argument("-p", "--preserve", action="store_true", help="Preserving meta, default: off")
     # using bloom filter for signature genearation, all chunksums info not available at root process anymore
-    #parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
+    parser.add_argument("-o", "--output", metavar='', default="sha1-%s.sig" % utils.timestamp2(), help="sha1 output file")
     parser.add_argument("-f", "--force", action="store_true", help="force overwrite")
     parser.add_argument("-t", "--cptime", metavar="s", type=int, default=3600, help="checkpoint interval, default: 1hr")
     parser.add_argument("-i", "--cpid", metavar="ID", default=None, help="checkpoint file id, default: timestamp")
@@ -209,10 +209,11 @@ class FCP(BaseTask):
         # we need to do this because if last job didn't finish cleanly
         # the fwalk files can be found as leftovers
         # and if fcp cleanup has a chance, it should clean up that
-
+        """
         fwalk = "%s/fwalk.%s" % (G.tempdir, self.circle.rank)
         if os.path.exists(fwalk):
             os.remove(fwalk)
+        """
 
     def new_fchunk(self, fitem):
         fchunk = FileChunk()  # default cmd = copy
@@ -761,7 +762,7 @@ def fcp_start():
 
     circle.begin(fcp)
     circle.finalize()
-    #fcp.cleanup()
+    fcp.epilogue()
 
 def get_workq_size(workq):
     """ workq is a list of FileChunks, we iterate each and summarize the size,
@@ -879,7 +880,6 @@ def fix_opt(treewalk):
 #     if fcp:
 #         fcp.cleanup()
 
-
 def get_workq_name():
     global args
     name = None
@@ -892,7 +892,6 @@ def get_workq_name():
         MPI.COMM_WORLD.bcast(ts)
         name = "workq.%s" % ts
     return name
-
 
 def tally_hosts():
     """ How many physical hosts are there?
@@ -963,21 +962,15 @@ def main():
     if args.signature:  # with signature implies doing verify as well
         args.verify = True
 
-    circle = Circle(dbname="fwalk")
-    #circle.dbname = dbname
-
     if args.rid:
         G.resume = True
         args.force = True
         G.rid = args.rid
         args.signature = False # when recovery, no signature
 
-    G.src, G.dest = check_source_and_target(args.src, args.dest)
-    dbname = get_workq_name()
-
     if not args.cpid:
         ts = utils.timestamp()
-        args.cpid = circle.comm.bcast(ts)
+        args.cpid = MPI.COMM_WORLD.bcast(ts)
 
     G.tempdir = os.path.join(os.getcwd(),(".pcircle" + args.cpid))
     if not os.path.exists(G.tempdir):
@@ -985,6 +978,12 @@ def main():
             os.mkdir(G.tempdir)
         except OSError:
             pass
+
+    G.src, G.dest = check_source_and_target(args.src, args.dest)
+    dbname = get_workq_name()
+
+    circle = Circle(dbname="fwalk")
+    #circle.dbname = dbname
 
     if circle.rank == 0:
         print("Running Parameters:\n")
@@ -1021,14 +1020,15 @@ def main():
         circle = Circle(dbname="verify")
         pcheck = PVerify(circle, fcp, G.total_files, G.totalsize, args.signature)
         circle.begin(pcheck)
+        circle.finalize()
         tally = pcheck.fail_tally()
         tally = comm.bcast(tally)
         if circle.rank == 0:
             print("")
             if tally == 0:
-                print("\t{:<20}{:<20}".format("Result:", "PASS"))
+                print("\t{:<20}{:<20}".format("Verify result:", "PASS"))
             else:
-                print("\t{:<20}{:<20}".format("Result:", "FAILED"))
+                print("\t{:<20}{:<20}".format("Verify result:", "FAILED"))
 
         comm.Barrier()
 
@@ -1044,15 +1044,13 @@ def main():
 
     if treewalk:
         treewalk.cleanup()
-
     if fcp:
-        fcp.epilogue()
         fcp.cleanup()
-
-    if circle:
-         circle.finalize(cleanup=True)
-
-    shutil.rmtree(G.tempdir, ignore_errors=True)
+    #if circle:
+    #    circle.finalize(cleanup=True)
+    comm.Barrier()
+    if comm.rank == 0:
+        os.rmdir(G.tempdir)
 
     # TODO: a close file error can happen when circle.finalize()
     #

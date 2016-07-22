@@ -5,13 +5,12 @@ from bitarray import bitarray
 from globals import G
 
 class BFsignature():
-    def __init__(self, fcp, total_files):
-        self.fcp = fcp
+    def __init__(self, total_files):
         self.total_files = total_files
         if self.total_files > 0:
             self.cal_m()
         else:
-            print("Error: negative total_files")
+            log.error("Non-positive total_files")
     
     def cal_m(self):
         self.k = - math.log(0.001) / math.log(2)

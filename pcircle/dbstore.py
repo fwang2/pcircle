@@ -113,10 +113,6 @@ class DbStore(object):
 
         #self._restore_from_backup()
 
-    def cleanup(self):
-        if os.path.exists(self.dbname):
-            os.remove(self.dbname)
-
     def size(self):
         return self.qsize
 
@@ -166,7 +162,8 @@ class DbStore(object):
         elif isinstance(obj, FileChunk) or isinstance(obj, ChunkSum):
             return obj.length
         else:
-            raise ValueError("Can't recognize %s" % obj)
+            return 0
+            #raise ValueError("Can't recognize %s" % obj)
 
     def _objs_size(self, objs):
         size = 0

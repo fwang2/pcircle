@@ -13,7 +13,7 @@ import stat
 import sys
 import signal
 import cPickle as pickle
-
+import shutil
 from mpi4py import MPI
 from cStringIO import StringIO
 
@@ -27,6 +27,7 @@ from fdef import ChunkSum
 from globals import G
 import utils
 from pcircle.mpihelper import tally_hosts, parse_and_bcast, ThrowingArgumentParser
+from bfsignature import BFsignature
 
 __version__ = get_versions()['version']
 args = None
@@ -53,21 +54,23 @@ def gen_parser():
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
     parser.add_argument("--chunksize", help="chunk size (K, M, G, T)")
-    parser.add_argument("--use-store", action="store_true", help="Use persistent store")
-    parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
+    #parser.add_argument("--use-store", action="store_true", help="Use persistent store")
+    #parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
     return parser
 
 
 class Checksum(BaseTask):
-    def __init__(self, circle, treewalk, chunksize, totalsize=0):
+    def __init__(self, circle, treewalk, chunksize, totalsize=0, totalfiles=0):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.treewalk = treewalk
         self.totalsize = totalsize
+        self.totalfiles = totalfiles
         self.workcnt = 0
-        self.chunkq = []
+        #self.chunkq = []
         self.chunksize = chunksize
+        self.bfsign = BFsignature(self.totalfiles)
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
@@ -84,24 +87,29 @@ class Checksum(BaseTask):
 
     def create(self):
 
-        if G.use_store:
-            while self.treewalk.flist.qsize > 0:
-                fitems, _ = self.treewalk.flist.mget(G.DB_BUFSIZE)
-                for fi in fitems:
-                    if stat.S_ISREG(fi.st_mode):
-                        self.enq_file(fi)  # where chunking takes place
-                self.treewalk.flist.mdel(G.DB_BUFSIZE)
 
-        else:
-            for fi in self.treewalk.flist:
-                if not os.path.islink(fi.path) and stat.S_ISREG(fi.st_mode):
-                    self.enq_file(fi)
+        for fi in self.treewalk.flist:
+            if not os.path.islink(fi.path) and stat.S_ISREG(fi.st_mode):
+                self.enq_file(fi)
+
+        if len(self.treewalk.flist_buf) > 0:
+           for fi in self.treewalk.flist_buf:
+               if not os.path.islink(fi.path) and stat.S_ISREG(fi.st_mode):
+                   self.enq_file(fi)
 
                     # right after this, we do first checkpoint
 
                     # if self.checkpoint_file:
                     #    self.do_no_interrupt_checkpoint()
                     #    self.checkpoint_last = MPI.Wtime()
+
+        if self.treewalk.use_store:
+            while self.treewalk.flist_db.qsize > 0:
+                fitems, _ = self.treewalk.flist_db.mget(G.DB_BUFSIZE)
+                for fi in fitems:
+                    if stat.S_ISREG(fi.st_mode):
+                        self.enq_file(fi)  # where chunking takes place
+                self.treewalk.flist_db.mdel(G.DB_BUFSIZE)
 
     def enq_file(self, f):
         """
@@ -192,8 +200,10 @@ class Checksum(BaseTask):
         except Exception as e:
             self.logger.warn(e, extra=self.d)
         ck.digest = digest.hexdigest()
-        self.chunkq.append(ck)
+        #self.chunkq.append(ck)
         self.vsize += ck.length
+
+        self.bfsign.insert_item(ck.digest)
 
     def reduce_init(self, buf):
         buf['vsize'] = self.vsize
@@ -295,10 +305,8 @@ def main():
         err_and_exit("Error: %s not accessible" % e)
 
     G.loglevel = args.loglevel
-    G.use_store = args.use_store
+    #G.use_store = args.use_store
     G.reduce_interval = args.interval
-
-
 
     hosts_cnt = tally_hosts()
     circle = Circle()
@@ -326,7 +334,7 @@ def main():
         print("Chunksize = ", chunksize)
 
     circle = Circle()
-    fcheck = Checksum(circle, fwalk, chunksize, totalsize)
+    fcheck = Checksum(circle, fwalk, chunksize, totalsize, G.total_files)
 
     circle.begin(fcheck)
     circle.finalize()
@@ -334,6 +342,7 @@ def main():
     if circle.rank == 0:
         sys.stdout.write("\nAggregating ... ")
 
+    """
     chunkl = circle.comm.gather(fcheck.chunkq)
 
     if circle.rank == 0:
@@ -354,9 +363,33 @@ def main():
         if args.export_block_signatures:
             export_checksum2(chunks, args.output)
             print("Exporting block signatures ... \n")
+    """
+    if circle.rank > 0:
+        circle.comm.send(fcheck.bfsign.bitarray, dest=0)
+    else:
+        for p in xrange(1, circle.comm.size):
+            other_bitarray = circle.comm.recv(source=p)
+            fcheck.bfsign.or_bf(other_bitarray)
+    circle.comm.Barrier()
+
+    if circle.comm.rank == 0:
+        sha1val = fcheck.bfsign.gen_signature()
+        with open(args.output, "w") as f:
+            f.write("sha1: %s\n" % sha1val)
+            f.write("chunksize: %s\n" % chunksize)
+            f.write("fwalk version: %s\n" % __version__)
+            f.write("src: %s\n" % utils.choplist(G.src))
+            f.write("date: %s\n" % utils.current_time())
+            f.write("totalsize: %s\n" % totalsize)
+
+        print("\nSHA1: %s" % sha1val)
+        print("Signature file: [%s]" % args.output)
 
     fcheck.epilogue()
 
+    if circle.comm.rank == 0:
+        if os.path.exists(G.tempdir):
+            shutil.rmtree(G.tempdir, ignore_errors=True)
 
 if __name__ == "__main__":
     main()

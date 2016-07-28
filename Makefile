@@ -54,6 +54,7 @@ deploy:
 	$(PYTHON) setup.py sdist
 	rm -rf $(VENV)
 	virtualenv --no-site-packages $(VENV)
+	$(VENV)/bin/pip install cffi
 	$(VENV)/bin/pip install $(SDIST)
 	virtualenv --relocatable $(VENV)
 

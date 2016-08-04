@@ -69,6 +69,7 @@ def gen_parser():
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
     parser.add_argument("--top", type=int, default=None, help="Top N files, default is None (disabled)")
     parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
+    parser.add_argument("--item", type=int, default=3000000, help="number of items stored in memory, default: 3000000")
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
 
@@ -407,8 +408,8 @@ def main():
     except ValueError as e:
         err_and_exit("Error: %s not accessible" % e)
 
+    G.memitem_threshold = args.item
     G.loglevel = args.loglevel
-
     hosts_cnt = tally_hosts()
 
     if comm.rank == 0:

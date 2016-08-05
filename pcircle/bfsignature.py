@@ -5,17 +5,19 @@ from bitarray import bitarray
 from globals import G
 
 class BFsignature():
-    def __init__(self, total_files):
-        self.total_files = total_files
-        if self.total_files > 0:
+    def __init__(self, total_chunks):
+        self.total_chunks = total_chunks
+        if self.total_chunks > 0:
             self.cal_m()
+            #print("bf size = ",self.m)
         else:
-            log.error("Non-positive total_files")
+            #log.error("Non-positive total_chunks")
+            print("Non-positive total_chunks")
     
     def cal_m(self):
         self.k = - math.log(0.001) / math.log(2)
         self.k = int(self.k)
-        self.m = - self.total_files * math.log(0.001) / (math.log(2)**2)
+        self.m = - self.total_chunks * math.log(0.001) / (math.log(2)**2)
         self.m = int(self.m)
         self.bitarray = bitarray(self.m) 
         self.bitarray.setall(False)

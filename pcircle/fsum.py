@@ -67,10 +67,10 @@ class Checksum(BaseTask):
         self.treewalk = treewalk
         self.totalsize = totalsize
         self.totalfiles = totalfiles
+        self.total_chunks = 0
         self.workcnt = 0
         #self.chunkq = []
         self.chunksize = chunksize
-        self.bfsign = BFsignature(self.totalfiles)
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
@@ -110,6 +110,13 @@ class Checksum(BaseTask):
                     if stat.S_ISREG(fi.st_mode):
                         self.enq_file(fi)  # where chunking takes place
                 self.treewalk.flist_db.mdel(G.DB_BUFSIZE)
+
+        # gather total chunks
+        self.circle.comm.barrier()
+        self.total_chunks = self.circle.comm.reduce(self.workcnt, op=MPI.SUM)
+        self.total_chunks = self.circle.comm.bcast(self.total_chunks)
+        #print("total chunks = ", self.total_chunks)
+        self.bfsign = BFsignature(self.total_chunks)
 
     def enq_file(self, f):
         """

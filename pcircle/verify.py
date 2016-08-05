@@ -10,14 +10,14 @@ from globals import G
 from bfsignature import BFsignature
 
 class PVerify(BaseTask):
-    def __init__(self, circle, fcp, total_files, totalsize=0,signature=False):
+    def __init__(self, circle, fcp, total_chunks, totalsize=0,signature=False):
         BaseTask.__init__(self, circle)
         self.circle = circle
         self.fcp = fcp
         self.totalsize = totalsize
         self.signature = signature
         if self.signature:
-            self.bfsign = BFsignature(total_files)
+            self.bfsign = BFsignature(total_chunks)
 
         # cache
         self.fd_cache = LRU(512)

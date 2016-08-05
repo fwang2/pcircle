@@ -309,6 +309,12 @@ class FCP(BaseTask):
             self.do_no_interrupt_checkpoint()
             self.checkpoint_last = MPI.Wtime()
 
+        # gather total_chunks
+        self.circle.comm.barrier()
+        G.total_chunks = self.circle.comm.reduce(self.workcnt, op=MPI.SUM)
+        G.total_chunks = self.circle.comm.bcast(G.total_chunks)
+        #print("Total chunks: ",G.total_chunks)
+
     def do_open(self, k, d, flag, limit):
         """
         @param k: the file path
@@ -1018,7 +1024,7 @@ def main():
     # do checksum verification
     if args.verify:
         circle = Circle(dbname="verify")
-        pcheck = PVerify(circle, fcp, G.total_files, G.totalsize, args.signature)
+        pcheck = PVerify(circle, fcp, G.total_chunks, G.totalsize, args.signature)
         circle.begin(pcheck)
         circle.finalize()
         tally = pcheck.fail_tally()

@@ -54,7 +54,7 @@ def gen_parser():
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
     parser.add_argument("--chunksize", help="chunk size (K, M, G, T)")
-    parser.add_argument("--item", type=int, default="4000000", help="number of items stored in memory, default: 3000000")
+    parser.add_argument("--item", type=int, default="3000000", help="number of items stored in memory, default: 3000000")
     #parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     #parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
@@ -115,8 +115,8 @@ class Checksum(BaseTask):
 
         # gather total chunks
         self.circle.comm.barrier()
-        self.total_chunks = self.circle.comm.reduce(self.workcnt, op=MPI.SUM)
-        self.total_chunks = self.circle.comm.bcast(self.total_chunks)
+        self.total_chunks = self.circle.comm.allreduce(self.workcnt, op=MPI.SUM)
+        #self.total_chunks = self.circle.comm.bcast(self.total_chunks)
         if self.circle.rank == 0:
             print("total chunks = ", self.total_chunks)
         self.bfsign = BFsignature(self.total_chunks)

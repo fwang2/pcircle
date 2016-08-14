@@ -311,8 +311,8 @@ class FCP(BaseTask):
 
         # gather total_chunks
         self.circle.comm.barrier()
-        G.total_chunks = self.circle.comm.reduce(self.workcnt, op=MPI.SUM)
-        G.total_chunks = self.circle.comm.bcast(G.total_chunks)
+        G.total_chunks = self.circle.comm.allreduce(self.workcnt, op=MPI.SUM)
+        #G.total_chunks = self.circle.comm.bcast(G.total_chunks)
         #print("Total chunks: ",G.total_chunks)
 
     def do_open(self, k, d, flag, limit):

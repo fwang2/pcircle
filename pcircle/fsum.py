@@ -54,6 +54,7 @@ def gen_parser():
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("-o", "--output", default="sha1-%s.sig" % timestamp2(), help="sha1 output file")
     parser.add_argument("--chunksize", help="chunk size (K, M, G, T)")
+    parser.add_argument("--item", type=int, default="3000000", help="number of items stored in memory, default: 3000000")
     #parser.add_argument("--use-store", action="store_true", help="Use persistent store")
     #parser.add_argument("--export-block-signatures", action="store_true", help="export block-level signatures")
 
@@ -67,10 +68,10 @@ class Checksum(BaseTask):
         self.treewalk = treewalk
         self.totalsize = totalsize
         self.totalfiles = totalfiles
+        self.total_chunks = 0
         self.workcnt = 0
         #self.chunkq = []
         self.chunksize = chunksize
-        self.bfsign = BFsignature(self.totalfiles)
 
         # debug
         self.d = {"rank": "rank %s" % circle.rank}
@@ -79,6 +80,7 @@ class Checksum(BaseTask):
 
         # reduce
         self.vsize = 0
+        self.vsize_prior = 0
 
         self.logger = utils.getLogger(__name__)
 
@@ -110,6 +112,14 @@ class Checksum(BaseTask):
                     if stat.S_ISREG(fi.st_mode):
                         self.enq_file(fi)  # where chunking takes place
                 self.treewalk.flist_db.mdel(G.DB_BUFSIZE)
+
+        # gather total chunks
+        self.circle.comm.barrier()
+        self.total_chunks = self.circle.comm.allreduce(self.workcnt, op=MPI.SUM)
+        #self.total_chunks = self.circle.comm.bcast(self.total_chunks)
+        if self.circle.rank == 0:
+            print("total chunks = ", self.total_chunks)
+        self.bfsign = BFsignature(self.total_chunks)
 
     def enq_file(self, f):
         """
@@ -214,6 +224,10 @@ class Checksum(BaseTask):
             out += "%.2f %% block checksummed, " % (100 * float(buf['vsize']) / self.totalsize)
 
         out += "%s bytes done" % bytes_fmt(buf['vsize'])
+        if self.circle.reduce_time_interval != 0:
+            rate = float(buf['vsize'] - self.vsize_prior) / self.circle.reduce_time_interval
+            self.vsize_prior = buf['vsize']
+            out += ", estimated checksum rate: %s/s" % bytes_fmt(rate)
         print(out)
 
     def reduce_finish(self, buf):
@@ -307,6 +321,7 @@ def main():
     G.loglevel = args.loglevel
     #G.use_store = args.use_store
     G.reduce_interval = args.interval
+    G.memitem_threshold = args.item
 
     hosts_cnt = tally_hosts()
     circle = Circle()
@@ -317,6 +332,7 @@ def main():
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", utils.choplist(G.src)))
+        print("\t{:<20}{:<20}".format("Items in memory:", G.memitem_threshold))
 
     fwalk = FWalk(circle, G.src)
     circle.begin(fwalk)

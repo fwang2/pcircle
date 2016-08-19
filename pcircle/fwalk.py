@@ -19,6 +19,7 @@ import numpy as np
 from task import BaseTask
 from circle import Circle
 from globals import G
+from globals import Tally as T
 from utils import getLogger, bytes_fmt, destpath
 from dbstore import DbStore
 from fdef import FileItem
@@ -352,37 +353,34 @@ class FWalk(BaseTask):
 
     def total_tally(self):
         global taskloads
-        total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
-        total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
-        total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
-        total_symlinks = self.circle.comm.reduce(self.sym_links, op=MPI.SUM)
-        total_skipped = self.circle.comm.reduce(self.skipped, op=MPI.SUM)
+        T.total_dirs = self.circle.comm.allreduce(self.cnt_dirs, op=MPI.SUM)
+        T.total_files = self.circle.comm.allreduce(self.cnt_files, op=MPI.SUM)
+        T.total_filesize = self.circle.comm.allreduce(self.cnt_filesize, op=MPI.SUM)
+        T.total_symlinks = self.circle.comm.allreduce(self.sym_links, op=MPI.SUM)
+        T.total_skipped = self.circle.comm.allreduce(self.skipped, op=MPI.SUM)
         taskloads = self.circle.comm.gather(self.reduce_items)
-        return total_dirs, total_files, total_filesize, total_symlinks, total_skipped
 
     def epilogue(self):
-        total_dirs, total_files, total_filesize, total_symlinks, total_skipped = self.total_tally()
+        self.total_tally()
         self.time_ended = MPI.Wtime()
 
         if self.circle.rank == 0:
             print("\nFWALK Epilogue:\n")
-            print("\t{:<20}{:<20}".format("Directory count:", total_dirs))
-            print("\t{:<20}{:<20}".format("Sym Links count:", total_symlinks))
-            print("\t{:<20}{:<20}".format("File count:", total_files))
-            print("\t{:<20}{:<20}".format("Skipped count:", total_skipped))
-            print("\t{:<20}{:<20}".format("Total file size:", bytes_fmt(total_filesize)))
-            if total_files != 0:
-                print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(total_filesize/float(total_files))))
+            print("\t{:<20}{:<20}".format("Directory count:", T.total_dirs))
+            print("\t{:<20}{:<20}".format("Sym Links count:", T.total_symlinks))
+            print("\t{:<20}{:<20}".format("File count:", T.total_files))
+            print("\t{:<20}{:<20}".format("Skipped count:", T.total_skipped))
+            print("\t{:<20}{:<20}".format("Total file size:", bytes_fmt(T.total_filesize)))
+            if G.total_files != 0:
+                print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(T.total_filesize/float(T.total_files))))
             print("\t{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
             print("\t{:<20}{:<20}".format("Use store flist:", "%s" % self.use_store))
             print("\t{:<20}{:<20}".format("Use store workq:", "%s" % self.circle.use_store))
             print("\tFWALK Loads: %s" % taskloads)
             print("")
 
-        G.total_files = total_files
-        G.total_files = self.circle.comm.bcast(G.total_files)
+        G.total_files = T.total_files
 
-        return total_filesize
 
     def cleanup(self):
         if hasattr(self, "flist_db"):

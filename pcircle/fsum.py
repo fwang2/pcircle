@@ -25,6 +25,7 @@ from fwalk import FWalk
 from cio import readn
 from fdef import ChunkSum
 from globals import G
+from globals import Tally as T
 import utils
 from pcircle.mpihelper import tally_hosts, parse_and_bcast, ThrowingArgumentParser
 from bfsignature import BFsignature
@@ -338,11 +339,13 @@ def main():
     circle.begin(fwalk)
     if G.use_store:
         fwalk.flushdb()
-    totalsize = fwalk.epilogue()
+
+    fwalk.epilogue()
     circle.finalize()
 
+
     # by default, we use adaptive chunksize
-    chunksize = utils.calc_chunksize(totalsize)
+    chunksize = utils.calc_chunksize(T.total_filesize)
     if args.chunksize:
         chunksize = conv_unit(args.chunksize)
 
@@ -350,7 +353,7 @@ def main():
         print("Chunksize = ", chunksize)
 
     circle = Circle()
-    fcheck = Checksum(circle, fwalk, chunksize, totalsize, G.total_files)
+    fcheck = Checksum(circle, fwalk, chunksize, T.total_filesize, T.total_files)
 
     circle.begin(fcheck)
     circle.finalize()
@@ -372,7 +375,7 @@ def main():
             f.write("fwalk version: %s\n" % __version__)
             f.write("src: %s\n" % utils.choplist(G.src))
             f.write("date: %s\n" % utils.current_time())
-            f.write("totalsize: %s\n" % totalsize)
+            f.write("totalsize: %s\n" % T.total_filesize)
 
         print("\nSHA1: %s" % sha1val)
         print("Signature file: [%s]" % args.output)
@@ -396,7 +399,7 @@ def main():
             f.write("fwalk version: %s\n" % __version__)
             f.write("src: %s\n" % utils.choplist(G.src))
             f.write("date: %s\n" % utils.current_time())
-            f.write("totalsize: %s\n" % totalsize)
+            f.write("totalsize: %s\n" % T.total_filesize)
 
         print("\nSHA1: %s" % sha1val)
         print("Signature file: [%s]" % args.output)

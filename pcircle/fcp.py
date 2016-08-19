@@ -34,6 +34,7 @@ from fwalk import FWalk
 from checkpoint import Checkpoint
 from fdef import FileChunk, ChunkSum
 from globals import G
+from globals import Tally as T
 from dbstore import DbStore
 from dbsum import MemSum
 from fsum import export_checksum2
@@ -720,8 +721,8 @@ def prep_recovery():
     # acquire total size
     total_sz_mem = circle.comm.allreduce(sz)
     total_sz_db = circle.comm.allreduce(sz_db)
-    G.totalsize = total_sz_mem + total_sz_db
-    if G.totalsize == 0:
+    T.total_filesize = total_sz_mem + total_sz_db
+    if T.total_filesize == 0:
         if circle.rank == 0:
             print("\nRecovery size is 0 bytes, can't proceed.")
         circle.exit(0)
@@ -729,7 +730,7 @@ def prep_recovery():
     if circle.rank == 0:
         print("\nResume copy\n")
         print("\t{:<20}{:<20}".format("Original size:", bytes_fmt(oldsz)))
-        print("\t{:<20}{:<20}".format("Recovery size:", bytes_fmt(G.totalsize)))
+        print("\t{:<20}{:<20}".format("Recovery size:", bytes_fmt(T.total_filesize)))
         print("")
 
     return cobj.workq
@@ -744,14 +745,14 @@ def fcp_start():
         treewalk = FWalk(circle, G.src, G.dest, force=args.force)
         circle.begin(treewalk)
         circle.finalize()
-        G.totalsize = treewalk.epilogue()
+        treewalk.epilogue()
     else:  # okay, let's do checkpoint recovery
         workq = prep_recovery()
 
     circle = Circle(dbname="fcp")
     fcp = FCP(circle, G.src, G.dest,
               treewalk=treewalk,
-              totalsize=G.totalsize,
+              totalsize=T.total_filesize,
               verify=args.verify,
               workq=workq,
               hostcnt=num_of_hosts)
@@ -762,7 +763,7 @@ def fcp_start():
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Read Cache:", "%s" % rcl, "|",
                                                       "Write Cache:", "%s" % wcl))
         print("")
-    set_chunksize(fcp, G.totalsize)
+    set_chunksize(fcp, T.total_filesize)
     fcp.checkpoint_interval = args.cptime
     fcp.checkpoint_file = ".pcp_workq.%s.%s" % (args.cpid, circle.rank)
 
@@ -872,11 +873,11 @@ def fix_opt(treewalk):
 #     treewalk.flushdb()
 #
 #     circle.finalize(cleanup=False)
-#     G.totalsize = treewalk.epilogue()
+#     T.total_filesize = treewalk.epilogue()
 #
 #     fcp = FCP(circle, src, dest, treewalk=treewalk,
-#               totalsize=G.totalsize, do_checksum=args.checksum, hostcnt=num_of_hosts)
-#     set_chunksize(fcp, G.totalsize)
+#               totalsize=T.total_filesize, do_checksum=args.checksum, hostcnt=num_of_hosts)
+#     set_chunksize(fcp, T.total_filesize)
 #     circle.begin(fcp)
 #
 #     # cleanup the db trails
@@ -1024,7 +1025,7 @@ def main():
     # do checksum verification
     if args.verify:
         circle = Circle(dbname="verify")
-        pcheck = PVerify(circle, fcp, G.total_chunks, G.totalsize, args.signature)
+        pcheck = PVerify(circle, fcp, G.total_chunks, T.total_filesize, args.signature)
         circle.begin(pcheck)
         circle.finalize()
         tally = pcheck.fail_tally()
@@ -1039,7 +1040,7 @@ def main():
         comm.Barrier()
 
         if args.signature and tally == 0:
-            gen_signature(pcheck.bfsign, G.totalsize)
+            gen_signature(pcheck.bfsign, T.total_filesize)
 
     # fix permission
     comm.Barrier()

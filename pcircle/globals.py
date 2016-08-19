@@ -49,7 +49,6 @@ class G:
     DB_BUFSIZE = 10000
     memitem_threshold = 100000
     tempdir = None
-    total_files = 0
     total_chunks = 0
     rid = None
     chk_file = None

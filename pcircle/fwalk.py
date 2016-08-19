@@ -371,15 +371,13 @@ class FWalk(BaseTask):
             print("\t{:<20}{:<20}".format("File count:", T.total_files))
             print("\t{:<20}{:<20}".format("Skipped count:", T.total_skipped))
             print("\t{:<20}{:<20}".format("Total file size:", bytes_fmt(T.total_filesize)))
-            if G.total_files != 0:
+            if T.total_files != 0:
                 print("\t{:<20}{:<20}".format("Avg file size:", bytes_fmt(T.total_filesize/float(T.total_files))))
             print("\t{:<20}{:<20}".format("Tree talk time:", utils.conv_time(self.time_ended - self.time_started)))
             print("\t{:<20}{:<20}".format("Use store flist:", "%s" % self.use_store))
             print("\t{:<20}{:<20}".format("Use store workq:", "%s" % self.circle.use_store))
             print("\tFWALK Loads: %s" % taskloads)
             print("")
-
-        G.total_files = T.total_files
 
 
     def cleanup(self):

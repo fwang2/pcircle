@@ -54,6 +54,7 @@ class G:
     args_dest = None
     resume = None
     reduce_interval = 10
+    reduce_enabled = False
     verbosity = 0
     am_root = False
     copytype = 'dir2dir'

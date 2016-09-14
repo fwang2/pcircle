@@ -5,6 +5,7 @@ import random
 import sys
 import os
 import os.path
+import time
 from collections import deque
 from pprint import pprint
 
@@ -86,12 +87,17 @@ class Circle:
         self.workreq_rank = None
 
         # reduction
-        self.reduce_enabled = True
+        self.reduce_enabled = G.reduce_enabled
         self.reduce_time_last = MPI.Wtime()
         self.reduce_outstanding = False
         self.reduce_replies = 0
         self.reduce_buf = {}
         self.reduce_status = None
+
+        # periodic report
+        self.report_enabled = True
+        self.report_interval = 60
+        self.report_last = MPI.Wtime()
 
         # barriers
         self.barrier_started = False
@@ -200,6 +206,11 @@ class Circle:
     def loop(self):
         """ central loop to finish the work """
         while True:
+
+            # check if we shall do report
+
+            if self.report_enabled and (MPI.Wtime() - self.report_last > self.report_interval):
+                self.do_periodic_report()
 
             # check for and service requests
             self.workreq_check()
@@ -607,6 +618,12 @@ class Circle:
                 # sent message to each child
                 for child in self.child_ranks:
                     self.comm.send(None, child, T.REDUCE)
+
+    def do_periodic_report(self):
+        s = "Circle report on rank %s at %s\n" % (self.rank, time.strftime("%Y-%m-%d %H:%M:%S"))
+        s += "\t{:<20}{:<20}\n".format("work queue size:", len(self.workq))
+        s += "\t{:<20}{:<20}\n".format("work processed:", self.work_processed)
+        print(s)
 
     @staticmethod
     def exit(code):

@@ -38,7 +38,6 @@ import utils
 from _version import get_versions
 __version__ = get_versions()['version']
 args = None
-log = getLogger(__name__)
 taskloads = []
 topn = []   # track top N files
 hist = [0] * (len(G.bins) + 1)
@@ -143,6 +142,8 @@ class ProfileWalk:
 
     def __init__(self, circle, src, perfile=True):
 
+        self.logger = utils.getLogger(__name__)
+
         self.d = {"rank": "rank %s" % circle.rank}
         self.circle = circle
         self.src = src
@@ -191,14 +192,15 @@ class ProfileWalk:
         """
         last_report = MPI.Wtime()
         count = 0
+
         try:
             with timeout(seconds=30):
                 entries = scandir(path)
         except OSError as e:
-            log.warn(e, extra=self.d)
+            self.logger.warn(e, extra=self.d)
             self.skipped += 1
         except TimeoutError as e:
-            log.error("%s when scandir() on %s" % (e, path), extra=self.d)
+            self.logger.error("%s when scandir() on %s" % (e, path), extra=self.d)
             self.skipped += 1
         else:
             for entry in entries:
@@ -212,40 +214,50 @@ class ProfileWalk:
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, path, count))
                     last_report = MPI.Wtime()
-            log.info("Finish scan of [%s], count=%s" % (path, count), extra=self.d)
+            self.logger.info("Finish scan of [%s], count=%s" % (path, count), extra=self.d)
 
         if count > self.maxfiles:
             self.maxfiles = count
             self.maxfiles_dir = path
+
 
     def process(self):
         """ process a work unit, spath, dpath refers to
             source and destination respectively """
 
         spath = self.circle.deq()
+        self.logger.debug("BEGIN process object: %s" % spath, extra=self.d)
+
         if spath:
             try:
                 with timeout(seconds=15):
                     st = os.lstat(spath)
             except OSError as e:
-                log.warn(e, extra=self.d)
+                self.logger.warn(e, extra=self.d)
                 self.skipped += 1
-                return False
+                return None
             except TimeoutError as e:
-                log.error("%s when stat() on %s" % (e, spath), extra=self.d)
+                self.logger.error("%s when stat() on %s" % (e, spath), extra=self.d)
                 self.skipped += 1
-                return
+                return None
+            except Exception as e:
+                self.logger.error("Unknown: %s on %s" % (e, spath), extra=self.d)
+                self.skipped += 1
+                return None
 
             self.reduce_items += 1
+
+            self.logger.debug("FIN lstat object: %s" % spath, extra=self.d)
 
             # islink() return True if it is symbolic link
             if os.path.islink(spath):
                 self.sym_links += 1
                 # NOT TO FOLLOW SYM LINKS SHOULD BE THE DEFAULT
-                return
+                return None
 
             self.handle_file_or_dir(spath, st)
-            del spath
+
+            self.logger.debug("END process object: %s" % spath, extra=self.d)
 
     def handle_file_or_dir(self, spath, st):
         if stat.S_ISREG(st.st_mode):
@@ -481,7 +493,7 @@ def gen_histogram(total_file_size):
             err_and_exit("No histogram generated.\n")
 
         print("Fileset Histogram\n")
-        
+
         msg = "\t{:<3}{:<15}{:<15,}{:>10}{:>15}{:>15}"
         msg2 = "\t{:<3}{:<15}{:<15}{:>10}{:>15}{:>15}"
 

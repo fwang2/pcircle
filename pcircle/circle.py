@@ -61,6 +61,9 @@ class Circle:
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
+        self.host = MPI.Get_processor_name()
+        self.pid = os.getpid()
+
         self.d = {"rank": "rank %s" % self.rank}
         self.logger = getLogger(__name__)
 
@@ -98,6 +101,7 @@ class Circle:
         self.report_enabled = True
         self.report_interval = 60
         self.report_last = MPI.Wtime()
+        self.report_processed = 0
 
         # barriers
         self.barrier_started = False
@@ -191,10 +195,8 @@ class Circle:
         self.task.create()
         self.comm.barrier()
         self.loop()
-
-        if self.rank == 0:
-            self.logger.debug("Loop finished, cleaning up ... ", extra=self.d)
         self.cleanup()
+        self.do_periodic_report(prefix="Circle final report")
         self.comm.barrier()
 
         if len(self.workq) != 0:
@@ -208,8 +210,9 @@ class Circle:
         while True:
 
             # check if we shall do report
-
-            if self.report_enabled and (MPI.Wtime() - self.report_last > self.report_interval):
+            cur_time = MPI.Wtime()
+            if self.report_enabled and (cur_time - self.report_last > self.report_interval):
+                self.report_last = cur_time
                 self.do_periodic_report()
 
             # check for and service requests
@@ -619,10 +622,16 @@ class Circle:
                 for child in self.child_ranks:
                     self.comm.send(None, child, T.REDUCE)
 
-    def do_periodic_report(self):
-        s = "Circle report on rank %s at %s\n" % (self.rank, time.strftime("%Y-%m-%d %H:%M:%S"))
-        s += "\t{:<20}{:<20}\n".format("work queue size:", len(self.workq))
-        s += "\t{:<20}{:<20}\n".format("work processed:", self.work_processed)
+    def do_periodic_report(self, prefix="Circle report"):
+        delta = self.work_processed - self.report_processed
+        rate = int(delta/self.report_interval)
+        self.report_processed = self.work_processed
+        s = "\n%s on [rank: %s  %s/%s] at %s\n" % \
+            (prefix, self.rank, self.host, self.pid, time.strftime("%Y-%m-%d %H:%M:%S"))
+        s += "\t{:<20}{:<10}{:5}{:<20}{:<10}\n".format("work queue size:",
+            len(self.workq), "|", "work processed:", self.work_processed)
+        s += "\t{:<20}{:<10}{:5}{:<20}{:<10}\n".format("work delta:", delta,
+                "|", "rate:", "%s /s" % rate)
         print(s)
 
     @staticmethod

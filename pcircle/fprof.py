@@ -34,6 +34,7 @@ from utils import getLogger, bytes_fmt, destpath
 from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
 import utils
+import fpipe
 
 from _version import get_versions
 __version__ = get_versions()['version']
@@ -188,7 +189,7 @@ class ProfileWalk:
         count = 0
 
         try:
-            with timeout(seconds=30):
+            with timeout(seconds=10):
                 entries = scandir(path)
         except OSError as e:
             self.logger.warn(e, extra=self.d)
@@ -202,8 +203,11 @@ class ProfileWalk:
                     self.sym_links += 1
                 elif entry.is_file():
                     self.circle.enq(entry.path)
-                else:
+                elif entry.is_dir():
                     self.circle.preq(entry.path)
+                else:
+                    self.logger.warn("Unknown scan entry: %s" % entry.path, extra=self.d)
+
                 count += 1
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, path, count))
@@ -224,7 +228,7 @@ class ProfileWalk:
 
         if spath:
             try:
-                with timeout(seconds=15):
+                with timeout(seconds=5):
                     st = os.lstat(spath)
             except OSError as e:
                 self.logger.warn(e, extra=self.d)
@@ -412,6 +416,9 @@ def sendto_syslog(key, msg):
 
 def main():
     global comm, args
+
+    fpipe.listen()
+
     args = parse_and_bcast(comm, gen_parser)
 
     try:

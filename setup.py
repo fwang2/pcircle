@@ -49,7 +49,8 @@ setuptools.setup(name='pcircle',
                          'fcorruptor=pcircle.fcorruptor:main',
                          'fdiff=pcircle.fdiff:main',
                          'fgen=pcircle.fgen:main',
-                         'fprof=pcircle.fprof:main'
+                         'fprof=pcircle.fprof:main',
+                         'fpipe=pcircle.fpipe:main'
                      ]
                  },
                  classifiers=[

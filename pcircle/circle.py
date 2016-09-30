@@ -8,6 +8,7 @@ import os.path
 import time
 from collections import deque
 from pprint import pprint
+import itertools
 
 """
 
@@ -152,7 +153,7 @@ class Circle:
         if G.use_store:
             self.workq_init(dbname, resume)
         else:
-            self.workq = []
+            self.workq = deque()
 
         self.logger.debug("Circle initialized", extra=self.d)
 
@@ -240,7 +241,7 @@ class Circle:
         self.workq.append(work)
 
     def preq(self, work):
-        self.workq.insert(0, work)
+        self.workq.appendleft(work)
 
     def setq(self, q):
         self.workq = q
@@ -460,7 +461,8 @@ class Circle:
             objs, size = self.workq.mget(witems)
             buf = {G.KEY: witems, G.VAL: objs}
         else:
-            buf = {G.KEY: witems, G.VAL: self.workq[0:witems]}
+            sliced = list(itertools.islice(self.workq, 0, witems))
+            buf = {G.KEY: witems, G.VAL: sliced}
 
         self.comm.send(buf, dest=rank, tag=T.WORK_REPLY)
         self.logger.debug("%s work items sent to rank %s" % (witems, rank), extra=self.d)
@@ -476,7 +478,9 @@ class Circle:
         if self.useStore:
             self.workq.mdel(witems, size)
         else:
-            del self.workq[0:witems]
+            #del self.workq[0:witems]
+            for i in xrange(witems):
+                self.workq.popleft()
 
     def request_work(self, cleanup=False):
         if self.workreq_outstanding:

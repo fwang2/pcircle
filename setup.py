@@ -18,12 +18,12 @@ import versioneer
 import sys
 
 requires = [
-     'cffi==1.2.1',
-     'mpi4py==1.3.1',
-     'lru-dict==1.1.1',
-     'xattr==0.7.8',
-     'scandir==1.1',
-     'numpy==1.9.2'
+     'cffi==1.8.3',
+     'mpi4py==2.0.0',
+     'lru-dict==1.1.4',
+     'xattr==0.8.0',
+     'scandir==1.3',
+     'numpy==1.11.2'
 ]
 
 if (3, 0, 0) < sys.version_info[:3] < (2, 7, 0):

@@ -632,9 +632,9 @@ class Circle:
         self.report_processed = self.work_processed
         s = "\n%s on [rank: %s  %s/%s] at %s\n" % \
             (prefix, self.rank, self.host, self.pid, time.strftime("%Y-%m-%d %H:%M:%S"))
-        s += "\t{:<20}{:<10}{:5}{:<20}{:<10}\n".format("work queue size:",
+        s += "\t{:<20}{:<10,}{:5}{:<20}{:<12,}\n".format("work queue size:",
             len(self.workq), "|", "work processed:", self.work_processed)
-        s += "\t{:<20}{:<10}{:5}{:<20}{:<10}\n".format("work delta:", delta,
+        s += "\t{:<20}{:<10,}{:5}{:<20}{:<10}\n".format("work delta:", delta,
                 "|", "rate:", "%s /s" % rate)
         print(s)
 

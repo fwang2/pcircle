@@ -49,7 +49,7 @@ DII_COUNT = 0           # data-in-inode
 comm = MPI.COMM_WORLD
 FSZMAX = 30000
 TopFile = namedtuple("TopFile", "size, path")
-
+EXCLUDE = set()
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -57,6 +57,11 @@ def err_and_exit(msg, code=0):
     MPI.Finalize()
     sys.exit(0)
 
+def is_valid_exclude_file(parser, arg):
+    if not os.path.exists(arg):
+        parser.error("Can't find exclude file: %s" % arg)
+    else:
+        return arg  # we are not returning open file handles
 
 def gen_parser():
     parser = ThrowingArgumentParser(description="fprof - a parallel file system profiler")
@@ -69,6 +74,8 @@ def gen_parser():
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
     parser.add_argument("--top", type=int, default=None, help="Top N files, default is None (disabled)")
     parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
+    parser.add_argument("--exclude", metavar="FILE",
+            type=lambda x: is_valid_exclude_file(parser, x), help="A file with exclusion list")
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
 
@@ -227,6 +234,11 @@ class ProfileWalk:
         self.logger.debug("BEGIN process object: %s" % spath, extra=self.d)
 
         if spath:
+            if spath in EXCLUDE:
+                self.logger.warn("Skip excluded path: %s" % spath, extra=self.d)
+                self.skipped += 1
+                return
+
             try:
                 with timeout(seconds=5):
                     st = os.lstat(spath)
@@ -414,6 +426,16 @@ def sendto_syslog(key, msg):
     syslog.syslog(str(msg))
     syslog.closelog()
 
+def process_exclude_file():
+    global EXCLUDE
+    with open(args.exclude, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line.startswith("/"):
+                continue
+            else:
+                EXCLUDE.add(os.path.realpath(line))
+
 def main():
     global comm, args
 
@@ -430,12 +452,20 @@ def main():
 
     hosts_cnt = tally_hosts()
 
+    if args.exclude:
+        process_exclude_file()
+
     if comm.rank == 0:
         print("Running Parameters:\n")
         print("\t{:<20}{:<20}".format("fprof version:", __version__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", G.src))
+
+        if args.exclude:
+            print("\nExclusions:\n")
+            for ele in EXCLUDE:
+                print("\t %s" % ele)
 
     circle = Circle()
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)

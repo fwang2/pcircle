@@ -73,6 +73,7 @@ def gen_parser():
     parser.add_argument("--inodesz", default="4k", help="inode size, default 4k")
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
     parser.add_argument("--top", type=int, default=None, help="Top N files, default is None (disabled)")
+    parser.add_argument("--perprocess", action="store_true", help="Enable per-process progress report")
     parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
     parser.add_argument("--exclude", metavar="FILE",
             type=lambda x: is_valid_exclude_file(parser, x), help="A file with exclusion list")
@@ -468,6 +469,11 @@ def main():
                 print("\t %s" % ele)
 
     circle = Circle()
+    if args.perprocess:
+        circle.report_enabled = True
+    else:
+        circle.reduce_enabled = True
+
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 

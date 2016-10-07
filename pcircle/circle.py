@@ -68,7 +68,6 @@ class Circle:
         self.d = {"rank": "rank %s" % self.rank}
         self.logger = getLogger(__name__)
 
-
         self.useStore = G.use_store
         self.split = split
         self.dbname = dbname
@@ -91,7 +90,7 @@ class Circle:
         self.workreq_rank = None
 
         # reduction
-        self.reduce_enabled = G.reduce_enabled
+        self.reduce_enabled = False
         self.reduce_time_last = MPI.Wtime()
         self.reduce_outstanding = False
         self.reduce_replies = 0
@@ -99,7 +98,7 @@ class Circle:
         self.reduce_status = None
 
         # periodic report
-        self.report_enabled = True
+        self.report_enabled = False
         self.report_interval = 60
         self.report_last = MPI.Wtime()
         self.report_processed = 0
@@ -197,7 +196,8 @@ class Circle:
         self.comm.barrier()
         self.loop()
         self.cleanup()
-        self.do_periodic_report(prefix="Circle final report")
+        if self.report_enabled:
+            self.do_periodic_report(prefix="Circle final report")
         self.comm.barrier()
 
         if len(self.workq) != 0:

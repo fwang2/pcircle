@@ -34,6 +34,7 @@ from utils import getLogger, bytes_fmt, destpath
 from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
 import utils
+import fpipe
 
 from _version import get_versions
 __version__ = get_versions()['version']
@@ -48,7 +49,7 @@ DII_COUNT = 0           # data-in-inode
 comm = MPI.COMM_WORLD
 FSZMAX = 30000
 TopFile = namedtuple("TopFile", "size, path")
-
+EXCLUDE = set()
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -56,6 +57,11 @@ def err_and_exit(msg, code=0):
     MPI.Finalize()
     sys.exit(0)
 
+def is_valid_exclude_file(parser, arg):
+    if not os.path.exists(arg):
+        parser.error("Can't find exclude file: %s" % arg)
+    else:
+        return arg  # we are not returning open file handles
 
 def gen_parser():
     parser = ThrowingArgumentParser(description="fprof - a parallel file system profiler")
@@ -67,8 +73,11 @@ def gen_parser():
     parser.add_argument("--inodesz", default="4k", help="inode size, default 4k")
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
     parser.add_argument("--top", type=int, default=None, help="Top N files, default is None (disabled)")
+    parser.add_argument("--perprocess", action="store_true", help="Enable per-process progress report")
     parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
     parser.add_argument("--item", type=int, default=3000000, help="number of items stored in memory, default: 3000000")
+    parser.add_argument("--exclude", metavar="FILE",
+            type=lambda x: is_valid_exclude_file(parser, x), help="A file with exclusion list")
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
 
@@ -194,7 +203,7 @@ class ProfileWalk:
         count = 0
 
         try:
-            with timeout(seconds=30):
+            with timeout(seconds=10):
                 entries = scandir(path)
         except OSError as e:
             self.logger.warn(e, extra=self.d)
@@ -208,8 +217,11 @@ class ProfileWalk:
                     self.sym_links += 1
                 elif entry.is_file():
                     self.circle.enq(entry.path)
-                else:
+                elif entry.is_dir():
                     self.circle.preq(entry.path)
+                else:
+                    self.logger.warn("Unknown scan entry: %s" % entry.path, extra=self.d)
+
                 count += 1
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, path, count))
@@ -229,8 +241,13 @@ class ProfileWalk:
         self.logger.debug("BEGIN process object: %s" % spath, extra=self.d)
 
         if spath:
+            if spath in EXCLUDE:
+                self.logger.warn("Skip excluded path: %s" % spath, extra=self.d)
+                self.skipped += 1
+                return
+
             try:
-                with timeout(seconds=15):
+                with timeout(seconds=5):
                     st = os.lstat(spath)
             except OSError as e:
                 self.logger.warn(e, extra=self.d)
@@ -416,8 +433,21 @@ def sendto_syslog(key, msg):
     syslog.syslog(str(msg))
     syslog.closelog()
 
+def process_exclude_file():
+    global EXCLUDE
+    with open(args.exclude, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line.startswith("/"):
+                continue
+            else:
+                EXCLUDE.add(os.path.realpath(line))
+
 def main():
     global comm, args
+
+    fpipe.listen()
+
     args = parse_and_bcast(comm, gen_parser)
 
     try:
@@ -429,6 +459,9 @@ def main():
     G.loglevel = args.loglevel
     hosts_cnt = tally_hosts()
 
+    if args.exclude:
+        process_exclude_file()
+
     if comm.rank == 0:
         print("Running Parameters:\n")
         print("\t{:<20}{:<20}".format("fprof version:", __version__))
@@ -436,7 +469,17 @@ def main():
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
         print("\t{:<20}{:<20}".format("Root path:", G.src))
 
+        if args.exclude:
+            print("\nExclusions:\n")
+            for ele in EXCLUDE:
+                print("\t %s" % ele)
+
     circle = Circle()
+    if args.perprocess:
+        circle.report_enabled = True
+    else:
+        circle.reduce_enabled = True
+
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 

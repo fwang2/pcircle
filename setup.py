@@ -26,7 +26,6 @@ requires = [
     'numpy==1.9.2',
     'bitarray==0.8.1'
 ]
-
 if (3, 0, 0) < sys.version_info[:3] < (2, 7, 0):
     raise RuntimeError("This application requires Python 2.7.x")
 
@@ -50,7 +49,8 @@ setuptools.setup(name='pcircle',
                          'fcorruptor=pcircle.fcorruptor:main',
                          'fdiff=pcircle.fdiff:main',
                          'fgen=pcircle.fgen:main',
-                         'fprof=pcircle.fprof:main'
+                         'fprof=pcircle.fprof:main',
+                         'fpipe=pcircle.fpipe:main'
                      ]
                  },
                  classifiers=[

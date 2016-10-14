@@ -7,8 +7,10 @@ import os
 import os.path
 import shutil
 import utils
+import time
 from collections import deque
 from pprint import pprint
+import itertools
 
 """
 
@@ -62,11 +64,12 @@ class Circle:
         self.comm.Set_name(name)
         self.size = self.comm.Get_size()
         self.rank = self.comm.Get_rank()
+        self.host = MPI.Get_processor_name()
+        self.pid = os.getpid()
+
         self.d = {"rank": "rank %s" % self.rank}
         self.logger = getLogger(__name__)
 
-
-        #self.useStore = G.use_store
         self.split = split
         self.dbname = dbname
         self.resume = resume
@@ -89,12 +92,18 @@ class Circle:
         self.workreq_rank = None
 
         # reduction
-        self.reduce_enabled = True
-        self.reduce_time_last = -self.reduce_time_interval
+        self.reduce_enabled = False
+        self.reduce_time_last = MPI.Wtime()
         self.reduce_outstanding = False
         self.reduce_replies = 0
         self.reduce_buf = {}
         self.reduce_status = None
+
+        # periodic report
+        self.report_enabled = False
+        self.report_interval = 60
+        self.report_last = MPI.Wtime()
+        self.report_processed = 0
 
         # barriers
         self.barrier_started = False
@@ -152,10 +161,11 @@ class Circle:
             self.workq = []
         """
         self.use_store = False
-        self.workq = []
+        self.workq = deque()
         self.workq_buf = []
         if G.resume:
             self.workq_init(self.dbname, G.resume)
+
         self.logger.debug("Circle initialized", extra=self.d)
 
     def finalize(self, cleanup=True):
@@ -210,10 +220,9 @@ class Circle:
         self.task.create()
         self.comm.barrier()
         self.loop()
-
-        if self.rank == 0:
-            self.logger.debug("Loop finished, cleaning up ... ", extra=self.d)
         self.cleanup()
+        if self.report_enabled:
+            self.do_periodic_report(prefix="Circle final report")
         self.comm.barrier()
 
         if self.qsize() != 0:
@@ -225,6 +234,12 @@ class Circle:
     def loop(self):
         """ central loop to finish the work """
         while True:
+
+            # check if we shall do report
+            cur_time = MPI.Wtime()
+            if self.report_enabled and (cur_time - self.report_last > self.report_interval):
+                self.report_last = cur_time
+                self.do_periodic_report()
 
             # check for and service requests
             self.workreq_check()
@@ -261,7 +276,7 @@ class Circle:
                 del self.workq_buf[:]
 
     def preq(self, work):
-        self.workq.insert(0, work)
+        self.workq.appendleft(work)
 
     def setq(self, q):
         self.workq = q
@@ -496,11 +511,8 @@ class Circle:
 
         # based on if it is memory or store-based
         # we have different ways of constructing buf
-        #if self.useStore:
-        #   objs, size = self.workq.mget(witems)
-        #    buf = {G.KEY: witems, G.VAL: objs}
-        #else:
-        buf = {G.KEY: witems, G.VAL: self.workq[0:witems]}
+        sliced = list(itertools.islice(self.workq, 0, witems))
+        buf = {G.KEY: witems, G.VAL: sliced}
 
         self.comm.send(buf, dest=rank, tag=T.WORK_REPLY)
         self.logger.debug("%s work items sent to rank %s" % (witems, rank), extra=self.d)
@@ -513,10 +525,8 @@ class Circle:
         # previous data and pass it back in to save us some time.
         #
 
-        #if self.useStore:
-        #   self.workq.mdel(witems, size)
-        #else:
-        del self.workq[0:witems]
+        for i in xrange(witems):
+            self.workq.popleft()
 
     def request_work(self, cleanup=False):
         if self.workreq_outstanding:
@@ -661,6 +671,18 @@ class Circle:
                 # sent message to each child
                 for child in self.child_ranks:
                     self.comm.send(None, child, T.REDUCE)
+
+    def do_periodic_report(self, prefix="Circle report"):
+        delta = self.work_processed - self.report_processed
+        rate = int(delta/self.report_interval)
+        self.report_processed = self.work_processed
+        s = "\n%s on [rank: %s  %s/%s] at %s\n" % \
+            (prefix, self.rank, self.host, self.pid, time.strftime("%Y-%m-%d %H:%M:%S"))
+        s += "\t{:<20}{:<10,}{:5}{:<20}{:<12,}\n".format("work queue size:",
+            len(self.workq), "|", "work processed:", self.work_processed)
+        s += "\t{:<20}{:<10,}{:5}{:<20}{:<10}\n".format("work delta:", delta,
+                "|", "rate:", "%s /s" % rate)
+        print(s)
 
     @staticmethod
     def exit(code):

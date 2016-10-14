@@ -59,7 +59,8 @@ class G:
     args_src = None
     args_dest = None
     resume = None
-    reduce_interval = 10
+    reduce_interval = 30
+    reduce_enabled = False
     verbosity = 0
     am_root = False
     copytype = 'dir2dir'

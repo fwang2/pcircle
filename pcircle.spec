@@ -1,6 +1,6 @@
 %define name pcircle
-%define version 0.16
-%define unmangled_version 0.16
+%define version 0.15
+%define unmangled_version 0.15
 %define release 1
 %define debug_package %{nil}
 
@@ -19,7 +19,8 @@ Group: Development/Libraries
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
 BuildRequires: python >= 2.7
 BuildRequires: python-virtualenv
-#BuildRequires: openmpi-devel
+BuildRequires: openmpi-devel
+BuildRequires: libffi-devel
 #BuildRequires: python-cffi
 #BuildRequires: numpy
 #BuildRequires: python-scandir

@@ -2,8 +2,8 @@ PYTHON=`which python`
 NAME=`python setup.py --name`
 VERSION=`python setup.py --version`
 SDIST=dist/$(NAME)-$(VERSION).tar.gz
-VENV=$(HOME)/app-pcircle
-VDEV=$(HOME)/dev-pcircle
+#VENV=$(HOME)/app-pcircle
+#VDEV=$(HOME)/dev-pcircle
 .PHONY:	test check
 
 all: source
@@ -54,8 +54,15 @@ deploy:
 	$(PYTHON) setup.py sdist
 	rm -rf $(VENV)
 	virtualenv --no-site-packages $(VENV)
-	$(VENV)/bin/pip install cffi
-	$(VENV)/bin/pip install $(SDIST)
+	$(VENV)/bin/pip install --upgrade pip
+	$(VENV)/bin/pip install --no-cache cffi
+	$(VENV)/bin/pip install --no-cache $(SDIST)
+	virtualenv --relocatable $(VENV)
+
+deploy-lfs:
+	$(PYTHON) setup.py sdist
+	virtualenv --no-site-packages $(VENV)
+	$(VENV)/bin/pip --no-cache install $(SDIST)
 	virtualenv --relocatable $(VENV)
 
 dev-deploy:	

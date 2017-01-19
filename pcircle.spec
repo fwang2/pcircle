@@ -1,7 +1,7 @@
 %define name pcircle
-%define version 0.16
 %define unmangled_version 0.16
-%define release 1
+%define version 0.16
+%define release 2%{?dist}
 %define debug_package %{nil}
 
 Autoreq: 0
@@ -21,6 +21,8 @@ BuildRequires: python >= 2.7
 BuildRequires: python-virtualenv
 BuildRequires: openmpi-devel
 BuildRequires: libffi-devel
+Requires: python >= 2.7
+Requires: openmpi
 #BuildRequires: python-cffi
 #BuildRequires: numpy
 #BuildRequires: python-scandir

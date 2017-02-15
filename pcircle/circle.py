@@ -79,11 +79,6 @@ class Circle:
         self.abort = False
         self.requestors = []
 
-        """
-        # workq buffer
-        if self.useStore:
-            self.workq_buf = deque()
-        """
         # counters
         self.work_requested = 0
         self.work_processed = 0
@@ -154,15 +149,13 @@ class Circle:
 
         # workq init
         # TODO: compare list vs. deque
-        """
-        if G.use_store:
-            self.workq_init(dbname, resume)
-        else:
-            self.workq = []
-        """
-        self.use_store = False
+        # 3 possible workq: workq, workq_buf(locates in memory, used when pushing to or retrieving from database )
         self.workq = deque()
-        self.workq_buf = []
+        # workq buffer
+        self.workq_buf = deque()
+        # flag that indicates database is used for workq
+        self.use_store = False
+
         if G.resume:
             self.workq_init(self.dbname, G.resume)
 
@@ -194,7 +187,7 @@ class Circle:
     def push_remaining_buf(self):
         if len(self.workq_buf) > 0:
             self.workq_db.mput(self.workq_buf)
-            del self.workq_buf[:]
+            self.workq_db.clear()
 
     def next_proc(self):
         """ Note next proc could return rank of itself """
@@ -273,7 +266,7 @@ class Circle:
                     self.workq_init(self.dbname, G.resume)
                     self.use_store = True
                 self.workq_db.mput(self.workq_buf)
-                del self.workq_buf[:]
+                self.workq_buf.clear()
 
     def preq(self, work):
         self.workq.appendleft(work)
@@ -289,7 +282,8 @@ class Circle:
             return self.workq_buf.pop()
         elif hasattr(self, "workq_db") and len(self.workq_db) > 0:
             #read a batch of works into memory
-            self.workq, objs_size = self.workq_db.mget(G.memitem_threshold)
+            workq, objs_size = self.workq_db.mget(G.memitem_threshold)
+            self.workq = deque(workq)          
             self.workq_db.mdel(G.memitem_threshold, objs_size)
             if len(self.workq) > 0:
                return self.workq.pop()
@@ -428,12 +422,13 @@ class Circle:
             # first combine workq and work_buf, both of them are in memory
             if len(self.workq_buf) > 0:
                 self.workq.extend(self.workq_buf)
-                del self.workq_buf[:]
+                self.workq_buf.clear()
 
             # if in-memory workq is empty, get a batch of works from database
             if len(self.workq) == 0 and hasattr(self, "workq_db"):
                 if len(self.workq_db) > 0:
-                    self.workq, objs_size  = self.workq_db.mget(G.memitem_threshold)
+                    workq, objs_size  = self.workq_db.mget(G.memitem_threshold)
+                    self.workq = deque(workq)
                     self.workq_db.mdel(G.memitem_threshold, objs_size)
 
             self.logger.debug("have %s requesters, with %s work items in queue" %

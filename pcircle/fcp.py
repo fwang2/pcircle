@@ -411,7 +411,7 @@ class FCP(BaseTask):
         tmp_file = self.checkpoint_file + ".part"
         with open(tmp_file, "wb") as f:
             self.circle.workq.extend(self.circle.workq_buf)
-            del self.circle.workq_buf[:]
+            self.circle.workq_buf.clear()
             cobj = Checkpoint(self.src, self.dest, self.get_workq(), self.totalsize)
             pickle.dump(cobj, f, pickle.HIGHEST_PROTOCOL)
         # POSIX requires rename to be atomic

@@ -35,6 +35,7 @@ from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
 import utils
 import fpipe
+import lfs
 
 from _version import get_versions
 __version__ = get_versions()['version']
@@ -50,6 +51,9 @@ comm = MPI.COMM_WORLD
 FSZMAX = 30000
 TopFile = namedtuple("TopFile", "size, path")
 EXCLUDE = set()
+
+# shared file
+stripe_out = None
 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -78,6 +82,10 @@ def gen_parser():
     parser.add_argument("--item", type=int, default=3000000, help="number of items stored in memory, default: 3000000")
     parser.add_argument("--exclude", metavar="FILE",
             type=lambda x: is_valid_exclude_file(parser, x), help="A file with exclusion list")
+    parser.add_argument("--lustre-stripe", action="store_true", help="Lustre stripe analysis")
+    parser.add_argument("--stripe-threshold", metavar="N", default="4g", help="Lustre stripe file threshold, default is 4GB")
+    parser.add_argument("--stripe-output", metavar='', default="stripe-%s.out" % utils.timestamp2(), help="stripe output file")
+
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
 
@@ -305,6 +313,19 @@ class ProfileWalk:
                 self.nlinks += st.st_nlink
                 self.nlinked_files += 1
 
+            # stripe analysis
+            if args.lustre_stripe and st.st_size > G.stripe_threshold:
+                # path, size, stripe_count
+                try:
+                    with timeout(seconds=5):
+                        stripe_count = lfs.lfs_get_stripe(G.lfs_bin, spath)
+                except OSError as e:
+                    self.logger.warn(e, extra=self.d)
+                except TimeoutError as e:
+                    self.logger.error("%s when lfs getstripe on %s" % (e,spath), extra=self.d)
+                else:
+                    stripe_out.write("%-4s, %-10s, %s\n" % (stripe_count, st.st_size, spath))
+
         elif stat.S_ISDIR(st.st_mode):
             self.cnt_dirs += 1
             self.process_dir(spath, st)
@@ -444,7 +465,7 @@ def process_exclude_file():
                 EXCLUDE.add(os.path.realpath(line))
 
 def main():
-    global comm, args
+    global comm, args, stripe_out
 
     fpipe.listen()
 
@@ -459,6 +480,18 @@ def main():
     G.loglevel = args.loglevel
     hosts_cnt = tally_hosts()
 
+
+    # Doing stripe analysis? lfs is not really bullet-proof way
+    # we might need a better way of doing fstype check.
+
+    if args.lustre_stripe:
+        G.lfs_bin = lfs.check_lfs()
+        G.stripe_threshold = utils.conv_unit(args.stripe_threshold)
+        try:
+            stripe_out = open(args.stripe_output, "a")
+        except:
+            err_and_exit("Error: can't create stripe output: %s" % args.stripe_output)
+
     if args.exclude:
         process_exclude_file()
 
@@ -467,6 +500,11 @@ def main():
         print("\t{:<20}{:<20}".format("fprof version:", __version__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
+        if args.lustre_stripe:
+            print("\t{:<20}{:<20}".format("Stripe analysis: ", "yes"))
+            print("\t{:<20}{:<20}".format("Stripe threshold: ", args.stripe_threshold))
+        else:
+            print("\t{:<20}{:<20}".format("Stripe analysis: ", "no"))
         print("\t{:<20}{:<20}".format("Root path:", G.src))
 
         if args.exclude:
@@ -524,6 +562,8 @@ def main():
     treewalk.cleanup()
     circle.finalize()
 
+    if args.lustre_stripe and stripe_out:
+        stripe_out.close()
 
 def gen_histogram(total_file_size):
     syslog_filecount_hist = ""

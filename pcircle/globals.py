@@ -65,6 +65,11 @@ class G:
     am_root = False
     copytype = 'dir2dir'
 
+    # Lustre file system
+    fs_lustre = None
+    lfs_bin = None
+    stripe_threshold = None
+
     b4k = 4 * 1024
     b8k = 8 * 1024
     b16k = 16 * 1024

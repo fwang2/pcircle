@@ -324,7 +324,11 @@ class ProfileWalk:
                 except TimeoutError as e:
                     self.logger.error("%s when lfs getstripe on %s" % (e,spath), extra=self.d)
                 else:
-                    stripe_out.write("%-4s, %-10s, %s\n" % (stripe_count, st.st_size, spath))
+                    if stripe_count:
+                        os.write(stripe_out, "%-4s, %-10s, %s\n" % (stripe_count, st.st_size, spath))
+                        Tally.spcnt += 1
+                    else:
+                        self.logger.error("Failed to read stripe info: %s" % spath, extra=self.d)
 
         elif stat.S_ISDIR(st.st_mode):
             self.cnt_dirs += 1
@@ -488,7 +492,7 @@ def main():
         G.lfs_bin = lfs.check_lfs()
         G.stripe_threshold = utils.conv_unit(args.stripe_threshold)
         try:
-            stripe_out = open(args.stripe_output, "a")
+            stripe_out = os.open(args.stripe_output, os.O_CREAT|os.O_WRONLY|os.O_APPEND)
         except:
             err_and_exit("Error: can't create stripe output: %s" % args.stripe_output)
 
@@ -563,7 +567,11 @@ def main():
     circle.finalize()
 
     if args.lustre_stripe and stripe_out:
-        stripe_out.close()
+        os.close(stripe_out)
+
+        sp_workload = comm.gather(Tally.spcnt)
+        if comm.rank == 0:
+            print("Stripe workload total: %s, distribution: %s" % (sum(sp_workload), sp_workload))
 
 def gen_histogram(total_file_size):
     syslog_filecount_hist = ""

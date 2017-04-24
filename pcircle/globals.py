@@ -17,6 +17,7 @@ class Tally:
     total_nlinked_files = 0
     devfile_cnt = 0
     devfile_sz = 0
+    spcnt = 0                   # stripe cnt account per process
 
 class G:
     ZERO = 0

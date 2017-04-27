@@ -78,6 +78,7 @@ def gen_parser():
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
     parser.add_argument("--top", type=int, default=None, help="Top N files, default is None (disabled)")
     parser.add_argument("--perprocess", action="store_true", help="Enable per-process progress report")
+    parser.add_argument("--syslog", action="store_true", help="Enable syslog report")
     parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
     parser.add_argument("--item", type=int, default=3000000, help="number of items stored in memory, default: 3000000")
     parser.add_argument("--exclude", metavar="FILE",
@@ -426,20 +427,21 @@ class ProfileWalk:
             processing_rate = int((Tally.total_files + Tally.total_dirs + Tally.total_symlinks + Tally.total_skipped) / elapsed_time)
             print(fmt_msg2.format("Tree walk time:", utils.conv_time(elapsed_time)))
             print(fmt_msg2.format("Scanning rate:", str(processing_rate) + "/s"))
-            print(fmt_msg2.format("Fprof loads:", taskloads))
+            print(fmt_msg2.format("Fprof loads:", Tally.taskloads))
             print("")
 
-            sendto_syslog("fprof.rootpath", "%s" % ",".join(G.src))
-            sendto_syslog("fprof.version", "%s" % __version__)
+            if args.syslog:
+                sendto_syslog("fprof.rootpath", "%s" % ",".join(G.src))
+                sendto_syslog("fprof.version", "%s" % __version__)
 
-            sendto_syslog("fprof.dir_count", Tally.total_dirs)
-            sendto_syslog("fprof.sym_count", Tally.total_symlinks)
-            sendto_syslog("fprof.file_count", Tally.total_files)
-            sendto_syslog("fprof.total_file_size", bytes_fmt(Tally.total_filesize))
-            if Tally.total_files > 0:
-                sendto_syslog("fprof.avg_file_size", bytes_fmt(Tally.total_filesize/float(Tally.total_files)))
-            sendto_syslog("fprof.walktime", utils.conv_time(elapsed_time))
-            sendto_syslog("fprof.scan_rate", processing_rate)
+                sendto_syslog("fprof.dir_count", Tally.total_dirs)
+                sendto_syslog("fprof.sym_count", Tally.total_symlinks)
+                sendto_syslog("fprof.file_count", Tally.total_files)
+                sendto_syslog("fprof.total_file_size", bytes_fmt(Tally.total_filesize))
+                if Tally.total_files > 0:
+                    sendto_syslog("fprof.avg_file_size", bytes_fmt(Tally.total_filesize/float(Tally.total_files)))
+                sendto_syslog("fprof.walktime", utils.conv_time(elapsed_time))
+                sendto_syslog("fprof.scan_rate", processing_rate)
 
         return Tally.total_filesize
 
@@ -530,7 +532,7 @@ def main():
 
     msg1, msg2 = gen_histogram(total_file_size)
 
-    if comm.rank == 0:
+    if comm.rank == 0 and args.syslog:
         sendto_syslog("fprof.filecount.hist", msg1)
         sendto_syslog("fprof.fsize_perc.hist", msg2)
 

@@ -39,6 +39,7 @@ import lfs
 
 from _version import get_versions
 __version__ = get_versions()['version']
+__revid__ = get_versions()['full-revisionid']
 args = None
 taskloads = []
 topn = []   # track top N files
@@ -433,7 +434,7 @@ class ProfileWalk:
             if args.syslog:
                 sendto_syslog("fprof.rootpath", "%s" % ",".join(G.src))
                 sendto_syslog("fprof.version", "%s" % __version__)
-
+                sendto_syslog("fprof.revid", "%s" % __revid__)
                 sendto_syslog("fprof.dir_count", Tally.total_dirs)
                 sendto_syslog("fprof.sym_count", Tally.total_symlinks)
                 sendto_syslog("fprof.file_count", Tally.total_files)
@@ -504,8 +505,15 @@ def main():
     if comm.rank == 0:
         print("Running Parameters:\n")
         print("\t{:<20}{:<20}".format("fprof version:", __version__))
+        print("\t{:<20}{:<20}".format("Full rev id:", __revid__))
         print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
         print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
+
+        if args.syslog:
+            print("\t{:<20}{:<20}".format("Syslog report: " , "yes"))
+        else:
+            print("\t{:<20}{:<20}".format("Syslog report: " , "no"))
+
         if args.lustre_stripe:
             print("\t{:<20}{:<20}".format("Stripe analysis: ", "yes"))
             print("\t{:<20}{:<20}".format("Stripe threshold: ", args.stripe_threshold))

@@ -12,6 +12,7 @@ class Tally:
     total_filesize = 0
     total_symlinks = 0
     total_skipped = 0
+    total_sparse = 0
     max_files = 0
     total_nlinks = 0
     total_nlinked_files = 0

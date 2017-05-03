@@ -192,6 +192,7 @@ class ProfileWalk:
         self.devfile_cnt = 0        # track # of dev files
         self.devfile_sz = 0         # track size of dev files
         self.last_reduce_time = MPI.Wtime()
+        self.sparse_cnt = 0
 
         # reduce
         self.reduce_items = 0
@@ -288,27 +289,36 @@ class ProfileWalk:
 
     def handle_file_or_dir(self, spath, st):
         if stat.S_ISREG(st.st_mode):
-            incr_local_histogram(st.st_size)
+
+            # check sparse file
+            # TODO: check why st_blksize * st_blocks is wrong.  
+            fsize = st.st_size
+
+            if st.st_blocks * 512 < st.st_size:
+                self.sparse_cnt += 1
+                fsize = st.st_blocks * 512
+                
+            incr_local_histogram(fsize)
             if args.gpfs_block_alloc:
                 inodesz = utils.conv_unit(args.inodesz)
-                gpfs_block_update(st.st_size, inodesz)
+                gpfs_block_update(fsize, inodesz)
 
             if args.top:
-                update_topn(TopFile(st.st_size, spath))
+                update_topn(TopFile(fsize, spath))
 
             if self.outfile:
-                self.fszlst.append(st.st_size)
+                self.fszlst.append(fsize)
                 if len(self.fszlst) >= FSZMAX:
                     for ele in self.fszlst:
                         self.outfile.write("%d\n" % ele)
                     self.fszlst = []
 
             self.cnt_files += 1
-            self.cnt_filesize += st.st_size
+            self.cnt_filesize += fsize
 
             if args.profdev and utils.is_dev_file(spath):
                 self.devfile_cnt += 1
-                self.devfile_sz += st.st_size
+                self.devfile_sz += fsize
 
             # check hard links
             if st.st_nlink > 1:
@@ -316,7 +326,7 @@ class ProfileWalk:
                 self.nlinked_files += 1
 
             # stripe analysis
-            if args.lustre_stripe and st.st_size > G.stripe_threshold:
+            if args.lustre_stripe and fsize > G.stripe_threshold:
                 # path, size, stripe_count
                 try:
                     with timeout(seconds=5):
@@ -327,7 +337,7 @@ class ProfileWalk:
                     self.logger.error("%s when lfs getstripe on %s" % (e,spath), extra=self.d)
                 else:
                     if stripe_count:
-                        os.write(stripe_out, "%-4s, %-10s, %s\n" % (stripe_count, st.st_size, spath))
+                        os.write(stripe_out, "%-4s, %-10s, %s\n" % (stripe_count, fsize, spath))
                         Tally.spcnt += 1
                     else:
                         self.logger.error("Failed to read stripe info: %s" % spath, extra=self.d)
@@ -398,6 +408,8 @@ class ProfileWalk:
         Tally.max_files = self.circle.comm.reduce(self.maxfiles, op=MPI.MAX)
         Tally.total_nlinks = self.circle.comm.reduce(self.nlinks, op=MPI.SUM)
         Tally.total_nlinked_files = self.circle.comm.reduce(self.nlinked_files, op=MPI.SUM)
+        Tally.total_sparse = self.circle.comm.reduce(self.sparse_cnt, op=MPI.SUM)
+
         if args.profdev:
             Tally.devfile_cnt = self.circle.comm.reduce(self.devfile_cnt, op=MPI.SUM)
             Tally.devfile_sz = self.circle.comm.reduce(self.devfile_sz, op=MPI.SUM)
@@ -415,6 +427,8 @@ class ProfileWalk:
             print(fmt_msg1.format("Sym links count:", Tally.total_symlinks))
             print(fmt_msg1.format("Hard linked files:", Tally.total_nlinked_files))
             print(fmt_msg1.format("File count:", Tally.total_files))
+            print(fmt_msg1.format("Sparse files:", Tally.total_sparse))
+
             if args.profdev:
                 print(fmt_msg1.format("Dev file count:", Tally.devfile_cnt))
                 print(fmt_msg2.format("Dev file size:", bytes_fmt(Tally.devfile_sz)))

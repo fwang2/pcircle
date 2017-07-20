@@ -615,8 +615,8 @@ def gen_histogram(total_file_size):
         print(msg2.format("", "Buckets", "Num of Files", "Size",  "%(Files)", "%(Size)"))
         print("")
         for idx, rightbound in enumerate(G.bins):
-            percent_files = 100 * hist[idx] / float(total_num_of_files)
-            percent_size = 100 * fsize[idx] / float(total_file_size)
+            percent_files = 100 * hist[idx] / float(total_num_of_files) if total_num_of_files != 0 else 0
+            percent_size = 100 * fsize[idx] / float(total_file_size) if total_file_size !=0 else 0
 
             print(msg.format("<= ", utils.bytes_fmt(rightbound),
                              hist[idx],
@@ -636,8 +636,8 @@ def gen_histogram(total_file_size):
             syslog_fsizeperc_hist += "%s = %s, " % (bins_fmt[idx], percent_size)
 
         # special processing of last row
-        percent_files = 100 * hist[-1] / float(total_num_of_files)
-        percent_size = 100 * fsize[-1] / float(total_file_size)
+        percent_files = 100 * hist[-1] / float(total_num_of_files) if total_num_of_files != 0 else 0
+        percent_size = 100 * fsize[-1] / float(total_file_size) if total_file_size != 0 else 0
         print(msg.format("> ", utils.bytes_fmt(rightbound),
                          hist[-1],
                          utils.bytes_fmt(fsize[-1]),

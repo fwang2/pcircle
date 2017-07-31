@@ -87,6 +87,7 @@ def gen_parser():
     parser.add_argument("--lustre-stripe", action="store_true", help="Lustre stripe analysis")
     parser.add_argument("--stripe-threshold", metavar="N", default="4g", help="Lustre stripe file threshold, default is 4GB")
     parser.add_argument("--stripe-output", metavar='', default="stripe-%s.out" % utils.timestamp2(), help="stripe output file")
+    parser.add_argument("--sparse", action="store_true", help="Print out detected spare files")
 
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
@@ -297,7 +298,9 @@ class ProfileWalk:
             if st.st_blocks * 512 < st.st_size:
                 self.sparse_cnt += 1
                 fsize = st.st_blocks * 512
-                
+                if args.sparse:
+                    print("\tSparse file:\t %s" % spath)
+                    print("\t\t\t st_blocks: %s, st_size: %s" % (st.st_blocks, st.st_size))         
             incr_local_histogram(fsize)
             if args.gpfs_block_alloc:
                 inodesz = utils.conv_unit(args.inodesz)

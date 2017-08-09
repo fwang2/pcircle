@@ -3,7 +3,7 @@ NAME=`python setup.py --name`
 VERSION=`python setup.py --version`
 SDIST=dist/$(NAME)-$(VERSION).tar.gz
 #VENV=$(HOME)/app-pcircle
-#VDEV=$(HOME)/dev-pcircle
+VDEV=$(HOME)/pdev
 .PHONY:	test check
 
 all: source
@@ -26,6 +26,15 @@ install: deploy
 uninstall:
 	pip uninstall -y pcircle
 
+clean-cache:
+	@if [ -d ~/Library/Caches/pip ]; then \
+		echo "Found pip cache, cleaned"; \
+		rm -rf ~/Library/Cache/pip; \
+	fi
+	@if [ -d ~/.cache/pip ]; then \
+		echo "Found pip cache, cleaned"; \
+		rm -rf ~/.cache/pip; \
+	fi
 
 check:
 	find . -name \*.py | grep -v "^test_" | xargs pylint --errors-only --reports=n
@@ -65,7 +74,7 @@ deploy-lfs:
 	$(VENV)/bin/pip --no-cache install $(SDIST)
 	virtualenv --relocatable $(VENV)
 
-dev-deploy:	
+dev-deploy:	clean-cache
 	rm -rf dist
 	rm -rf $(VDEV)
 	$(PYTHON) setup.py sdist

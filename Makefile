@@ -74,12 +74,13 @@ deploy-lfs:
 	$(VENV)/bin/pip --no-cache install $(SDIST)
 	virtualenv --relocatable $(VENV)
 
-dev-deploy:	clean-cache
+dev-deploy:clean-cache
 	rm -rf dist
 	rm -rf $(VDEV)
 	$(PYTHON) setup.py sdist
 	virtualenv --no-site-packages $(VDEV)
-	$(VDEV)/bin/pip install -U pip setuptools ipython
+	$(VDEV)/bin/pip install -U pip setuptools
+	$(VDEV)/bin/pip install argparse
 	$(VDEV)/bin/pip install flake8
 	$(VDEV)/bin/pip install -e .
 

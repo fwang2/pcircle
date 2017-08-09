@@ -56,6 +56,17 @@ EXCLUDE = set()
 # shared file
 stripe_out = None
 
+def py_version():
+    py_major,py_minor = sys.version_info[0], sys.version_info[1]
+    if py_major == 2 and py_minor==6: 
+        return "py26"
+    elif py_major == 2 and py_minor==7:
+        return "py27"
+    elif py_major == 3:
+        return "py3x"
+    else:
+        raise RuntimeError("Unkown python version detected")
+	 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
         print("\n%s" % msg)
@@ -423,8 +434,12 @@ class ProfileWalk:
 
         if self.circle.rank == 0:
             print("\nFprof epilogue:\n")
-            fmt_msg1 = "\t{:<25}{:<20,}"    # numeric
-            fmt_msg2 = "\t{:<25}{:<20}"     # string
+	    if py_version() != "py26": 
+                fmt_msg1 = "\t{0:<25}{1:<20,}"    # numeric
+	    else: # 2.6 compat 
+                fmt_msg1 = "\t{0:<25}{1:<20}"    # numeric
+
+            fmt_msg2 = "\t{0:<25}{1:<20}"     # string
 
             print(fmt_msg1.format("Directory count:", Tally.total_dirs))
             print(fmt_msg1.format("Sym links count:", Tally.total_symlinks))
@@ -521,22 +536,22 @@ def main():
 
     if comm.rank == 0:
         print("Running Parameters:\n")
-        print("\t{:<20}{:<20}".format("fprof version:", __version__))
-        print("\t{:<20}{:<20}".format("Full rev id:", __revid__))
-        print("\t{:<20}{:<20}".format("Num of hosts:", hosts_cnt))
-        print("\t{:<20}{:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
+        print("\t{0:<20}{1:<20}".format("fprof version:", __version__))
+        print("\t{0:<20}{1:<20}".format("Full rev id:", __revid__))
+        print("\t{0:<20}{1:<20}".format("Num of hosts:", hosts_cnt))
+        print("\t{0:<20}{1:<20}".format("Num of processes:", MPI.COMM_WORLD.Get_size()))
 
         if args.syslog:
-            print("\t{:<20}{:<20}".format("Syslog report: " , "yes"))
+            print("\t{0:<20}{1:<20}".format("Syslog report: " , "yes"))
         else:
-            print("\t{:<20}{:<20}".format("Syslog report: " , "no"))
+            print("\t{0:<20}{1:<20}".format("Syslog report: " , "no"))
 
         if args.lustre_stripe:
-            print("\t{:<20}{:<20}".format("Stripe analysis: ", "yes"))
-            print("\t{:<20}{:<20}".format("Stripe threshold: ", args.stripe_threshold))
+            print("\t{0:<20}{1:<20}".format("Stripe analysis: ", "yes"))
+            print("\t{0:<20}{1:<20}".format("Stripe threshold: ", args.stripe_threshold))
         else:
-            print("\t{:<20}{:<20}".format("Stripe analysis: ", "no"))
-        print("\t{:<20}{:<20}".format("Root path:", G.src))
+            print("\t{0:<20}{1:<20}".format("Stripe analysis: ", "no"))
+        print("\t{0:<20}{1:<20}".format("Root path:", G.src))
 
         if args.exclude:
             print("\nExclusions:\n")
@@ -579,12 +594,12 @@ def main():
         gather_gpfs_dii()
         if comm.rank == 0:
             print("\nGPFS Block Alloc Report:\n")
-            print("\t{:<15}{:<4}".format("inode size:", args.inodesz))
-            print("\t{:<25}{:>15,}".format("DII (data-in-inode) count:", DII_COUNT))
+            print("\t{0:<15}{1:<4}".format("inode size:", args.inodesz))
+            print("\t{0:<25}{1:>15,}".format("DII (data-in-inode) count:", DII_COUNT))
             print("\tSubblocks: %s\n" % gpfs_blocks)
             for idx, bsz in enumerate(G.gpfs_block_size):
                 gpfs_file_size = gpfs_blocks[idx] * G.gpfs_subs[idx]
-                fmt_msg = "\tBlocksize: {:<6}   Estimated Space: {:<20s}   Efficiency: {:>6.2%}"
+                fmt_msg = "\tBlocksize: {0:<6}   Estimated Space: {1:<20s}   Efficiency: {3:>6.2%}"
                 if gpfs_file_size != 0:
                     print(fmt_msg.format(bsz, bytes_fmt(gpfs_file_size), total_file_size/float(gpfs_file_size)))
                 else:
@@ -612,8 +627,12 @@ def gen_histogram(total_file_size):
 
         print("Fileset Histogram\n")
 
-        msg = "\t{:<3}{:<15}{:<15,}{:>10}{:>15}{:>15}"
-        msg2 = "\t{:<3}{:<15}{:<15}{:>10}{:>15}{:>15}"
+	if py_version() == "py26": 
+            msg = "\t{0:<3}{1:<15}{2:<15}{3:>10}{4:>15}{5:>15}"
+            msg2 = "\t{0:<3}{1:<15}{2:<15}{3:>10}{4:>15}{5:>15}"
+        else:
+            msg = "\t{:<3}{:<15}{:<15,}{:>10}{:>15}{:>15}"
+            msg2 = "\t{:<3}{:<15}{:<15}{:>10}{:>15}{:>15}"
 
         print(msg2.format("", "Buckets", "Num of Files", "Size",  "%(Files)", "%(Size)"))
         print("")

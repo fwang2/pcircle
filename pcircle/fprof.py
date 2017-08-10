@@ -30,7 +30,7 @@ import heapq
 from timeout import timeout, TimeoutError
 from circle import Circle
 from globals import G, Tally
-from utils import getLogger, bytes_fmt, destpath
+from utils import getLogger, bytes_fmt, destpath,py_version
 from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
 import utils
@@ -56,17 +56,7 @@ EXCLUDE = set()
 # shared file
 stripe_out = None
 
-def py_version():
-    py_major,py_minor = sys.version_info[0], sys.version_info[1]
-    if py_major == 2 and py_minor==6: 
-        return "py26"
-    elif py_major == 2 and py_minor==7:
-        return "py27"
-    elif py_major == 3:
-        return "py3x"
-    else:
-        raise RuntimeError("Unkown python version detected")
-	 
+ 
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
         print("\n%s" % msg)
@@ -396,7 +386,10 @@ class ProfileWalk:
         # self.last_cnt = buf['cnt_files']
 
         rate = (buf['reduce_items'] - self.last_cnt) / (MPI.Wtime() - self.last_reduce_time)
-        fmt_msg = "Scanned files: {:<12,}   Processing rate: {:<6,}/s   HWM mem: {:<12}   Work Queue: {:<12,}"
+        if py_version() == "py26":
+            fmt_msg = "Scanned files: {0:<12}   Processing rate: {1:<6}/s   HWM mem: {2:<12}   Work Queue: {3:<12}"
+        else:
+            fmt_msg = "Scanned files: {:<12,}   Processing rate: {:<6,}/s   HWM mem: {:<12}   Work Queue: {:<12,}"
         print(fmt_msg.format(
             buf['reduce_items'],
             int(rate),

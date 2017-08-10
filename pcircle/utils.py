@@ -14,6 +14,16 @@ from pcircle.fdef import FileItem
 
 __author__ = 'Feiyi Wang'
 
+def py_version():
+    py_major,py_minor = sys.version_info[0], sys.version_info[1]
+    if py_major == 2 and py_minor==6:
+        return "py26"
+    elif py_major == 2 and py_minor==7:
+        return "py27"
+    elif py_major == 3:
+        return "py3x"
+    else:
+        raise RuntimeError("Unkown python version detected")
 
 def numeric_level(loglevel):
     level = getattr(logging, loglevel.upper(), None)

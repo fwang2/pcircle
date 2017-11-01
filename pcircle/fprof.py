@@ -252,7 +252,7 @@ class ProfileWalk:
             source and destination respectively """
 
         spath = self.circle.deq()
-        self.logger.debug("BEGIN process object: %s" % spath, extra=self.d)
+        self.logger.info("BEGIN process object: %s" % spath, extra=self.d)
 
         if spath:
             if spath in EXCLUDE:

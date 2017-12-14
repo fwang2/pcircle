@@ -72,7 +72,7 @@ def is_valid_exclude_file(parser, arg):
 def gen_parser():
     parser = ThrowingArgumentParser(description="fprof - a parallel file system profiler")
     parser.add_argument("--version", action="version", version="{version}".format(version=__version__))
-    parser.add_argument('-v', action='count', dest='verbose', help="def verbose level")
+    parser.add_argument('-v', action='count', default=0, dest='verbose', help="def verbose level")
     parser.add_argument("--loglevel", default="INFO", help="log level")
     parser.add_argument("path", nargs='+', default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
@@ -300,7 +300,7 @@ class ProfileWalk:
             fsize = st.st_size
             if st.st_size == 0:
                 self.cnt_0byte += 1
-                if args.verbose == 3:
+                if args.verbose == 2:
                     self.logger.info("ZERO-byte file: %s" % spath, extra=self.d)
 
             if st.st_blocks * 512 < st.st_size:

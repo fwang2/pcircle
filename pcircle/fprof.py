@@ -73,7 +73,7 @@ def gen_parser():
     parser = ThrowingArgumentParser(description="fprof - a parallel file system profiler")
     parser.add_argument("--version", action="version", version="{version}".format(version=__version__))
     parser.add_argument('-v', action='count', dest='verbose', help="def verbose level")
-    parser.add_argument("--loglevel", default="ERROR", help="log level")
+    parser.add_argument("--loglevel", default="INFO", help="log level")
     parser.add_argument("path", nargs='+', default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
     parser.add_argument("--perfile", action="store_true", help="Save perfile file size")
@@ -242,7 +242,7 @@ class ProfileWalk:
                 if (MPI.Wtime() - last_report) > self.interval:
                     print("Rank %s : Scanning [%s] at %s" % (self.circle.rank, path, count))
                     last_report = MPI.Wtime()
-            self.logger.info("Finish scan of [%s], count=%s" % (path, count), extra=self.d)
+            self.logger.debug("Finish scan of [%s], count=%s" % (path, count), extra=self.d)
 
         if count > self.maxfiles:
             self.maxfiles = count
@@ -254,7 +254,7 @@ class ProfileWalk:
             source and destination respectively """
 
         spath = self.circle.deq()
-        self.logger.info("BEGIN process object: %s" % spath, extra=self.d)
+        self.logger.debug("BEGIN process object: %s" % spath, extra=self.d)
 
         if spath:
             if spath in EXCLUDE:
@@ -301,7 +301,7 @@ class ProfileWalk:
             if st.st_size == 0:
                 self.cnt_0byte += 1
                 if args.verbose == 3:
-                    print("ZERO-byte file: %s" % spath)
+                    self.logger.info("ZERO-byte file: %s" % spath, extra=self.d)
 
             if st.st_blocks * 512 < st.st_size:
                 self.sparse_cnt += 1

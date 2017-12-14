@@ -71,7 +71,8 @@ def is_valid_exclude_file(parser, arg):
 
 def gen_parser():
     parser = ThrowingArgumentParser(description="fprof - a parallel file system profiler")
-    parser.add_argument("-v", "--version", action="version", version="{version}".format(version=__version__))
+    parser.add_argument("--version", action="version", version="{version}".format(version=__version__))
+    parser.add_argument('-v', action='count', dest='verbose', help="def verbose level")
     parser.add_argument("--loglevel", default="ERROR", help="log level")
     parser.add_argument("path", nargs='+', default=".", help="path")
     parser.add_argument("-i", "--interval", type=int, default=10, help="interval")
@@ -188,6 +189,7 @@ class ProfileWalk:
         self.cnt_dirs = 0
         self.cnt_files = 0
         self.cnt_filesize = 0
+        self.cnt_0byte = 0
         self.last_cnt = 0
         self.skipped = 0
         self.maxfiles = 0
@@ -296,6 +298,10 @@ class ProfileWalk:
             # check sparse file
             # TODO: check why st_blksize * st_blocks is wrong.  
             fsize = st.st_size
+            if st.st_size == 0:
+                self.cnt_0byte += 1
+                if args.verbose == 3:
+                    print("ZERO-byte file: %s" % spath)
 
             if st.st_blocks * 512 < st.st_size:
                 self.sparse_cnt += 1
@@ -420,6 +426,7 @@ class ProfileWalk:
         Tally.total_nlinks = self.circle.comm.reduce(self.nlinks, op=MPI.SUM)
         Tally.total_nlinked_files = self.circle.comm.reduce(self.nlinked_files, op=MPI.SUM)
         Tally.total_sparse = self.circle.comm.reduce(self.sparse_cnt, op=MPI.SUM)
+        Tally.total_0byte_files = self.circle.comm.reduce(self.cnt_0byte, op=MPI.SUM)
 
         if args.profdev:
             Tally.devfile_cnt = self.circle.comm.reduce(self.devfile_cnt, op=MPI.SUM)
@@ -442,6 +449,7 @@ class ProfileWalk:
             print(fmt_msg1.format("Sym links count:", Tally.total_symlinks))
             print(fmt_msg1.format("Hard linked files:", Tally.total_nlinked_files))
             print(fmt_msg1.format("File count:", Tally.total_files))
+            print(fmt_msg1.format("Zero byte files:", Tally.total_0byte_files))
             print(fmt_msg1.format("Sparse files:", Tally.total_sparse))
 
             if args.profdev:

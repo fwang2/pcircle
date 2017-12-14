@@ -73,7 +73,7 @@ class G:
     fs_lustre = None
     lfs_bin = None
     stripe_threshold = None
-
+    b0 = 0
     b4k = 4 * 1024
     b8k = 8 * 1024
     b16k = 16 * 1024
@@ -102,8 +102,8 @@ class G:
     b1tb = 1024 * b1g
     b4tb = 4 * b1tb
 
-    # 24 bins
-    bins = [b4k, b8k, b16k, b32k, b64k, b128k, b256k, b512k,
+    # 25 bins
+    bins = [b0, b4k, b8k, b16k, b32k, b64k, b128k, b256k, b512k,
             b1m, b2m, b4m, b16m, b32m, b64m, b128m, b256m, b512m,
             b1g, b4g, b64g, b128g, b256g, b512g, b1tb, b4tb]
 

@@ -22,6 +22,9 @@ class Tally:
     devfile_sz = 0
     spcnt = 0                   # stripe cnt account per process
 
+    # ZFS
+    total_blocks = 0
+
 class G:
     ZERO = 0
     ABORT = -1

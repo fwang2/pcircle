@@ -91,6 +91,9 @@ def gen_parser():
     parser.add_argument("--stripe-threshold", metavar="N", default="4g", help="Lustre stripe file threshold, default is 4GB")
     parser.add_argument("--stripe-output", metavar='', default="stripe-%s.out" % utils.timestamp2(), help="stripe output file")
     parser.add_argument("--sparse", action="store_true", help="Print out detected spare files")
+    parser.add_argument("--cpr", action="store_true", help="Estimate compression saving")
+    parser.add_argument("--cpr-per-file", action="store_true", help="Print compression saving for each file")
+
 
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
@@ -198,6 +201,7 @@ class ProfileWalk:
         self.devfile_sz = 0         # track size of dev files
         self.last_reduce_time = MPI.Wtime()
         self.sparse_cnt = 0
+        self.cnt_blocks = 0
 
         # reduce
         self.reduce_items = 0
@@ -302,6 +306,15 @@ class ProfileWalk:
                 self.cnt_0byte += 1
                 if args.verbose == 2:
                     self.logger.info("ZERO-byte file: %s" % spath, extra=self.d)
+            
+            # check compression saving
+            if args.cpr:
+                self.cnt_blocks += st.st_blocks
+                if args.cpr_per_file and st.st_size !=0:
+                    uncompressed = st.st_size
+                    compressed = float(st.st_blocks * 512)
+                    saving = 1 - float(compressed)/uncompressed
+                    self.logger.info("Compression (nblocks, fsize): (%s,%s), %0.2f %%" % (st.st_blocks, st.st_size, saving), extra=self.d)
 
             if st.st_blocks * 512 < st.st_size:
                 self.sparse_cnt += 1
@@ -432,6 +445,9 @@ class ProfileWalk:
             Tally.devfile_cnt = self.circle.comm.reduce(self.devfile_cnt, op=MPI.SUM)
             Tally.devfile_sz = self.circle.comm.reduce(self.devfile_sz, op=MPI.SUM)
 
+        if args.cpr:
+            Tally.total_blocks = self.circle.comm.reduce(self.cnt_blocks, op=MPI.SUM)
+
     def epilogue(self):
         self.total_tally()
         self.time_ended = MPI.Wtime()
@@ -444,7 +460,7 @@ class ProfileWalk:
                 fmt_msg1 = "\t{0:<25}{1:<20}"    # numeric
 
             fmt_msg2 = "\t{0:<25}{1:<20}"     # string
-
+            fmt_msg3 = "\t{0:<25}{1:<20.2f}"  # float
             print(fmt_msg1.format("Directory count:", Tally.total_dirs))
             print(fmt_msg1.format("Sym links count:", Tally.total_symlinks))
             print(fmt_msg1.format("Hard linked files:", Tally.total_nlinked_files))
@@ -457,6 +473,15 @@ class ProfileWalk:
                 print(fmt_msg2.format("Dev file size:", bytes_fmt(Tally.devfile_sz)))
             print(fmt_msg1.format("Skipped count:", Tally.total_skipped))
             print(fmt_msg2.format("Total file size:", bytes_fmt(Tally.total_filesize)))
+
+            if args.cpr:
+                compressed = float(Tally.total_blocks * 512)
+                saving = 1 - compressed/Tally.total_filesize
+                ratio = Tally.total_filesize/compressed
+                print(fmt_msg3.format("Compression Ratio:", ratio))
+                print(fmt_msg3.format("Compression Saving (%):", saving))
+
+
             if Tally.total_files != 0:
                 print(fmt_msg2.format("Avg file size:",
                                       bytes_fmt(Tally.total_filesize/float(Tally.total_files))))

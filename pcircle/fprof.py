@@ -310,11 +310,13 @@ class ProfileWalk:
             # check compression saving
             if args.cpr:
                 self.cnt_blocks += st.st_blocks
-                if args.cpr_per_file and st.st_size !=0:
+                if args.cpr_per_file:
+                    saving = 0.0
                     uncompressed = st.st_size
                     compressed = float(st.st_blocks * 512)
-                    saving = 1 - float(compressed)/uncompressed
-                    self.logger.info("Compression (nblocks, fsize): (%s,%s), %0.2f %%" % (st.st_blocks, st.st_size, saving), extra=self.d)
+                    if st.st_size !=0:
+                        saving = 1 - float(compressed)/uncompressed
+                    self.logger.info("Compression: %s (nblocks, fsize): (%s,%s), %0.2f %%" % (spath, st.st_blocks, st.st_size, saving), extra=self.d)
 
             if st.st_blocks * 512 < st.st_size:
                 self.sparse_cnt += 1

@@ -315,7 +315,7 @@ class ProfileWalk:
                     uncompressed = st.st_size
                     compressed = float(st.st_blocks * 512)
                     if st.st_size !=0:
-                        saving = 1 - float(compressed)/uncompressed
+                        saving = (1 - float(compressed)/uncompressed)*100
                     self.logger.info("Compression: %s (nblocks, fsize): (%s,%s), %0.2f %%" % (spath, st.st_blocks, st.st_size, saving), extra=self.d)
 
             if st.st_blocks * 512 < st.st_size:
@@ -478,7 +478,7 @@ class ProfileWalk:
 
             if args.cpr:
                 compressed = float(Tally.total_blocks * 512)
-                saving = 1 - compressed/Tally.total_filesize
+                saving = (1 - compressed/Tally.total_filesize)*100
                 ratio = Tally.total_filesize/compressed
                 print(fmt_msg3.format("Compression Ratio:", ratio))
                 print(fmt_msg3.format("Compression Saving (%):", saving))

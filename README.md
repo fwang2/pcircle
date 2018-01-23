@@ -16,7 +16,7 @@ feedbacks, please post it here at https://github.com/olcf/pcircle/issues.
 
 ## Quick Start
 
-To jumpstart and do a quick testrun on MacOS:
+To jumpstart and do a quick test run on MacOS:
 
     $ brew install pkg-config libffi openmpi python
     $ pip2 install virtualenv
@@ -26,7 +26,7 @@ To jumpstart and do a quick testrun on MacOS:
 
 To run a simple test:
 
-    $ (pcirlce) mpirun -np 4 fprof ~
+    $ mpirun -np 4 fprof ~
 
 This also shows the core dependencies of pcircle: `python`, `libffi`, and `openmpi`. For Linux alike, we need their dev rpms. For example:
 
@@ -36,13 +36,20 @@ This also shows the core dependencies of pcircle: `python`, `libffi`, and `openm
 
 ## Manpage
 
+Note: this is a bit out of date, `-h` shows current options:
+
 * Parallel Data Copy: [fcp.8](https://rawgit.com/olcf/pcircle/master/man/fcp.8.html)
 * Parallel Checksumming: [fsum.8](https://rawgit.com/olcf/pcircle/master/man/fsum.8.html)
 * Parallel Profiler: [fprof.8](https://rawgit.com/olcf/pcircle/master/man/fprof.8.html)
 
+## Publications:
+
+
+
 ## Author
 
 - Feiyi Wang | Oak Ridge National Laboratory | fwang2@ornl.gov
-- Sisi Xiong | University of Tennessee (Now at Micrsoft Corp.)
+- Sisi Xiong | University of Tennessee (Now at Microsoft Corp.)
+
 
 

@@ -44,7 +44,11 @@ Note: this is a bit out of date, `-h` shows current options:
 
 ## Publications:
 
+- ["FCP: A Fast and Scalable Data Copy Tool for High Performance Parallel File Systems"](docs/cug15-fcp.pdf), by F. Wang, V.G.V. Larrea, D. Leverman, S. Oral, at CUG'2015.
 
+- ["A Bloom Filter BAsed Scalable Data Integrity Check Tool for Large-scale Dataset"](docs/pdsw16-fsum.pdf), by S. Xiong, F. Wang, and Q. Cao, at PDSW'2016.
+
+- ["Diving into Petascale Production File Systems through Large Scale Profiling and Analysis"](docs/pdsw17-fprof.pdf), by F. Wang, H. Sim, C. Harr and S. Oral, at PDSW'2017.
 
 ## Author
 

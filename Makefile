@@ -102,3 +102,4 @@ clean:
 	find . -name '*.sig' -delete
 	find . -name '*.log' -delete
 	find . -name '*pcp_workq*' -delete
+	find . -name '.pcircle*' -delete

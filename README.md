@@ -13,51 +13,25 @@ in active development, please use it at your own risk. For bug report and
 feedbacks, please post it here at https://github.com/olcf/pcircle/issues. 
 
 
-## Dependencies
 
-`pcircle` is largely a Python implementation, but we don't rule out possible
-and judicious integration of C/C++ code for performance gains. Currently, it
-has the following dependencies:
+## Quick Start
 
-- `Python 2.7.x` - it is not Python3 compatible, yet.
-- `mpi4py` - wraps the MPI library 
-- `xattr` - wraps the libattr library
-- `cffi` - python interface to `libffi`
-- `lru-dict` - wrap a small C-based LRU cache
+To jumpstart and do a quick testrun on MacOS:
 
-## Installation
+    $ brew install pkg-config libffi openmpi python
+    $ pip2 install virtualenv
+    $ virtualenv pcircle
+    $ source ~/pcircle/bin/activate
+    $ (pcircle) pip2 install git+https://github.com/olcf/pcircle@dev
 
-`xattr` dependency requires `cffi`, which depends on `libffi`, which is
-notoriously difficult to install right.
+To run a simple test:
 
-- On Mac, you might have to manually do:
+    $ (pcirlce) mpirun -np 4 fprof ~
 
-        brew install pkg-config libffi
-        PKG_CONFIG_PATH=/usr/local/opt/libffi/lib/pkgconfig pip install cffi
-
-- On Redhat:
+This also shows the core dependencies of pcircle: `python`, `libffi`, and `openmpi`. For Linux alike, we need their dev rpms. For example:
 
         sudo yum install openmpi-devel
         sudo yum install libffi-devel
-      
-- Then, the rest of setup is pretty much Python standard:
-
-        python setup.py install
-
-
-## virtualenv
-
-If you have **setuptools** and **virtualenv** packages, then
-
-        make deploy
-
-It grab all dependencies and produce you a **container**, which isolate you from the default
-installation:
-
-        source ~/app-pcircle/bin/activate
-        fcp -h
-
-For this command to work, you do need a working `libffi` as well.
         
 
 ## Manpage
@@ -69,4 +43,6 @@ For this command to work, you do need a working `libffi` as well.
 ## Author
 
 - Feiyi Wang | Oak Ridge National Laboratory | fwang2@ornl.gov
+- Sisi Xiong | University of Tennessee (Now at Micrsoft Corp.)
+
 

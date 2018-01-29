@@ -56,6 +56,11 @@ EXCLUDE = set()
 # shared file
 stripe_out = None
 
+
+# directory histogram
+DIR_BINS = None
+DIR_HIST = None
+
  
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -93,7 +98,8 @@ def gen_parser():
     parser.add_argument("--sparse", action="store_true", help="Print out detected spare files")
     parser.add_argument("--cpr", action="store_true", help="Estimate compression saving")
     parser.add_argument("--cpr-per-file", action="store_true", help="Print compression saving for each file")
-
+    parser.add_argument("--dirprof", action="store_true", help="enable directory count profiling")
+    parser.add_argument("--dirbins", metavar="INT", nargs='+', type=int, help="directory bins, need to be ordered and sorted") 
 
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
@@ -106,7 +112,6 @@ def incr_local_histogram(fsz):
     hist[idx] += 1
     fsize[idx] += fsz
 
-
 def gather_histogram():
     global hist, fsize
     hist = np.array(hist)  # switch to array format
@@ -118,6 +123,19 @@ def gather_histogram():
         hist = sum(all_hist)
         fsize = sum(all_fsize)
 
+def incr_local_directory_histogram(cnt):
+    """ update local directory bins"""
+    global DIR_BINS, DIR_HIST
+    idx = bisect.bisect_left(DIR_BINS, cnt) # <= (inclusive)
+    DIR_HIST[idx] += 1
+
+def gather_directory_histogram():
+    global DIR_HIST 
+    DIR_HIST = np.array(DIR_HIST) # switch to array format
+    all_hist = comm.gather(DIR_HIST)
+
+    if comm.rank == 0:
+        DIR_HIST = sum(all_hist)
 
 def update_topn(item):
     """ collect top N (as defined by args.topn) items """
@@ -251,6 +269,9 @@ class ProfileWalk:
         if count > self.maxfiles:
             self.maxfiles = count
             self.maxfiles_dir = path
+
+        if args.dirprof:
+            incr_local_directory_histogram(count)
 
 
     def process(self):
@@ -536,7 +557,7 @@ def process_exclude_file():
                 EXCLUDE.add(os.path.realpath(line))
 
 def main():
-    global comm, args, stripe_out
+    global comm, args, stripe_out, DIR_BINS, DIR_HIST
 
     fpipe.listen()
 
@@ -551,6 +572,18 @@ def main():
     G.loglevel = args.loglevel
     hosts_cnt = tally_hosts()
 
+    # doing directory profiling?
+    if args.dirprof:
+        # check the input
+        if args.dirbins is None:
+            err_and_exit("Error: missing directory bin parameters: a sorted integer list\n")
+
+        myList = sorted(set(args.dirbins))
+        if myList != args.dirbins:
+            err_and_exit("Error: duplicated, or unsorted bins: %s\n" % args.dirbins)
+
+        DIR_BINS = args.dirbins
+        DIR_HIST = [0] * (len(DIR_BINS) + 1)
 
     # Doing stripe analysis? lfs is not really bullet-proof way
     # we might need a better way of doing fstype check.
@@ -578,6 +611,9 @@ def main():
         else:
             print("\t{0:<20}{1:<20}".format("Syslog report: " , "no"))
 
+        if args.dirprof:
+            print("\t{0:<20}{1:<20}".format("Dir bins: ", args.dirbins))
+
         if args.lustre_stripe:
             print("\t{0:<20}{1:<20}".format("Stripe analysis: ", "yes"))
             print("\t{0:<20}{1:<20}".format("Stripe threshold: ", args.stripe_threshold))
@@ -603,6 +639,10 @@ def main():
     total_file_size = treewalk.epilogue()
 
     msg1, msg2 = gen_histogram(total_file_size)
+
+
+    if args.dirprof:
+        gen_directory_histogram()
 
     if comm.rank == 0 and args.syslog:
         sendto_syslog("fprof.filecount.hist", msg1)
@@ -648,7 +688,37 @@ def main():
         if comm.rank == 0:
             print("Stripe workload total: %s, distribution: %s" % (sum(sp_workload), sp_workload))
 
+def gen_directory_histogram():
+    """Generate directory set histogram"""
+    global DIR_BINS, DIR_HIST
+    gather_directory_histogram()
+
+    if comm.rank == 0:
+        total_hist_entries = DIR_HIST.sum()
+        if total_hist_entries == 0:
+            err_and_exit("Zero hist entries, no histogram can be generated.\n")
+
+        if py_version() == "py26":
+            msg = "\t{0:<3}{1:<15}{2:<15}{3:>15}"
+            msg2 = "\t{0:<3}{1:<15}{2:<15}{3:>15}"
+        else:
+            msg = "\t{:<3}{:<15}{:<15,}{:>15}"
+            msg2 = "\t{:<3}{:<15}{:<15}{:>15}"
+
+        print("\n")
+        print("Directory Histogram\n")
+        print(msg2.format("", "Buckets", "Num of Entries", "%(Entries)"))
+        print("")
+
+        for idx, rightbound in enumerate(DIR_BINS):
+            pct = 100 * DIR_HIST[idx] / float(total_hist_entries) if total_hist_entries !=0 else 0
+            print(msg.format("<= ", rightbound,
+                             DIR_HIST[idx],
+                             "%0.2f%%" % pct))
+
 def gen_histogram(total_file_size):
+    """Generate file set histogram"""
+
     syslog_filecount_hist = ""
     syslog_fsizeperc_hist = ""
     bins_fmt = utils.bins_strs(G.bins)

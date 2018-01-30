@@ -21,7 +21,7 @@ requires = [
     'cffi>=1.2.1',
     'mpi4py>=1.3.1',
     'lru-dict>=1.1.1',
-    'xattr>=0.7.8',
+    'xattr',
     'scandir>=1.1',
     'numpy>=1.9.2',
     'bitarray>=0.8.1'

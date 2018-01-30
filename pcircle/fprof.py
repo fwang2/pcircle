@@ -576,11 +576,12 @@ def main():
     if args.dirprof:
         # check the input
         if args.dirbins is None:
-            err_and_exit("Error: missing directory bin parameters: a sorted integer list\n")
-
-        myList = sorted(set(args.dirbins))
-        if myList != args.dirbins:
-            err_and_exit("Error: duplicated, or unsorted bins: %s\n" % args.dirbins)
+            # err_and_exit("Error: missing directory bin parameters: a sorted integer list\n")
+            args.dirbins = [0, 10, 100, 1000, 10**4, 10**5, 10**6, 10**7, 10**8]
+	else:
+            myList = sorted(set(args.dirbins))
+            if myList != args.dirbins:
+                err_and_exit("Error: duplicated, or unsorted bins: %s\n" % args.dirbins)
 
         DIR_BINS = args.dirbins
         DIR_HIST = [0] * (len(DIR_BINS) + 1)

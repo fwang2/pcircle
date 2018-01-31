@@ -42,7 +42,7 @@ __version__ = get_versions()['version']
 __revid__ = get_versions()['full-revisionid']
 args = None
 taskloads = []
-topn = []   # track top N files
+TOPN_FILES = []   # track top N files
 hist = [0] * (len(G.bins) + 1)
 
 # tracking size
@@ -60,6 +60,9 @@ stripe_out = None
 # directory histogram
 DIR_BINS = None
 DIR_HIST = None
+
+# track top N large directories
+TOPN_DIRS = [] 
 
  
 def err_and_exit(msg, code=0):
@@ -85,7 +88,7 @@ def gen_parser():
     parser.add_argument("--inodesz", default="4k", help="inode size, default 4k")
     parser.add_argument("--gpfs-block-alloc", action="store_true", help="GPFS block usage analysis")
     parser.add_argument("--dii", action="store_true", help="Enable data-in-inode (dii)")
-    parser.add_argument("--top", type=int, default=None, help="Top N files, default is None (disabled)")
+    parser.add_argument("--topn-files", type=int, default=None, help="Top N files, default is None (disabled)")
     parser.add_argument("--perprocess", action="store_true", help="Enable per-process progress report")
     parser.add_argument("--syslog", action="store_true", help="Enable syslog report")
     parser.add_argument("--profdev", action="store_true", help="Enable dev profiling")
@@ -100,6 +103,7 @@ def gen_parser():
     parser.add_argument("--cpr-per-file", action="store_true", help="Print compression saving for each file")
     parser.add_argument("--dirprof", action="store_true", help="enable directory count profiling")
     parser.add_argument("--dirbins", metavar="INT", nargs='+', type=int, help="directory bins, need to be ordered and sorted") 
+    parser.add_argument("--topn-dirs", default=None, type=int, help="Top N large directories")
 
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     return parser
@@ -137,17 +141,17 @@ def gather_directory_histogram():
     if comm.rank == 0:
         DIR_HIST = sum(all_hist)
 
-def update_topn(item):
+def update_topn_files(item):
     """ collect top N (as defined by args.topn) items """
-    global topn
-    if len(topn) >= args.top:
-        heapq.heappushpop(topn, item)
+    global TOPN_FILES 
+    if len(TOPN_FILES) >= args.topn_files:
+        heapq.heappushpop(TOPN_FILES, item)
     else:
-        heapq.heappush(topn, item)
+        heapq.heappush(TOPN_FILES, item)
 
 
 def gather_topfiles():
-    all_topfiles = comm.gather(topn) # [ [ top list from rank x] [ top list from rank y] ]
+    all_topfiles = comm.gather(TOPN_FILES) # [ [ top list from rank x] [ top list from rank y] ]
     if comm.rank == 0:
         flat_topfiles = [item for sublist in all_topfiles for item in sublist ]
         return sorted(flat_topfiles, reverse=True)
@@ -353,8 +357,8 @@ class ProfileWalk:
                     inodesz = 0
                 gpfs_block_update(fsize, inodesz)
 
-            if args.top:
-                update_topn(TopFile(fsize, spath))
+            if args.topn_files:
+                update_topn_files(TopFile(fsize, spath))
 
             if self.outfile:
                 self.fszlst.append(fsize)
@@ -649,12 +653,12 @@ def main():
         sendto_syslog("fprof.filecount.hist", msg1)
         sendto_syslog("fprof.fsize_perc.hist", msg2)
 
-    if args.top:
+    if args.topn_files:
         topfiles = gather_topfiles()
         if comm.rank == 0:
-            print("\nTop File Report:\n")
+            print("\nTop N File Report:\n")
             # edge case: not enough files (< args.top)
-            totaln = args.top if len(topfiles) > args.top else len(topfiles)
+            totaln = args.topn_files if len(topfiles) > args.topn_files else len(topfiles)
             for index, _ in enumerate(xrange(totaln)):
                 size, path = topfiles[index]
                 print("\t%s: %s (%s)" % (index + 1,

@@ -63,7 +63,7 @@ DIR_HIST = None
 
 # track top N large directories
 TOPN_DIRS = [] 
-
+TopDir = namedtuple("TopDir", "size, path") # the name tuple is pushed to heap
  
 def err_and_exit(msg, code=0):
     if comm.rank == 0:
@@ -149,12 +149,25 @@ def update_topn_files(item):
     else:
         heapq.heappush(TOPN_FILES, item)
 
+def update_topn_dirs(item):
+    """ collect top N largest directories """
+    global TOPN_DIRS
+    if len(TOPN_DIRS) >= args.topn_dirs:
+        heapq.heappushpop(TOPN_DIRS, item)
+    else:
+        heapq.heappush(TOPN_DIRS, item)
 
 def gather_topfiles():
     all_topfiles = comm.gather(TOPN_FILES) # [ [ top list from rank x] [ top list from rank y] ]
     if comm.rank == 0:
-        flat_topfiles = [item for sublist in all_topfiles for item in sublist ]
+        flat_topfiles = [item for sublist in all_topfiles for item in sublist]
         return sorted(flat_topfiles, reverse=True)
+
+def gather_topdirs():
+    all_topdirs = comm.gather(TOPN_DIRS)
+    if comm.rank == 0:
+        flat_topdirs = [item for sublist in all_topdirs for item in sublist]
+        return sorted(flat_topdirs, reverse=True)
 
 
 def gpfs_block_update(fsz, inodesz=4096):
@@ -276,6 +289,9 @@ class ProfileWalk:
 
         if args.dirprof:
             incr_local_directory_histogram(count)
+
+        if args.topn_dirs:
+            update_topn_dirs(TopDir(count, path))
 
 
     def process(self):
@@ -664,6 +680,17 @@ def main():
                 print("\t%s: %s (%s)" % (index + 1,
                                        path,
                                        utils.bytes_fmt(size)))
+            print("")
+
+    if args.topn_dirs:
+        topdirs = gather_topdirs()
+        if comm.rank == 0:
+            print("\nTop N Directory Report:\n")
+            totaln = args.topn_dirs if len(topdirs) > args.topn_dirs else len(topdirs)
+            for index, _ in enumerate(xrange(totaln)):
+                size, path = topdirs[index]
+                print("\t{0:}: {1:}  ({2:,} items)".format(index+1, path, size))
+
             print("")
 
     if args.gpfs_block_alloc:

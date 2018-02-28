@@ -165,6 +165,12 @@ class Circle:
         if cleanup and hasattr(self, "workq_db"):
             self.workq_db.cleanup()
 
+        if os.path.exists(G.tempdir) and cleanup:
+            try:
+                shutil.rmtree(G.tempdir)
+            except:
+                pass
+
     def workq_init(self, dbname=None, resume=False):
 
         # NOTE: the db filename and its rank is seprated with "-"

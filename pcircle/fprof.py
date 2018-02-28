@@ -497,9 +497,9 @@ class ProfileWalk:
 
         if self.circle.rank == 0:
             print("\nFprof epilogue:\n")
-	    if py_version() != "py26": 
+            if py_version() != "py26": 
                 fmt_msg1 = "\t{0:<25}{1:<20,}"    # numeric
-	    else: # 2.6 compat 
+            else: # 2.6 compat 
                 fmt_msg1 = "\t{0:<25}{1:<20}"    # numeric
 
             fmt_msg2 = "\t{0:<25}{1:<20}"     # string
@@ -598,7 +598,7 @@ def main():
         if args.dirbins is None:
             # err_and_exit("Error: missing directory bin parameters: a sorted integer list\n")
             args.dirbins = [0, 10, 100, 1000, 10**4, 10**5, 10**6, 10**7, 10**8]
-	else:
+        else:
             myList = sorted(set(args.dirbins))
             if myList != args.dirbins:
                 err_and_exit("Error: duplicated, or unsorted bins: %s\n" % args.dirbins)

@@ -261,6 +261,7 @@ class ProfileWalk:
         self.cnt_dirs = 0
         self.cnt_files = 0
         self.cnt_filesize = 0
+        self.cnt_stat_filesize = 0  # uncompressed
         self.cnt_0byte = 0
         self.last_cnt = 0
         self.skipped = 0
@@ -393,13 +394,17 @@ class ProfileWalk:
             if args.cpr:
                 self.cnt_blocks += st.st_blocks
                 if args.cpr_per_file:
-                    saving = 0.0
-                    uncompressed = st.st_size
+                    uncompressed = float(st.st_size)
                     compressed = float(st.st_blocks * 512)
                     if st.st_size != 0:
-                        saving = (1 - float(compressed)/uncompressed)*100
-                    self.logger.info("Compression: %s (nblocks, fsize): (%s,%s), %0.2f %%" % (
-                        spath, st.st_blocks, st.st_size, saving), extra=self.d)
+                        ratio = uncompressed/compressed
+                    self.logger.info("Compression: %s: (nblocks: %s, fsize: %s, ratio: %0.2f)"
+                            % (spath, st.st_blocks, st.st_size, ratio), extra=self.d)
+                
+                # if stat filesize is not crazy, we count it as uncompressed filesize
+                # part of this is due to LLNL's sparse EB file, which skews the result
+                if st.st_size <= G.FSZ_BOUND:
+                    self.cnt_stat_filesize += st.st_size
 
             if st.st_blocks * 512 < st.st_size:
                 self.sparse_cnt += 1
@@ -523,10 +528,9 @@ class ProfileWalk:
         global taskloads
         Tally.total_dirs = self.circle.comm.reduce(self.cnt_dirs, op=MPI.SUM)
         Tally.total_files = self.circle.comm.reduce(self.cnt_files, op=MPI.SUM)
-        Tally.total_filesize = self.circle.comm.reduce(
-            self.cnt_filesize, op=MPI.SUM)
-        Tally.total_symlinks = self.circle.comm.reduce(
-            self.sym_links, op=MPI.SUM)
+        Tally.total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
+        Tally.total_stat_filesize = self.circle.comm.reduce(self.cnt_stat_filesize, op=MPI.SUM)
+        Tally.total_symlinks = self.circle.comm.reduce(self.sym_links, op=MPI.SUM)
         Tally.total_skipped = self.circle.comm.reduce(self.skipped, op=MPI.SUM)
         Tally.taskloads = self.circle.comm.gather(self.reduce_items)
         Tally.max_files = self.circle.comm.reduce(self.maxfiles, op=MPI.MAX)
@@ -578,10 +582,11 @@ class ProfileWalk:
 
             if args.cpr:
                 compressed = float(Tally.total_blocks * 512)
-                saving = (1 - compressed/Tally.total_filesize)*100
-                ratio = Tally.total_filesize/compressed
+                uncompressed = float(Tally.total_stat_filesize)
+                ratio = uncompressed/compressed
+                saving = 1 - compressed/uncompressed
                 print(fmt_msg3.format("Compression Ratio:", ratio))
-                print(fmt_msg3.format("Compression Saving (%):", saving))
+                print(fmt_msg3.format("Compression Saving:", saving))
 
             if Tally.total_files != 0:
                 print(fmt_msg2.format("Avg file size:",

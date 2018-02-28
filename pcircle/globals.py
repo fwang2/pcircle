@@ -10,6 +10,7 @@ class Tally:
     total_dirs = 0
     total_files = 0
     total_filesize = 0
+    total_stat_filesize = 0
     total_symlinks = 0
     total_skipped = 0
     total_sparse = 0
@@ -104,6 +105,8 @@ class G:
     b512g = 512 * b1g
     b1tb = 1024 * b1g
     b4tb = 4 * b1tb
+
+    FSZ_BOUND = 64 * b1tb
 
     # 25 bins
     bins = [b0, b4k, b8k, b16k, b32k, b64k, b128k, b256k, b512k,

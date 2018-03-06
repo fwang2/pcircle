@@ -398,9 +398,9 @@ class ProfileWalk:
                     compressed = float(st.st_blocks * 512)
                     if st.st_size != 0:
                         ratio = uncompressed/compressed
-                    self.logger.info("Compression: %s: (nblocks: %s, fsize: %s, ratio: %0.2f)"
+                        self.logger.info("Compression: %s: (nblocks: %s, fsize: %s, ratio: %0.2f)"
                             % (spath, st.st_blocks, st.st_size, ratio), extra=self.d)
-                
+
                 # if stat filesize is not crazy, we count it as uncompressed filesize
                 # part of this is due to LLNL's sparse EB file, which skews the result
                 if st.st_size <= G.FSZ_BOUND:

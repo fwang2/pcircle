@@ -40,8 +40,8 @@ def get_config():
     cfg = VersioneerConfig()
     cfg.VCS = "git"
     cfg.style = "pep440"
-    cfg.tag_prefix = "pcircle-v"
-    cfg.parentdir_prefix = "pcircle-v"
+    cfg.tag_prefix = ""
+    cfg.parentdir_prefix = ""
     cfg.versionfile_source = "pcircle/_version.py"
     cfg.verbose = False
     return cfg

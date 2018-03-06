@@ -2,15 +2,15 @@ PYTHON=`which python`
 NAME=`python setup.py --name`
 VERSION=`python setup.py --version`
 SDIST=dist/$(NAME)-$(VERSION).tar.gz
-#VENV=$(HOME)/app-pcircle
 VDEV=$(HOME)/pdev
-.PHONY:	test check
+.PHONY:	test check dist
 
-all: source
-dist: source
+all: dist
 
-source:
-	$(PYTHON) setup.py sdist
+dist:
+	rm -rf dist
+	python setup.py sdist
+	python setup.py bdist_wheel
 
 deb:
 	$(PYTHON) setup.py --command-packages=stdeb.command bdist_deb
@@ -19,7 +19,6 @@ rpm:
 
 	$(PYTHON) setup.py bdist_rpm --require \
 		"numpy python-scandir libattr-devel pyxattr python-argparse mpi4py-openmpi python-cffi lru-dict"
-
 
 install: deploy
 
@@ -44,17 +43,6 @@ check:
 	# pychecker
 	# pymetrics
 
-upload:
-	$(PYTHON) setup.py sdist register upload
-	$(PYTHON) setup.py bdist_wininst upload
-
-init:
-	pip install -r requirements.txt --allow-all-external
-
-update:
-	rm ez_setup.py
-	wget http://peak.telecommunity.com/dist/ez_setup.py
-
 daily:
 	$(PYTHON) setup.py bdist egg_info --tag-date
 
@@ -74,20 +62,13 @@ deploy-lfs:
 	$(VENV)/bin/pip --no-cache install $(SDIST)
 	virtualenv --relocatable $(VENV)
 
-dev-deploy:clean-cache
-	rm -rf dist
-	rm -rf $(VDEV)
+dev:clean-cache
 	$(PYTHON) setup.py sdist
-	virtualenv --no-site-packages $(VDEV)
+	@if [ ! -d $(VDEV) ]; then \
+		virtualenv --no-site-packages $(VDEV); \
+	fi
 	$(VDEV)/bin/pip install -U pip setuptools
 	$(VDEV)/bin/pip install argparse
-	$(VDEV)/bin/pip install flake8
-	$(VDEV)/bin/pip install -e .
-
-dev-link:	
-	rm -rf dist
-	$(PYTHON) setup.py sdist
-	virtualenv --no-site-packages $(VDEV)
 	$(VDEV)/bin/pip install flake8
 	$(VDEV)/bin/pip install -e .
 

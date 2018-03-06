@@ -10,7 +10,7 @@ Distributed Termination Detection = Efficient and Scalable Parallel Solution.
 to take advantage of highly scalable parallel file system such as Lustre and
 GPFS. Early tests show very promising scaling properties. However, it is still
 in active development, please use it at your own risk. For bug report and
-feedbacks, please post it here at https://github.com/olcf/pcircle/issues. 
+feedbacks, please post it here at https://github.com/olcf/pcircle/issues.
 
 
 
@@ -32,7 +32,7 @@ This also shows the core dependencies of pcircle: `python`, `libffi`, and `openm
 
         sudo yum install openmpi-devel
         sudo yum install libffi-devel
-        
+
 
 ## Manpage
 
@@ -50,10 +50,11 @@ Note: this is a bit out of date, `-h` shows current options:
 
 - ["Diving into Petascale Production File Systems through Large Scale Profiling and Analysis"](docs/pdsw17-fprof.pdf), by F. Wang, H. Sim, C. Harr and S. Oral, at PDSW'2017.
 
-## Author
+## Authors and Contributors
 
 - Feiyi Wang | Oak Ridge National Laboratory | fwang2@ornl.gov
 - Sisi Xiong | University of Tennessee (Now at Microsoft Corp.)
-
+- Cameron Harr | Lawrence Livermore National Laboratory | harr1@llnl.gov
+- Sarp Oral | Oak Ridge National Laboratory | oralhs@ornl.gov
 
 

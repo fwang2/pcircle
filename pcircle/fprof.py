@@ -131,6 +131,9 @@ def gen_parser():
                         type=int, help="Top N large directories")
 
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
+    parser.add_argument("--progress", action="store_true",
+                        help="Enable periodoic progress report")
+
     return parser
 
 
@@ -726,8 +729,12 @@ def main():
     if args.perprocess:
         circle.report_enabled = True
     else:
-        circle.reduce_enabled = True
+        circle.report_enabled = False
 
+    if args.progress:
+        circle.report_enabled = False
+        circle.reduce_enabled = True
+    
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 

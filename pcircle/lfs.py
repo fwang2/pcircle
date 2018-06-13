@@ -6,7 +6,7 @@ wrapper for lfs command line
 from __future__ import print_function
 import subprocess
 from distutils import spawn
-from globals import  G
+from pcircle.globals import  G
 
 
 def check_lfs():

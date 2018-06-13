@@ -3,9 +3,14 @@ import os
 import sys
 import os.path
 import sqlite3
-import cPickle as pickle
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
 from collections import deque
-from fdef import FileItem, FileChunk, ChunkSum
+from pcircle.fdef import FileItem, FileChunk, ChunkSum
 from pcircle.utils import getLogger
 
 __author__ = 'Feiyi Wang'

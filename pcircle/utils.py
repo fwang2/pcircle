@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, division
 import sys
 import time
 import itertools
@@ -110,20 +110,20 @@ def conv_time(s):
     if s < one_min:
         return "%.2fs" % s
     elif s < one_hr:
-        mins = int(s) / 60
+        mins = int(s) // 60
         secs = int(s % 60)
         return "%sm %ss" % (mins, secs)
     elif s < one_day:
         s = int(s)
-        hours = s / one_hr
+        hours = s // one_hr
         mins = (s % one_hr) / 60
         # secs = int(s - (hours * 60 * 60) - (mins * 60))
         return "%sh %sm" % (hours, mins)
     else:
         s = int(s)
-        days = s / one_day
-        hours = (s % one_day) / one_hr
-        mins = ((s % one_day) % one_hr) / one_min
+        days = s // one_day
+        hours = (s % one_day) // one_hr
+        mins = ((s % one_day) % one_hr) // one_min
         return "%sd %sh %sm" % (days, hours, mins)
 
 

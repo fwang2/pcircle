@@ -1,4 +1,7 @@
 from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import division
+
 from mpi4py import MPI
 from copy import copy
 import random
@@ -6,7 +9,6 @@ import sys
 import os
 import os.path
 import shutil
-import utils
 import time
 from collections import deque
 from pprint import pprint
@@ -48,10 +50,12 @@ Reduce Note:
 
 """
 
+from pcircle import utils
 from pcircle.globals import T, G
 from pcircle.dbstore import DbStore
 from pcircle.utils import getLogger
 from pcircle.token import Token
+from builtins import range
 
 DB_BUFSIZE = 10000
 
@@ -126,7 +130,7 @@ class Circle:
         self.children = 0
         # compute rank of parent if we have one
         if self.rank > 0:
-            self.parent_rank = (self.rank - 1) / k
+            self.parent_rank = (self.rank - 1) // k
 
         # identify ranks of what would be leftmost and rightmost children
         left = self.rank * k + 1
@@ -284,12 +288,12 @@ class Circle:
         # deque a work starting from workq, then from workq_buf, then from workq_db
         if len(self.workq) > 0:
             return self.workq.pop()
-	elif len(self.workq_buf) > 0:
+        elif len(self.workq_buf) > 0:
             return self.workq_buf.pop()
         elif hasattr(self, "workq_db") and len(self.workq_db) > 0:
             #read a batch of works into memory
             workq, objs_size = self.workq_db.mget(G.memitem_threshold)
-            self.workq = deque(workq)          
+            self.workq = deque(workq)
             self.workq_db.mdel(G.memitem_threshold, objs_size)
             if len(self.workq) > 0:
                return self.workq.pop()
@@ -469,11 +473,11 @@ class Circle:
 
         if self.split != "equal":
             raise NotImplementedError
-        base = wcount / (rcount + 1)  # leave self a base number of works
+        base = wcount // (rcount + 1)  # leave self a base number of works
         extra = wcount - base * (rcount + 1)
         assert extra <= rcount
         sizes = [base] * rcount
-        for i in xrange(extra):
+        for i in range(extra):
             sizes[i] += 1
         return sizes
 
@@ -526,7 +530,7 @@ class Circle:
         # previous data and pass it back in to save us some time.
         #
 
-        for i in xrange(witems):
+        for i in range(witems):
             self.workq.popleft()
 
     def request_work(self, cleanup=False):

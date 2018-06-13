@@ -69,8 +69,21 @@ dev:clean-cache
 	fi
 	$(VDEV)/bin/pip install -U pip setuptools
 	$(VDEV)/bin/pip install argparse
+	$(VDEV)/bin/pip install future
 	$(VDEV)/bin/pip install flake8
 	$(VDEV)/bin/pip install -e .
+
+dev3:clean-cache
+	echo "Creating virtual environment at [$(HOME)/pdev3]"
+	python3 setup.py sdist
+	@if [ ! -d $(HOME)/pdev3 ]; then \
+		python3 -m venv $(HOME)/pdev3; \
+	fi
+	$(HOME)/pdev3/bin/pip3 install -U pip setuptools
+	$(HOME)/pdev3/bin/pip3 install future
+	$(HOME)/pdev3/bin/pip3 install flake8
+	$(HOME)/pdev3/bin/pip3 install -e .
+
 
 test:
 	$(PYTHON) -m unittest discover ./test -v

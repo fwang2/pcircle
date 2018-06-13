@@ -1,18 +1,25 @@
 #!/usr/bin/env python
 #
 # See: http://code.activestate.com/recipes/576515/
+from __future__ import print_function
+
+from future import standard_library
+standard_library.install_aliases()
 
 try: import readline  # For readline input support
 except: pass
 
-import sys, os, traceback, signal, codeop, cStringIO, cPickle, tempfile
+import sys, os, traceback, signal, codeop, tempfile
+from io import BytesIO
+from io import StringIO
+import pickle
 
 def pipename(pid):
     """Return name of pipe to use"""
     return os.path.join(tempfile.gettempdir(), 'debug-%d' % pid)
 
 class NamedPipe(object):
-    def __init__(self, name, end=0, mode=0666):
+    def __init__(self, name, end=0, mode=0o666):
         """Open a pair of pipes, name.in and name.out for communication
         with another process.  One process should pass 1 for end, and the
         other 0.  Data is marshalled with pickle."""
@@ -96,7 +103,7 @@ def remote_debug(sig,frame):
                     if code:
                         sys.stdout = cStringIO.StringIO()
                         sys.stderr = sys.stdout
-                        exec code in globs,locs
+                        exec(code, globs,locs)
                         txt = ''
                         pipe.put(sys.stdout.getvalue() + '>>> ')
                     else:
@@ -135,7 +142,7 @@ def listen():
 def main():
 
     if len(sys.argv) != 2:
-        print "Error: Must provide process id to debug"
+        print("Error: Must provide process id to debug")
     else:
         pid = int(sys.argv[1])
         debug_process(pid)

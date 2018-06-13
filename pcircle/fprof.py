@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from __future__ import print_function
+from __future__ import absolute_import
+from builtins import range
+
 """
 fprof: a specialized version of parallel tree walk
 designed to profile file size distribution at extreme scale.
@@ -28,19 +31,21 @@ import resource
 import syslog
 import heapq
 
-from timeout import timeout, TimeoutError
-from circle import Circle
-from globals import G, Tally
-from utils import getLogger, bytes_fmt, destpath, py_version
-from mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
+from pcircle import utils
+from pcircle import fpipe
+from pcircle import lfs
 
-import utils
-import fpipe
-import lfs
+from pcircle.timeout import timeout, TimeoutError
+from pcircle.circle import Circle
+from pcircle.globals import G, Tally
+from pcircle.utils import getLogger, bytes_fmt, destpath, py_version
+from pcircle.mpihelper import ThrowingArgumentParser, tally_hosts, parse_and_bcast
 
-from _version import get_versions
+from pcircle._version import get_versions
 __version__ = get_versions()['version']
 __revid__ = get_versions()['full-revisionid']
+
+
 args = None
 taskloads = []
 TOPN_FILES = []   # track top N files
@@ -310,19 +315,22 @@ class ProfileWalk:
             self.skipped += 1
         else:
             for entry in entries:
-                if entry.is_symlink():
-                    self.sym_links += 1
-                elif entry.stat().st_mode & 0o170000 == S_IFIFO:
-                    self.pipes += 1
-                elif entry.stat().st_mode & 0o170000 == S_IFSOCK:
-                    self.sockets += 1
-                elif entry.is_file():
-                    self.circle.enq(entry.path)
-                elif entry.is_dir():
-                    self.circle.preq(entry.path)
-                else:
-                    self.logger.warn("Unknown scan entry: %s" %
-                                     entry.path, extra=self.d)
+                try:
+                    if entry.is_symlink():
+                        self.sym_links += 1
+                    elif entry.stat().st_mode & 0o170000 == S_IFIFO:
+                        self.pipes += 1
+                    elif entry.stat().st_mode & 0o170000 == S_IFSOCK:
+                        self.sockets += 1
+                    elif entry.is_file():
+                        self.circle.enq(entry.path)
+                    elif entry.is_dir():
+                        self.circle.preq(entry.path)
+                    else:
+                        self.logger.warn("Unknown scan entry: %s" %
+                                        entry.path, extra=self.d)
+                except OSError as e:
+                    self.logger.warn(e, extra=self.d)
 
                 count += 1
                 if (MPI.Wtime() - last_report) > self.interval:
@@ -612,7 +620,7 @@ class ProfileWalk:
             print(fmt_msg2.format("Tree walk time:",
                                   utils.conv_time(elapsed_time)))
             print(fmt_msg2.format("Scanning rate:", str(processing_rate) + "/s"))
-            print(fmt_msg2.format("Fprof loads:", Tally.taskloads))
+            print(fmt_msg2.format("Fprof loads:", str(Tally.taskloads)))
             print("")
 
             if args.syslog:
@@ -729,7 +737,8 @@ def main():
                 "Stripe threshold: ", args.stripe_threshold))
         else:
             print("\t{0:<20}{1:<20}".format("Stripe analysis: ", "no"))
-        print("\t{0:<20}{1:<20}".format("Root path:", G.src))
+
+        print("\t{0:<20}{1:<20}".format("Root path:", str(G.src)))
 
         if args.exclude:
             print("\nExclusions:\n")
@@ -745,7 +754,7 @@ def main():
     if args.progress:
         circle.report_enabled = False
         circle.reduce_enabled = True
-    
+
     treewalk = ProfileWalk(circle, G.src, perfile=args.perfile)
     circle.begin(treewalk)
 
@@ -768,7 +777,7 @@ def main():
             # edge case: not enough files (< args.top)
             totaln = args.topn_files if len(
                 topfiles) > args.topn_files else len(topfiles)
-            for index, _ in enumerate(xrange(totaln)):
+            for index, _ in enumerate(range(totaln)):
                 size, path = topfiles[index]
                 print("\t%s: %s (%s)" % (index + 1,
                                          path,

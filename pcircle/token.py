@@ -1,8 +1,8 @@
 __author__ = 'f7b'
 
 from mpi4py import MPI
-from globals import G, T
-from utils import getLogger
+from pcircle.globals import G, T
+from pcircle.utils import getLogger
 
 # module variables
 log = getLogger(__name__)

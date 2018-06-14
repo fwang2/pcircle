@@ -70,7 +70,7 @@ sample report on ORNL Atlas file system is as the following:
    file system to GPFS-based file system and reports the GPFS block usage
    characterization.
 
- `-h`                      
+ `-h, --help`                
    Print out the help menu
 
  `-i, --interval <INTERVAL>`             

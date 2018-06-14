@@ -44,15 +44,86 @@ sample report on ORNL Atlas file system is as the following:
             Max files within dir:    1,003,319
 
 
-**fprof** supports two other options:
+**fprof** supports many other options:
 
-* `--perfile`             
-   Save perfile file size for more analysis
+ `--cpr`             
+   Estimate compression saving
 
-* `--gpfs-block-alloc`    
+ `--cpr-per-file`             
+   Print compression saving for each file
+
+ `--dii`             
+   Enable data-in-inode (dii)
+
+ `--dirprof`             
+   Enable directory count profiling
+
+ `--dirbins <INT[ INT INT...]>`             
+   Directory bins for histogram, list each bin in order
+   e.g. --dirbins 100 1000 100000 ...
+
+ `--exclude <FILE>`             
+   A file with exclusion list
+
+ `--gpfs-block-alloc`    
    GPFS block usage analysis. This is to aid the transition from Lustre-based
    file system to GPFS-based file system and reports the GPFS block usage
    characterization.
+
+ `-h`                      
+   Print out the help menu
+
+ `-i, --interval <INTERVAL>`             
+   Interval 
+
+ `-inodesz <INODESZ>`             
+   Inode size, default 4k
+
+ `--item <ITEM>`             
+   Number of items stored in memory, default: 3000000
+
+ `--loglevel <LOGLEVEL>`             
+   Log Level
+
+ `--lustre-stripe`             
+   Lustre stripe analysis
+
+ `--perfile`             
+   Save perfile file size for more analysis
+
+ `--perprocess`             
+   Enable per-process progress report
+
+ `--profdev`             
+   Enable dev profiling
+
+ `--progress`             
+   Enable periodoic progress report
+
+ `--sparse`             
+   Print out detected spare files
+
+ `--stripe-output`             
+   Stripe output file
+
+ `--stripe-threshold <N>`             
+   Lustre stripe file size threshold above which to analyze, default is 4GB
+
+ `--syslog`             
+   Enable syslog report
+
+ `--topn-dirs <TOPN_DIRS>`             
+   Print out the top N largest directories
+
+ `--topn-files <TOPN_FILES>`             
+   Print out the top N largest files
+
+ `-v`             
+   Verbose mode
+
+ `--version`             
+   Show program version number and exit
+
 
 An sample output of `--gpfs-block-alloc` is as the following, against a
 dataset with mostly small files. The report shows that if GPFS blocksize is
@@ -75,8 +146,5 @@ inefficiency issue can be largely neglected.
 
 ## AUTHOR
 
-Feiyi Wang (fwang2@ornl.gov)
-
-
-
-
+Feiyi Wang (fwang2@ornl.gov), 
+Cameron Harr (charr@llnl.gov)

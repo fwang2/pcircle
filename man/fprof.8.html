@@ -114,24 +114,92 @@ Fprof epilogue:
         Max files within dir:    1,003,319
 </code></pre>
 
-<p><strong>fprof</strong> supports two other options:</p>
+<p><strong>fprof</strong> supports many other options:</p>
 
-<ul>
-<li><p><code>--perfile</code>           <br />
- Save perfile file size for more analysis</p></li>
-<li><p><code>--gpfs-block-alloc</code>  <br />
- GPFS block usage analysis. This is to aid the transition from Lustre-based
- file system to GPFS-based file system and reports the GPFS block usage
- characterization.</p></li>
-</ul>
+<p> <code>--cpr</code>           <br />
+   Estimate compression saving</p>
 
+<p> <code>--cpr-per-file</code>           <br />
+   Print compression saving for each file</p>
+
+<p> <code>--dii</code>           <br />
+   Enable data-in-inode (dii)</p>
+
+<p> <code>--dirprof</code>           <br />
+   Enable directory count profiling</p>
+
+<p> <code>--dirbins &lt;INT[ INT INT...]&gt;</code>           <br />
+   Directory bins for histogram, list each bin in order
+   e.g. --dirbins 100 1000 100000 ...</p>
+
+<p> <code>--exclude &lt;FILE></code>           <br />
+   A file with exclusion list</p>
+
+<p> <code>--gpfs-block-alloc</code>  <br />
+   GPFS block usage analysis. This is to aid the transition from Lustre-based
+   file system to GPFS-based file system and reports the GPFS block usage
+   characterization.</p>
+
+<p> <code>-h</code>                    <br />
+   Print out the help menu</p>
+
+<p> <code>-i, --interval &lt;INTERVAL></code>           <br />
+   Interval</p>
+
+<p> <code>-inodesz &lt;INODESZ></code>           <br />
+   Inode size, default 4k</p>
+
+<p> <code>--item &lt;ITEM></code>           <br />
+   Number of items stored in memory, default: 3000000</p>
+
+<p> <code>--loglevel &lt;LOGLEVEL></code>           <br />
+   Log Level</p>
+
+<p> <code>--lustre-stripe</code>           <br />
+   Lustre stripe analysis</p>
+
+<p> <code>--perfile</code>           <br />
+   Save perfile file size for more analysis</p>
+
+<p> <code>--perprocess</code>           <br />
+   Enable per-process progress report</p>
+
+<p> <code>--profdev</code>           <br />
+   Enable dev profiling</p>
+
+<p> <code>--progress</code>           <br />
+   Enable periodoic progress report</p>
+
+<p> <code>--sparse</code>           <br />
+   Print out detected spare files</p>
+
+<p> <code>--stripe-output</code>           <br />
+   Stripe output file</p>
+
+<p> <code>--stripe-threshold &lt;N></code>           <br />
+   Lustre stripe file size threshold above which to analyze, default is 4GB</p>
+
+<p> <code>--syslog</code>           <br />
+   Enable syslog report</p>
+
+<p> <code>--topn-dirs &lt;TOPN_DIRS></code>           <br />
+   Print out the top N largest directories</p>
+
+<p> <code>--topn-files &lt;TOPN_FILES></code>           <br />
+   Print out the top N largest files</p>
+
+<p> <code>-v</code>           <br />
+   Verbose mode</p>
+
+<p> <code>--version</code>           <br />
+   Show program version number and exit</p>
 
 <p>An sample output of <code>--gpfs-block-alloc</code> is as the following, against a
 dataset with mostly small files. The report shows that if GPFS blocksize is
 8M, then the 1GB dataset will inflate 10x to 10.39GB, with a poor space
 efficiency of 10%. <strong>However</strong>, this trend should not generalize to other file
 systems. We observe that for file system with many large files, this space
-inefficiency can be largely neglected.</p>
+inefficiency issue can be largely neglected.</p>
 
 <pre><code>GPFS Block Alloc Report:
 
@@ -146,12 +214,13 @@ inefficiency can be largely neglected.</p>
 
 <h2 id="AUTHOR">AUTHOR</h2>
 
-<p>Feiyi Wang (fwang2@ornl.gov)</p>
+<p>Feiyi Wang (fwang2@ornl.gov),
+Cameron Harr (charr@llnl.gov)</p>
 
 
   <ol class='man-decor man-foot man foot'>
     <li class='tl'></li>
-    <li class='tc'>December 2015</li>
+    <li class='tc'>June 2018</li>
     <li class='tr'>fprof(8)</li>
   </ol>
 

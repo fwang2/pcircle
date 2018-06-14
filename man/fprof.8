@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "FPROF" "8" "December 2015" "" ""
+.TH "FPROF" "8" "June 2018" "" ""
 .
 .SH "NAME"
 \fBfprof\fR \- File System Profiler
@@ -12,7 +12,7 @@
 
 fprof target_directory
 
-mpirun \-np 8 fprof \.\.\.
+mpirun \-np 8 fprof \|\.\|\.\|\.
 .
 .fi
 .
@@ -58,24 +58,160 @@ Fprof epilogue:
 .IP "" 0
 .
 .P
-\fBfprof\fR supports two other options:
+\fBfprof\fR supports many other options:
 .
-.IP "\(bu" 4
-\fB\-\-perfile\fR
+.P
+\fB\-\-cpr\fR
 .
 .br
-Save perfile file size for more analysis
+Estimate compression saving
 .
-.IP "\(bu" 4
+.P
+\fB\-\-cpr\-per\-file\fR
+.
+.br
+Print compression saving for each file
+.
+.P
+\fB\-\-dii\fR
+.
+.br
+Enable data\-in\-inode (dii)
+.
+.P
+\fB\-\-dirprof\fR
+.
+.br
+Enable directory count profiling
+.
+.P
+\fB\-\-dirbins <INT[ INT INT\|\.\|\.\|\.]>\fR
+.
+.br
+Directory bins for histogram, list each bin in order e\.g\. \-\-dirbins 100 1000 100000 \|\.\|\.\|\.
+.
+.P
+\fB\-\-exclude <FILE>\fR
+.
+.br
+A file with exclusion list
+.
+.P
 \fB\-\-gpfs\-block\-alloc\fR
 .
 .br
 GPFS block usage analysis\. This is to aid the transition from Lustre\-based file system to GPFS\-based file system and reports the GPFS block usage characterization\.
 .
-.IP "" 0
+.P
+\fB\-h\fR
+.
+.br
+Print out the help menu
 .
 .P
-An sample output of \fB\-\-gpfs\-block\-alloc\fR is as the following, against a dataset with mostly small files\. The report shows that if GPFS blocksize is 8M, then the 1GB dataset will inflate 10x to 10\.39GB, with a poor space efficiency of 10%\. \fBHowever\fR, this trend should not generalize to other file systems\. We observe that for file system with many large files, this space inefficiency can be largely neglected\.
+\fB\-i, \-\-interval <INTERVAL>\fR
+.
+.br
+Interval
+.
+.P
+\fB\-inodesz <INODESZ>\fR
+.
+.br
+Inode size, default 4k
+.
+.P
+\fB\-\-item <ITEM>\fR
+.
+.br
+Number of items stored in memory, default: 3000000
+.
+.P
+\fB\-\-loglevel <LOGLEVEL>\fR
+.
+.br
+Log Level
+.
+.P
+\fB\-\-lustre\-stripe\fR
+.
+.br
+Lustre stripe analysis
+.
+.P
+\fB\-\-perfile\fR
+.
+.br
+Save perfile file size for more analysis
+.
+.P
+\fB\-\-perprocess\fR
+.
+.br
+Enable per\-process progress report
+.
+.P
+\fB\-\-profdev\fR
+.
+.br
+Enable dev profiling
+.
+.P
+\fB\-\-progress\fR
+.
+.br
+Enable periodoic progress report
+.
+.P
+\fB\-\-sparse\fR
+.
+.br
+Print out detected spare files
+.
+.P
+\fB\-\-stripe\-output\fR
+.
+.br
+Stripe output file
+.
+.P
+\fB\-\-stripe\-threshold <N>\fR
+.
+.br
+Lustre stripe file size threshold above which to analyze, default is 4GB
+.
+.P
+\fB\-\-syslog\fR
+.
+.br
+Enable syslog report
+.
+.P
+\fB\-\-topn\-dirs <TOPN_DIRS>\fR
+.
+.br
+Print out the top N largest directories
+.
+.P
+\fB\-\-topn\-files <TOPN_FILES>\fR
+.
+.br
+Print out the top N largest files
+.
+.P
+\fB\-v\fR
+.
+.br
+Verbose mode
+.
+.P
+\fB\-\-version\fR
+.
+.br
+Show program version number and exit
+.
+.P
+An sample output of \fB\-\-gpfs\-block\-alloc\fR is as the following, against a dataset with mostly small files\. The report shows that if GPFS blocksize is 8M, then the 1GB dataset will inflate 10x to 10\.39GB, with a poor space efficiency of 10%\. \fBHowever\fR, this trend should not generalize to other file systems\. We observe that for file system with many large files, this space inefficiency issue can be largely neglected\.
 .
 .IP "" 4
 .
@@ -96,4 +232,4 @@ GPFS Block Alloc Report:
 .IP "" 0
 .
 .SH "AUTHOR"
-Feiyi Wang (fwang2@ornl\.gov)
+Feiyi Wang (fwang2@ornl\.gov), Cameron Harr (charr@llnl\.gov)

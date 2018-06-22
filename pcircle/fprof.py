@@ -15,6 +15,7 @@ __email__ = "fwang2@ornl.gov"
 # rc.initialize = False
 from mpi4py import MPI
 
+from stat import S_IFIFO,S_IFSOCK
 from scandir import scandir
 from collections import namedtuple
 import stat
@@ -250,6 +251,8 @@ class ProfileWalk:
         self.nlinks = 0
         self.nlinked_files = 0
 
+        self.pipes = 0
+        self.sockets = 0
         self.sym_links = 0
         self.follow_sym_links = False
 
@@ -309,6 +312,10 @@ class ProfileWalk:
             for entry in entries:
                 if entry.is_symlink():
                     self.sym_links += 1
+                elif entry.stat().st_mode & 0o170000 == S_IFIFO:
+                    self.pipes += 1
+                elif entry.stat().st_mode & 0o170000 == S_IFSOCK:
+                    self.sockets += 1
                 elif entry.is_file():
                     self.circle.enq(entry.path)
                 elif entry.is_dir():
@@ -534,6 +541,8 @@ class ProfileWalk:
         Tally.total_filesize = self.circle.comm.reduce(self.cnt_filesize, op=MPI.SUM)
         Tally.total_stat_filesize = self.circle.comm.reduce(self.cnt_stat_filesize, op=MPI.SUM)
         Tally.total_symlinks = self.circle.comm.reduce(self.sym_links, op=MPI.SUM)
+        Tally.total_pipes = self.circle.comm.reduce(self.pipes, op=MPI.SUM)
+        Tally.total_sockets = self.circle.comm.reduce(self.sockets, op=MPI.SUM)
         Tally.total_skipped = self.circle.comm.reduce(self.skipped, op=MPI.SUM)
         Tally.taskloads = self.circle.comm.gather(self.reduce_items)
         Tally.max_files = self.circle.comm.reduce(self.maxfiles, op=MPI.MAX)
@@ -570,6 +579,8 @@ class ProfileWalk:
             fmt_msg3 = "\t{0:<25}{1:<20.2f}"  # float
             print(fmt_msg1.format("Directory count:", Tally.total_dirs))
             print(fmt_msg1.format("Sym links count:", Tally.total_symlinks))
+            print(fmt_msg1.format("pipes count:", Tally.total_pipes))
+            print(fmt_msg1.format("sockets count:", Tally.total_sockets))
             print(fmt_msg1.format("Hard linked files:", Tally.total_nlinked_files))
             print(fmt_msg1.format("File count:", Tally.total_files))
             print(fmt_msg1.format("Zero byte files:", Tally.total_0byte_files))

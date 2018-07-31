@@ -135,6 +135,8 @@ def gen_parser():
                         type=int, help="directory bins, need to be ordered and sorted")
     parser.add_argument("--topn-dirs", default=None,
                         type=int, help="Top N large directories")
+    parser.add_argument("--dist_file", metavar="FILE",
+                        help="Generate an cfg file containing the file count histogram")
 
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
     parser.add_argument("--progress", action="store_true",
@@ -761,7 +763,7 @@ def main():
     # we need the total file size to calculate GPFS efficiency
     total_file_size = treewalk.epilogue()
 
-    msg1, msg2 = gen_histogram(total_file_size)
+    msg1, msg2 = gen_histogram(total_file_size, args.dist_file)
 
     if args.dirprof:
         gen_directory_histogram()
@@ -859,7 +861,34 @@ def gen_directory_histogram():
                              "%0.2f%%" % pct))
 
 
-def gen_histogram(total_file_size):
+def gen_dist_file(bins, hist, file_name):
+    import ConfigParser
+    import re
+
+    bin_names = []
+
+    for i, bin in enumerate(bins):
+        match_obj = re.search(r'(\d+)\.\d+_([KMGT])\w+', bin)
+        val = match_obj.group(1)
+        suffix = match_obj.group(2)
+        bin_names.append(str(val) + str(suffix).lower())
+
+    config_tupls = zip(bin_names, hist)
+    # drop the last element from the list since
+    # we only want the upper bounds
+    del config_tupls[-1]
+
+    config = ConfigParser.ConfigParser()
+    config.add_section("dist")
+
+    for i, tupl in enumerate(config_tupls):
+        config.set("dist", tupl[0], tupl[1])
+
+    with open(file_name, 'wb') as fp:
+        config.write(fp)
+
+
+def gen_histogram(total_file_size, dist_file=None):
     """Generate file set histogram"""
 
     syslog_filecount_hist = ""
@@ -928,6 +957,8 @@ def gen_histogram(total_file_size):
         syslog_filecount_hist += "%s = %s" % (bins_fmt[-1], hist[-1])
         syslog_fsizeperc_hist += "%s = %s" % (bins_fmt[-1], percent_size)
 
+        if dist_file is not None:
+            gen_dist_file(bins_fmt, hist, dist_file)
         # end of if comm.rank == 0
 
     return syslog_filecount_hist, syslog_fsizeperc_hist

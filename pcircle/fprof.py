@@ -135,7 +135,7 @@ def gen_parser():
                         type=int, help="directory bins, need to be ordered and sorted")
     parser.add_argument("--topn-dirs", default=None,
                         type=int, help="Top N large directories")
-    parser.add_argument("--dist-file", metavar="FILE",
+    parser.add_argument("--dist-file",  metavar="FILE", default=None,
                         help="Generate an cfg file containing the file count histogram")
 
     # parser.add_argument("--histogram", action="store_true", help="Generate block histogram")
@@ -868,7 +868,6 @@ def gen_dist_file(bins, hist, file_name):
         import configparser as ConfigParser
     except ImportError:
         import ConfigParser
-
 
     bin_names = []
 

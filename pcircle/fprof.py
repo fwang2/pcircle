@@ -877,11 +877,9 @@ def gen_dist_file(bins, hist, file_name):
         suffix = match_obj.group(2)
         bin_names.append(str(val) + str(suffix).lower())
 
-    config_tupls = zip(bin_names, hist)
+    config_tupls = zip(bin_names[:-1], hist[:-1])
     # drop the last element from the list since
     # we only want the upper bounds
-    del config_tupls[-1]
-
     config = ConfigParser.ConfigParser()
     config.add_section("dist")
 

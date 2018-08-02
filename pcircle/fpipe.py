@@ -103,7 +103,7 @@ def remote_debug(sig,frame):
                     if code:
                         sys.stdout = cStringIO.StringIO()
                         sys.stderr = sys.stdout
-                        exec(code, globs,locs)
+                        exec(code, globs,locs) in globals(), locals()
                         txt = ''
                         pipe.put(sys.stdout.getvalue() + '>>> ')
                     else:

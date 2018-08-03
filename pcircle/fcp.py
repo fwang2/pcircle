@@ -1057,7 +1057,10 @@ def main():
     #    circle.finalize(cleanup=True)
     comm.Barrier()
     if comm.rank == 0:
-        os.rmdir(G.tempdir)
+        try:
+            os.rmdir(G.tempdir)
+        except:
+            pass
 
     # TODO: a close file error can happen when circle.finalize()
     #

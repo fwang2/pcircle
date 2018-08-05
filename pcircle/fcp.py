@@ -20,7 +20,6 @@ import sqlite3
 import math
 import cPickle as pickle
 from collections import Counter
-from lru import LRU
 from threading import Thread
 from mpi4py import MPI
 
@@ -118,22 +117,6 @@ class FCP(BaseTask):
         self.src = src
         self.dest = os.path.abspath(dest)
 
-        # cache, keep the size conservative
-        # TODO: we need a more portable LRU size
-
-        if hostcnt != 0:
-            max_ofile, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
-            procs_per_host = self.circle.size / hostcnt
-            self._read_cache_limit = ((max_ofile - 64) / procs_per_host) / 3
-            self._write_cache_limit = ((max_ofile - 64) / procs_per_host) * 2 / 3
-
-        if self._read_cache_limit <= 0 or self._write_cache_limit <= 0:
-            self._read_cache_limit = 1
-            self._write_cache_limit = 8
-
-        self.rfd_cache = LRU(self._read_cache_limit)
-        self.wfd_cache = LRU(self._write_cache_limit)
-
         self.cnt_filesize_prior = 0
         self.cnt_filesize = 0
 
@@ -166,8 +149,6 @@ class FCP(BaseTask):
         if self.circle.rank == 0:
             print("Start copying process ...")
 
-    def rw_cache_limit(self):
-        return (self._read_cache_limit, self._write_cache_limit)
 
     def set_fixed_chunksize(self, sz):
         self.chunksize = sz
@@ -178,17 +159,6 @@ class FCP(BaseTask):
             print("Adaptive chunksize: %s" % bytes_fmt(self.chunksize))
 
     def cleanup(self):
-        for f in self.rfd_cache.values():
-            try:
-                os.close(f)
-            except OSError as e:
-                pass
-
-        for f in self.wfd_cache.values():
-            try:
-                os.close(f)
-            except OSError as e:
-                pass
 
         # remove checkpoint file
         if self.checkpoint_file and os.path.exists(self.checkpoint_file):
@@ -316,25 +286,9 @@ class FCP(BaseTask):
         #G.total_chunks = self.circle.comm.bcast(G.total_chunks)
         #print("Total chunks: ",G.total_chunks)
 
-    def do_open(self, k, d, flag, limit):
-        """
-        @param k: the file path
-        @param d: dictionary of <path, file descriptor>
-        @return: file descriptor
-        """
-        if d.has_key(k):
-            return d[k]
 
-        if len(d.keys()) >= limit:
-            # over the limit
-            # clean up the least used
-            old_k, old_v = d.items()[-1]
-            try:
-                os.close(old_v)
-            except OSError as e:
-                log.warn("FD for %s not valid when closing" % old_k, extra=self.d)
-
-        fd = -1
+    def do_open2(self, k, flag):
+        """ open path 'k' with 'flags' """
         try:
             fd = os.open(k, flag)
         except OSError as e:
@@ -343,9 +297,6 @@ class FCP(BaseTask):
                 self.circle.exit(0)  # should abort
             else:
                 log.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
-        else:
-            if fd > 0:
-                d[k] = fd
         finally:
             return fd
 
@@ -364,10 +315,10 @@ class FCP(BaseTask):
         if not os.path.exists(basedir):
             os.makedirs(basedir)
 
-        rfd = self.do_open(src, self.rfd_cache, os.O_RDONLY, self._read_cache_limit)
+        rfd = self.do_open2(src, os.O_RDONLY)
         if rfd < 0:
             return False
-        wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT, self._write_cache_limit)
+        wfd = self.do_open2(dest, os.O_WRONLY | os.O_CREAT)
         if wfd < 0:
             if args.force:
                 try:
@@ -376,7 +327,7 @@ class FCP(BaseTask):
                     log.error("Failed to unlink %s, %s " % (dest, e), extra=self.d)
                     return False
                 else:
-                    wfd = self.do_open(dest, self.wfd_cache, os.O_WRONLY, self._write_cache_limit)
+                    wfd = self.do_open2(dest, os.O_WRONLY)
             else:
                 log.error("Failed to create output file %s" % dest, extra=self.d)
                 return False
@@ -397,17 +348,10 @@ class FCP(BaseTask):
         a = Thread(target=self.do_checkpoint)
         a.start()
         a.join()
-        log.debug("checkpoint: %s" % self.checkpoint_file, extra=self.d)
-        print("\nMake checkpoint files: ", self.checkpoint_file)
+        if G.verbosity > 0:
+            print("Checkpoint: %s" % self.checkpoint_file)
 
     def do_checkpoint(self):
-        # when make checkpoint, first write workq and workq_buf into checkpoint file, then make a copy of workq_db if it exists
-        for k in self.wfd_cache.keys():
-            os.close(self.wfd_cache[k])
-
-        # clear the cache
-        self.wfd_cache.clear()
-
         tmp_file = self.checkpoint_file + ".part"
         with open(tmp_file, "wb") as f:
             self.circle.workq.extend(self.circle.workq_buf)
@@ -757,12 +701,6 @@ def fcp_start():
               workq=workq,
               hostcnt=num_of_hosts)
 
-    if comm.rank == 0 and G.verbosity > 0:
-        rcl, wcl = fcp.rw_cache_limit()
-        print("")
-        print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Read Cache:", "%s" % rcl, "|",
-                                                      "Write Cache:", "%s" % wcl))
-        print("")
     set_chunksize(fcp, T.total_filesize)
     fcp.checkpoint_interval = args.cptime
     fcp.checkpoint_file = ".pcp_workq.%s.%s" % (args.cpid, circle.rank)

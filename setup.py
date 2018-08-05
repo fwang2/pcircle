@@ -20,7 +20,6 @@ import sys
 requires = [
     'cffi>=1.2.1',
     'mpi4py>=1.3.1',
-    'lru-dict>=1.1.1',
     'pyxattr>=0.5.1',
     'scandir>=1.1',
     'numpy>=1.7.1',

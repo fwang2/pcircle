@@ -3,7 +3,6 @@ from utils import bytes_fmt
 import hashlib
 from mpi4py import MPI
 import utils
-from lru import LRU
 from dbstore import DbStore
 from dbsum import MemSum
 from globals import G
@@ -19,8 +18,6 @@ class PVerify(BaseTask):
         if self.signature:
             self.bfsign = BFsignature(total_chunks)
 
-        # cache
-        self.fd_cache = LRU(512)
 
         # failed
         self.failed = {}

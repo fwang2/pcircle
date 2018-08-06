@@ -5,7 +5,7 @@ PCP provides MPI-based parallel data transfer functionality.
 Author: Feiyi Wang (fwang2@ornl.gov)
 
 """
-from __future__ import print_function
+from __future__ import print_function, division
 
 import time
 import stat
@@ -41,6 +41,7 @@ from fdef import FileItem
 from _version import get_versions
 from mpihelper import ThrowingArgumentParser, parse_and_bcast
 from bfsignature import BFsignature
+from pcircle.lru import LRU
 
 __version__ = get_versions()['version']
 del get_versions
@@ -48,6 +49,7 @@ del get_versions
 args = None
 circle = None
 treewalk = None
+oflimit = 0
 fcp = None
 num_of_hosts = 0
 taskloads = []
@@ -117,6 +119,9 @@ class FCP(BaseTask):
         self.src = src
         self.dest = os.path.abspath(dest)
 
+        self.rfd_cache = LRU(oflimit, callback = self.cb_close_fd)
+        self.wfd_cache = LRU(oflimit, callback = self.cb_close_fd)
+
         self.cnt_filesize_prior = 0
         self.cnt_filesize = 0
 
@@ -149,6 +154,11 @@ class FCP(BaseTask):
         if self.circle.rank == 0:
             print("Start copying process ...")
 
+    def cb_close_fd(self, k, v):
+        try:
+            os.close(v)
+        except:
+            pass
 
     def set_fixed_chunksize(self, sz):
         self.chunksize = sz
@@ -159,6 +169,9 @@ class FCP(BaseTask):
             print("Adaptive chunksize: %s" % bytes_fmt(self.chunksize))
 
     def cleanup(self):
+
+        self.rfd_cache.clear()
+        self.wfd_cache.clear()
 
         # remove checkpoint file
         if self.checkpoint_file and os.path.exists(self.checkpoint_file):
@@ -196,7 +209,7 @@ class FCP(BaseTask):
         """ Process a single file, represented by "fi" - FileItem
         It involves chunking this file and equeue all chunks. """
 
-        chunks = fi.st_size / self.chunksize
+        chunks = fi.st_size // self.chunksize
         remaining = fi.st_size % self.chunksize
 
         workcnt = 0
@@ -287,8 +300,14 @@ class FCP(BaseTask):
         #print("Total chunks: ",G.total_chunks)
 
 
-    def do_open2(self, k, flag):
-        """ open path 'k' with 'flags' """
+    def do_open2(self, k, d, flag):
+        """ d is fd cache (either read or write)
+        open path 'k' with 'flags' """
+        if d.has_key(k):
+            return d.get(k)
+
+        fd = -1
+
         try:
             fd = os.open(k, flag)
         except OSError as e:
@@ -297,12 +316,14 @@ class FCP(BaseTask):
                 self.circle.exit(0)  # should abort
             else:
                 log.error("OSError({0}):{1}, skipping {2}".format(e.errno, e.strerror, k), extra=self.d)
+        else:
+            if fd > 0:
+                d.set(k, fd)
         finally:
             return fd
 
     @staticmethod
     def do_mkdir(work):
-        src = work.src
         dest = work.dest
         if not os.path.exists(dest):
             os.makedirs(dest)
@@ -315,10 +336,10 @@ class FCP(BaseTask):
         if not os.path.exists(basedir):
             os.makedirs(basedir)
 
-        rfd = self.do_open2(src, os.O_RDONLY)
+        rfd = self.do_open2(src, self.rfd_cache, os.O_RDONLY)
         if rfd < 0:
             return False
-        wfd = self.do_open2(dest, os.O_WRONLY | os.O_CREAT)
+        wfd = self.do_open2(dest, self.wfd_cache, os.O_WRONLY | os.O_CREAT)
         if wfd < 0:
             if args.force:
                 try:
@@ -327,7 +348,7 @@ class FCP(BaseTask):
                     log.error("Failed to unlink %s, %s " % (dest, e), extra=self.d)
                     return False
                 else:
-                    wfd = self.do_open2(dest, os.O_WRONLY)
+                    wfd = self.do_open2(dest, self.wfd_cache, os.O_WRONLY)
             else:
                 log.error("Failed to create output file %s" % dest, extra=self.d)
                 return False
@@ -407,12 +428,12 @@ class FCP(BaseTask):
     def reduce_report(self, buf):
         out = ""
         if self.totalsize != 0:
-            out += "%.2f %% finished, " % (100 * float(buf['cnt_filesize']) / self.totalsize)
+            out += "%.2f %% finished, " % (100 * float(buf['cnt_filesize']) // self.totalsize)
 
         out += "%s copied" % bytes_fmt(buf['cnt_filesize'])
 
         if self.circle.reduce_time_interval != 0:
-            rate = float(buf['cnt_filesize'] - self.cnt_filesize_prior) / self.circle.reduce_time_interval
+            rate = float(buf['cnt_filesize'] - self.cnt_filesize_prior) // self.circle.reduce_time_interval
             self.cnt_filesize_prior = buf['cnt_filesize']
             out += ", estimated transfer rate: %s/s" % bytes_fmt(rate)
 
@@ -930,6 +951,16 @@ def main():
     circle = Circle(dbname="fwalk")
     #circle.dbname = dbname
 
+    global oflimit
+
+    if num_of_hosts != 0:
+        max_ofile, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        procs_per_host = circle.size // num_of_hosts
+        oflimit = ((max_ofile - 64) // procs_per_host) // 2
+    if oflimit < 8:
+            oflimit = 8
+
+
     if circle.rank == 0:
         print("Running Parameters:\n")
         print("\t{:<25}{:<20}".format("Starting at:", utils.current_time()))
@@ -945,7 +976,8 @@ def main():
         print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Checkpoint interval:", "%s" % utils.conv_time(args.cptime), "|",
             "Checkpoint ID:", "%s" % args.cpid))
 
-        print("\t{:<25}{:<10}".format("Items in memory:", "%r" % G.memitem_threshold))
+        print("\t{:<25}{:<10}{:5}{:<25}{:<10}".format("Items in memory: ",
+            " % r" % G.memitem_threshold, "|", "O file limit", "%s" % oflimit))
         #
         if args.verbosity > 0:
             print("\t{:<25}{:<20}".format("Copy Mode:", G.copytype))

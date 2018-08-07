@@ -33,6 +33,22 @@ This also shows the core dependencies of pcircle: `python`, `libffi`, and `openm
         sudo yum install openmpi-devel
         sudo yum install libffi-devel
 
+## RPM Install
+
+For CentOS/Redhat, we have a prebuilt rpm:
+
+### If you don't have EPEL repo yet:
+
+         sudo yum install \
+            https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+
+
+### Install `pcircle` through URL:
+
+        sudo yum install \
+            https://github.com/fwang2/pcircle-rpm/raw/master/RPMS/pcircle-0.17.1-1.el7.noarch.rpm
+
+You can also build one from SPEC file maintained at `fwang2/pcircle-rpm` repo.
 
 ## Manpage
 

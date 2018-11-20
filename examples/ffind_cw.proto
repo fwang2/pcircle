@@ -1,0 +1,47 @@
+syntax = "proto2";
+
+message FileInfo {
+    optional string name = 1;
+    optional int32 st_mode = 2;
+    optional int32 st_nlink = 3;
+    optional int64 st_size = 4;
+    optional int64 st_blocks = 5;
+    optional bool status = 6;
+}
+
+message Search {
+    required bool cond_delete = 1;
+    optional string cond_type = 2;
+    optional string cond_size = 3;
+}
+
+message DirEntry {
+    required int32 type = 1;
+    required string name = 2;
+}
+
+enum MsgType {
+    REQ_FILE_INFO = 0;
+    REQ_DIR_SCAN = 1;
+    REPLY_FILE_INFO = 2;
+    REPLY_DIR_SCAN = 3;
+    SEARCH = 4;
+    ERROR = 5;
+}
+
+message WorkRequest {
+    required MsgType type = 1;
+    required string name = 2;
+}
+
+message WorkReply {
+  required MsgType type = 1;
+  optional string errmsg = 2;
+  repeated FileInfo finfo = 3;
+  repeated DirEntry dentries =4;
+}
+
+
+message DieMessage {
+    optional string msg = 1;
+}

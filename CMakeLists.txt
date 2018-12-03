@@ -7,7 +7,7 @@ project(P2
 # disable 4.8.5 as regex is broken
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.9")
-        message(FATAL_ERROR "Insufficient gcc version (4.9+)")
+        message(FATAL_ERROR "Insufficient gcc version, require 4.9 or above.")
     endif()
 
     SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -pedantic")
@@ -35,6 +35,7 @@ option(P2_ENABLE_WERROR "Enable all warnings as errors" OFF)
 option(P2_BUILD_FPROF "Build fprof" ON)
 option(P2_BUILD_FFIND "Build ffind" OFF)
 option(P2_BUILD_TESTING "Build P2 Test" OFF)
+
 
 # Define some folders
 set(P2_DIR ${CMAKE_SOURCE_DIR})

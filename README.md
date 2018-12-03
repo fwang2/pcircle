@@ -1,37 +1,47 @@
+# pcircle 
+
+## Overview
+
+The ubiquitous MPI environment in HPC cluster + Work Stealing Pattern +
+Distributed Termination Detection = Efficient and Scalable Parallel Solution.
+
+`pcircle` contains a suite of file system tools that we are developing at OLCF
+to take advantage of highly scalable parallel file system such as Lustre and
+GPFS. Early tests show very promising scaling properties. However, it is still
+in active development, please use it at your own risk. For bug report and
+feedbacks, please post it here at https://github.com/olcf/pcircle/issues.
 
 
-# P2
+## Prerequisites:
 
-This is a different take on large-scale parallel operations: an implementation
-of master-slave pattern. Differing from the more fancy peer to peer, work
-stealing pattern as seen in [pcirlce](http://github.com/olcf/pcircle),
-master/slave is dead simple conceptually: master distributes the work,
-slaves/works does the work as assigned.
+* cmake3 (this is available through [EPEL Repo](https://fedoraproject.org/wiki/EPEL). Once it is enabled, `yum install cmake3` should do it.
 
-The biggest advantage of this pattern is: simplicity and predictability.
-Specifically to the file system environment, since each process goes on its own
-to gather next work items (more efficient and balanced workload distribution),
-it is fairly difficult to checkpoint the work. In contrast, it is relatively
-easy to achieve that in the master/slave pattern.
+* A working C++11 compiler. Notes: RHEL 7 shipped gcc 4.8.5 which doesn't have complete support for C++11. In particular, its `regex` library is hopelessly broken. You can compile and generate a binary, but it will just core dump when you run it. This unfortrunately requires us to move to 4.9+ or bring third party library `boost` into play. One alternative solution is to enable [Redhat developer toolset 6](https://www.softwarecollections.org/en/scls/rhscl/devtoolset-6/) or [Redhat developer toolset 7](https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/). Once this is enabled, you can bring new compiler into environment by:
 
+    source /opt/rh/devtoolset-7/enable
 
-# Build
+Another alternative is to use `spack` software package environment, which is what DOE/ECP recommended path forward. See below for more information.
 
-The main dependency:
-* mpi
-* protobuf
-
-The reason for the later is this implementation are not registering new MPI
-datatype, instead, it is relying protobuf to serialize everything into a byte
-stream. In short, to build:
+* A working MPI dev environment. For RHEL7, that means:
+      
+      sudo yum install mpi-devel
+      module load mpi 
 
 
-    mkdir build
-    cd build
-    cmake ..
-    make
 
-# Run
+## Build from source: (RHEL/CentOS 7)
+
+      git clone http://github.com/olcf/pcircle
+      cd pcircle; mkdir build; cd build; cmake3 ..
+
+
+## Build (Spark)
+
+TBD
+
+
+## Example Runs
+
 
     mpirun -np 8 ffind --pattern ">250k" \
         --delete --print /path/to/your/directory

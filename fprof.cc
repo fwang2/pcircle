@@ -4,7 +4,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <regex>
 #include <unordered_map>
 #include <sstream>   // std::istringstream
 #include <mpi.h>

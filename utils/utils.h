@@ -170,7 +170,8 @@ size_t conv_size(std::string s) {
         return conv_size(std::stoi(digits), unit);
     } 
     // if here, it means we found no proper unit char
-    return -1;
+    // SIZE_MAX indicts error
+    return SIZE_MAX; 
 }
 #endif
 

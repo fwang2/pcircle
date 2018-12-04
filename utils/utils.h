@@ -12,7 +12,11 @@
 #include <tuple>
 #include <cmath>
 #include <algorithm>
+
+#ifdef HAVE_REGEX
 #include <regex>
+#endif
+
 #include <iostream>
 
 
@@ -110,7 +114,7 @@ inline std::string format_percent(const double &value, int preci=2) {
 // }
 
 /** convert a number + unit to a number */
-int conv_size(int n, char unit='C')
+size_t conv_size(int n, char unit='C')
 {
     size_t KB = 1 << 10;
     size_t MB = 1 << 20;
@@ -146,7 +150,8 @@ int conv_size(int n, char unit='C')
     return val;
 }
 
-int conv_size(std::string s) {
+#ifdef HAVE_REGEX
+size_t conv_size(std::string s) {
     std::regex patt(R"((\d+)([ckmgt]+))", std::regex_constants::icase);
     std::smatch match;
     if (regex_search(s, match, patt)) {
@@ -155,6 +160,19 @@ int conv_size(std::string s) {
     }
     return -1;
 }
+#else 
+size_t conv_size(std::string s) {
+    // we don't have working regex
+    char unit = s.back(); // last char
+    std::vector<char> unitvec = {'c', 'C', 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T'};
+    if (std::find(unitvec.begin(), unitvec.end(), unit) != unitvec.end()) {
+        std::string digits = s.substr(0, s.find(unit));
+        return conv_size(std::stoi(digits), unit);
+    } 
+    // if here, it means we found no proper unit char
+    return -1;
+}
+#endif
 
 std::string dtype_str(int d_type)
 {

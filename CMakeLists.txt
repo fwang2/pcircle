@@ -1,13 +1,11 @@
-cmake_minimum_required(VERSION 3.9.0)
-project(P2 
-    LANGUAGES CXX 
-    VERSION 0.1
-)
+cmake_minimum_required(VERSION 2.8.11)
+project(P2 LANGUAGES CXX)
+ 
 
 # disable 4.8.5 as regex is broken
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.9")
-        message(FATAL_ERROR "Insufficient gcc version, require 4.9 or above.")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.5")
+         message(FATAL_ERROR "Insufficient gcc version, require 4.8 or above.")
     endif()
 
     SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -pedantic")

@@ -90,7 +90,7 @@ static std::string validate_bins(const std::string& bins) {
         // iss will give me empty string at the end.        
         if (ele.empty()) break;
 
-        int val = conv_size(ele);
+        size_t val = conv_size(ele);
         if (val == -1) {
             return "Bin size format error";
         } else if (val == 0) {

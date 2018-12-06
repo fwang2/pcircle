@@ -25,7 +25,8 @@ feedbacks, please post it here at https://github.com/olcf/pcircle/issues.
 ## Build from source: (RHEL/CentOS 7)
 
       git clone http://github.com/olcf/pcircle
-      cd pcircle; mkdir build; cd build; cmake3 ..
+      
+      cd pcircle; ./buildme.sh      
 
 This should build the `fprof` binary by default in the `build` directory.
 

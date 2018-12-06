@@ -54,7 +54,7 @@ configure_file(
 )
 
 # Add POP and externals
-add_subdirectory (pop)
+add_subdirectory(pop)
 add_subdirectory(externals)
 add_subdirectory(utils)
 
@@ -85,3 +85,15 @@ endif()
 if (P2_BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
+
+set(CPACK_PACKAGE_NAME pcircle)
+set(CPACK_PACKAGE_DESCRIPTION "A set of parallel filesystem tools")
+set(CPACK_PACKAGE_VERSION_MAJOR 0)
+set(CPACK_PACKAGE_VERSION_MINOR 19)
+set(CPACK_PACKAGE_VERSION_PATCH 1)
+set(CPACK_PACKAGE_HOMEPAGE_URL http://www.github.com/olcf/pcircle)
+set(CPACK_GENERATOR "RPM")
+set(CPACK_RPM_PACKAGE_REQUIRES_PRE "openmpi")
+install(TARGETS fprof RUNTIME DESTINATION bin)
+include(CPack)

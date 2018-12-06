@@ -5,6 +5,7 @@
 .ropeproject
 .swp
 build
+build-*
 dist
 tags
 pcircle.egg-info
